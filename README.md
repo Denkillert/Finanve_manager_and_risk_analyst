@@ -1,6 +1,6 @@
 # Сетевое программное средство управления финансами проектов и анализа рисков в строительной компании («СтройФинРиск»)
 
-Реализация программного комплекса в соответствии со спецификацией курсового проекта (`Наработка общ.docx`, гл. 1–2): многослойное решение на **.NET 8 (C# / ASP.NET Core / EF Core / WPF MVVM / xUnit)**, скрипты развёртывания **MS SQL Server 2022**, а также адаптивный **веб-клиент (React + TypeScript + Vite)** и **демонстрационный REST-сервер (Node.js + TypeScript + SQLite)** для запуска, интеграционного тестирования и живого предпросмотра.
+Реализация программного комплекса в соответствии со спецификацией курсового проекта (`Наработка общ.docx`, гл. 1–2): многослойное решение на **.NET 9.0 (C# 13 / ASP.NET Core 9 / EF Core 9 / WPF MVVM / xUnit)**, скрипты развёртывания **MS SQL Server 2022**, а также адаптивный **веб-клиент (React + TypeScript + Vite)** и **демонстрационный REST-сервер (Node.js + TypeScript + SQLite)** для запуска, интеграционного тестирования и живого предпросмотра.
 
 ---
 
@@ -14,12 +14,12 @@ Finanve_manager_and_risk_analyst.sln
 ├── src/
 │   ├── FinanveManager.Domain/             # Сущности предметной области, Enums, калькуляторы (Lдост, EVM, Cashflow, P80, С-2/С-3)
 │   ├── FinanveManager.Application/        # DTO, интерфейсы, WorkflowEngine, BudgetService, PaymentRequestService, RiskService
-│   ├── FinanveManager.Infrastructure/     # EF Core 8 (AppDbContext), MT940/CSV, 1С, сметы XML/CSV, ЭЦП, PBKDF2-SHA256
-│   ├── FinanveManager.Api/                # ASP.NET Core 8 Web API (TLS 1.3 Kestrel, JWT Bearer, Swagger, контроллеры)
-│   ├── FinanveManager.WpfClient/          # Настольный WPF-клиент (.NET 8 Windows, MVVM) для desktop-ролей
+│   ├── FinanveManager.Infrastructure/     # EF Core 9 (AppDbContext), MT940/CSV, 1С, сметы XML/CSV, ЭЦП, PBKDF2-SHA256
+│   ├── FinanveManager.Api/                # ASP.NET Core 9 Web API (TLS 1.3 Kestrel, JWT Bearer, OpenAPI 9, контроллеры)
+│   ├── FinanveManager.WpfClient/          # Настольный WPF-клиент (.NET 9 Windows, MVVM) для desktop-ролей
 │   └── WebClient/                         # Адаптивный веб-клиент React 18 + TypeScript + Tailwind CSS (от 360 px)
 ├── tests/
-│   └── FinanveManager.Tests/              # Модульные и интеграционные тесты xUnit (.NET 8)
+│   └── FinanveManager.Tests/              # Модульные и интеграционные тесты xUnit (.NET 9.0)
 └── demo-server/                           # Локальный Node.js/TypeScript + SQLite REST-сервер (XLSX/PDF, MT940, Vitest)
 ```
 
@@ -71,7 +71,7 @@ npm run dev     # Vite dev-сервер на http://0.0.0.0:5173 с прокси
 
 ---
 
-## Сборка и запуск решения .NET 8 и MS SQL Server 2022 (Windows / SDK .NET 8)
+## Сборка и запуск решения .NET 9.0 и MS SQL Server 2022 (Windows / SDK .NET 9.0)
 
 1. Выполнить SQL-скрипты развёртывания БД в MS SQL Server 2022 (в SSMS или `sqlcmd`):
    ```bash
@@ -85,4 +85,4 @@ npm run dev     # Vite dev-сервер на http://0.0.0.0:5173 с прокси
    dotnet build Finanve_manager_and_risk_analyst.sln -c Release
    dotnet test tests/FinanveManager.Tests/FinanveManager.Tests.csproj
    ```
-4. Запустить API (`dotnet run --project src/FinanveManager.Api`) и, при необходимости на Windows, настольный WPF-клиент (`dotnet run --project src/FinanveManager.WpfClient`).
+4. Запустить API (`dotnet run --project src/FinanveManager.Api`, спецификация OpenAPI доступна в режиме Development по пути `/openapi/v1.json`) и, при необходимости на Windows, настольный WPF-клиент (`dotnet run --project src/FinanveManager.WpfClient`).

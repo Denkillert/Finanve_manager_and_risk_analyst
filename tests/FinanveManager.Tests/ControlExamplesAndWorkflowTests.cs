@@ -138,4 +138,13 @@ public class ControlExamplesAndWorkflowTests
         var req = new PaymentRequest { Number = "ЗП-1", Status = RequestStatus.Blocked };
         Assert.Throws<DomainException>(() => req.EnsureCanExecute());
     }
+
+    [Fact]
+    public void PasswordHasher_EnforcesMinLengthAndVerifiesHash()
+    {
+        Assert.Throws<ArgumentException>(() => FinanveManager.Infrastructure.Security.PasswordHasher.HashPassword("short"));
+        string hash = FinanveManager.Infrastructure.Security.PasswordHasher.HashPassword("StroyFin2026!");
+        Assert.True(FinanveManager.Infrastructure.Security.PasswordHasher.VerifyPassword("StroyFin2026!", hash));
+        Assert.False(FinanveManager.Infrastructure.Security.PasswordHasher.VerifyPassword("WrongPassword123", hash));
+    }
 }

@@ -12,12 +12,20 @@ namespace FinanveManager.Infrastructure.Adapters;
 /// <summary>
 /// Адаптер банка (рис. 2.13, 2.15, требование 20): разбор выписок MT940 и CSV.
 /// </summary>
-public class BankAdapter : IBankAdapter
+public partial class BankAdapter : IBankAdapter
 {
+    private static readonly string[] LineSeparators = ["\r\n", "\n"];
+
+    [GeneratedRegex(@":61:(\d{6})([CD])([\d,\.]+)N\w+//([^\r\n]+)(?:\r?\n:86:([^\r\n:]+))?")]
+    private static partial Regex Mt940OperationRegex();
+
+    [GeneratedRegex(@"(ЗП-\d+-[A-Z0-9]+)")]
+    private static partial Regex RequestNumberRegex();
+
     public List<BankStatementOperationDto> ParseStatement(string content, string fileName)
     {
         if (string.IsNullOrWhiteSpace(content))
-            return new List<BankStatementOperationDto>();
+            return [];
 
         if (fileName.EndsWith(".mt940", StringComparison.OrdinalIgnoreCase) || content.Contains(":61:"))
             return ParseMt940(content);
@@ -28,7 +36,7 @@ public class BankAdapter : IBankAdapter
     private static List<BankStatementOperationDto> ParseCsv(string content)
     {
         var result = new List<BankStatementOperationDto>();
-        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        var lines = content.Split(LineSeparators, StringSplitOptions.RemoveEmptyEntries);
         foreach (var rawLine in lines.Skip(1))
         {
             var sep = rawLine.Contains(';') ? ';' : ',';
@@ -56,8 +64,7 @@ public class BankAdapter : IBankAdapter
     private static List<BankStatementOperationDto> ParseMt940(string content)
     {
         var result = new List<BankStatementOperationDto>();
-        var matches = Regex.Matches(content, @":61:(\d{6})([CD])([\d,\.]+)N\w+//([^\r\n]+)(?:\r?\n:86:([^\r\n:]+))?");
-        foreach (Match m in matches)
+        foreach (Match m in Mt940OperationRegex().Matches(content))
         {
             string yymmdd = m.Groups[1].Value;
             var date = DateTime.ParseExact("20" + yymmdd, "yyyyMMdd", CultureInfo.InvariantCulture);
@@ -65,7 +72,7 @@ public class BankAdapter : IBankAdapter
             string opId = m.Groups[4].Value.Trim();
             string purpose = m.Groups[5].Success ? m.Groups[5].Value.Trim() : string.Empty;
 
-            var reqMatch = Regex.Match(purpose, @"(ЗП-\d+-[A-Z0-9]+)");
+            var reqMatch = RequestNumberRegex().Match(purpose);
             result.Add(new BankStatementOperationDto(
                 BankOperationId: opId,
                 OperationDate: date,
@@ -103,7 +110,8 @@ public class AccountingAdapter : IAccountingAdapter
 
     public Task<int> ImportEntriesAsync(string content, CancellationToken ct = default)
     {
-        var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        string[] separators = ["\r\n", "\n"];
+        var lines = content.Split(separators, StringSplitOptions.RemoveEmptyEntries);
         return Task.FromResult(Math.Max(0, lines.Length - 1));
     }
 }
@@ -132,7 +140,8 @@ public class EstimateImporter : IEstimateImporter
         }
         else
         {
-            var rows = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+            string[] separators = ["\r\n", "\n"];
+            var rows = content.Split(separators, StringSplitOptions.RemoveEmptyEntries);
             foreach (var r in rows.Skip(1))
             {
                 var cols = r.Split(r.Contains(';') ? ';' : ',');

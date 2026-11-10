@@ -59,9 +59,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddProblemDetails();
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
@@ -89,9 +89,16 @@ app.UseExceptionHandler(errApp =>
 
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.MapOpenApi();
 }
+
+app.MapGet("/api/health", () => Results.Ok(new
+{
+    status = "ok",
+    service = "FinanveManager.Api",
+    runtime = Environment.Version.ToString(),
+    timestamp = DateTime.UtcNow
+}));
 
 app.UseAuthentication();
 app.UseAuthorization();

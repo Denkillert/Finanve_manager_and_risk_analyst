@@ -112,6 +112,12 @@ public class AppDbContext : DbContext
             }
         }
 
+        // Запрещаем множественные каскадные пути удаления в MS SQL Server (как в 01_schemas_and_tables.sql)
+        foreach (var fk in modelBuilder.Model.GetEntityTypes().SelectMany(e => e.GetForeignKeys()))
+        {
+            fk.DeleteBehavior = DeleteBehavior.Restrict;
+        }
+
         modelBuilder.Entity<Contract>().Property(c => c.VatRate).HasPrecision(5, 2);
         modelBuilder.Entity<Contract>().Property(c => c.RetentionPercent).HasPrecision(5, 2);
         modelBuilder.Entity<Contract>().Property(c => c.PenaltyRatePerDay).HasPrecision(6, 4);

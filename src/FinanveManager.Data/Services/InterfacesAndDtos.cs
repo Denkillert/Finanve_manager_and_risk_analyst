@@ -95,6 +95,8 @@ public interface IPaymentRequestService
 {
     Task<(PaymentRequest Request, RequestCheckSummaryDto Checks)> CreateAsync(
         CreatePaymentRequestDto dto, Guid currentUserId, string currentLogin, CancellationToken ct = default);
+    Task<(PaymentRequest Request, RequestCheckSummaryDto Checks)> SubmitAsync(
+        Guid requestId, byte[] rowVersion, Guid currentUserId, string currentLogin, CancellationToken ct = default);
     Task<PaymentRequest> ApproveOverrunAsync(
         Guid requestId, bool approve, string justificationOrReason, byte[] rowVersion, Guid currentUserId, string currentLogin, CancellationToken ct = default);
     Task<PaymentRequest> ApproveAsync(

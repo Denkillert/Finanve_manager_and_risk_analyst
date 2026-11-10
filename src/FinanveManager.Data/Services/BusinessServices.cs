@@ -399,6 +399,39 @@ public class PaymentRequestService : IPaymentRequestService
         return (request, checks);
     }
 
+    public async Task<(PaymentRequest Request, RequestCheckSummaryDto Checks)> SubmitAsync(
+        Guid requestId, byte[] rowVersion, Guid currentUserId, string currentLogin, CancellationToken ct = default)
+    {
+        var request = await _requestRepo.GetByIdAsync(requestId, ct)
+            ?? throw new DomainException("Заявка не найдена.");
+
+        if (rowVersion.Length > 0 && !request.RowVersion.SequenceEqual(rowVersion))
+            throw new ConcurrencyConflictException();
+
+        if (request.Status is not (RequestStatus.Draft or RequestStatus.Returned))
+            throw new DomainException(
+                $"Повторная отправка доступна только для черновиков и возвращённых заявок (текущий статус: {RussianLabels.RequestStatusName(request.Status)}).");
+
+        var docs = (await _documentRepo.GetAllAsync(ct))
+            .Where(d => !d.IsDeleted && d.PaymentRequestId == request.Id)
+            .ToList();
+        string docNumber = docs.FirstOrDefault()?.Number ?? request.Number;
+
+        string prevStatus = request.Status.ToString();
+        request.ReturnOrRejectReason = null;
+        request.BlockReason = null;
+
+        var checks = await RunAutomatedChecksAsync(request, docNumber, ct);
+        await ApplyAutomatedWorkflowTransitionAsync(request, checks, ct);
+
+        await _requestRepo.UpdateAsync(request, ct);
+        await _auditService.LogAsync(currentUserId, currentLogin, nameof(PaymentRequest), request.Id.ToString(),
+            "RESUBMIT_REQUEST", prevStatus, request.Status.ToString(), request.Number, ct);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return (request, checks);
+    }
+
     public async Task<PaymentRequest> ApproveOverrunAsync(
         Guid requestId, bool approve, string justificationOrReason, byte[] rowVersion, Guid currentUserId, string currentLogin, CancellationToken ct = default)
     {

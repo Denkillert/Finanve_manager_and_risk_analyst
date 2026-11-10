@@ -153,6 +153,7 @@ public static class DbInitializer
             ConnectTimeout = targetBuilder.ConnectTimeout > 0 ? Math.Min(targetBuilder.ConnectTimeout, 10) : 5
         };
 
+        bool databaseExists;
         try
         {
             await using var masterConn = new SqlConnection(masterBuilder.ConnectionString);
@@ -161,7 +162,8 @@ public static class DbInitializer
             await using var cmd = masterConn.CreateCommand();
             cmd.CommandText = "SELECT DB_ID(@dbName)";
             cmd.Parameters.AddWithValue("@dbName", databaseName);
-            _ = await cmd.ExecuteScalarAsync(ct);
+            var dbId = await cmd.ExecuteScalarAsync(ct);
+            databaseExists = dbId != null && dbId != DBNull.Value;
         }
         catch (Exception ex)
         {
@@ -175,12 +177,20 @@ public static class DbInitializer
             .UseSqlServer(targetBuilder.ConnectionString)
             .Options;
 
-        await using var db = new AppDbContext(appOpts);
         bool createdEmpty;
         try
         {
+            if (databaseExists)
+            {
+                await CleanupIncompleteEmptyDatabaseIfNeededAsync(masterBuilder.ConnectionString, targetBuilder.ConnectionString, databaseName, ct);
+            }
+
+            await using var db = new AppDbContext(appOpts);
             createdEmpty = await db.Database.EnsureCreatedAsync(ct);
             await EnsureSqlViewsAsync(db, ct);
+
+            bool hasUsers = await db.Users.AnyAsync(ct);
+            return new DatabaseEnsureResult(createdEmpty, hasUsers, targetBuilder.DataSource, databaseName);
         }
         catch (Exception ex)
         {
@@ -188,9 +198,61 @@ public static class DbInitializer
                 $"Не удалось проверить или создать пустую базу данных «{databaseName}» на сервере {targetBuilder.DataSource}: {ex.Message}",
                 ex);
         }
+    }
 
-        bool hasUsers = await db.Users.AnyAsync(ct);
-        return new DatabaseEnsureResult(createdEmpty, hasUsers, targetBuilder.DataSource, databaseName);
+    private static async Task CleanupIncompleteEmptyDatabaseIfNeededAsync(
+        string masterConnStr, string targetConnStr, string databaseName, CancellationToken ct)
+    {
+        bool isIncomplete;
+        bool hasRows;
+
+        await using (var targetConn = new SqlConnection(targetConnStr))
+        {
+            await targetConn.OpenAsync(ct);
+            await using var inspectCmd = targetConn.CreateCommand();
+            inspectCmd.CommandText = """
+                SELECT
+                    (SELECT COUNT(*) FROM sys.tables WHERE is_ms_shipped = 0) AS TableCount,
+                    CASE WHEN OBJECT_ID(N'security.Users', N'U') IS NOT NULL
+                          AND OBJECT_ID(N'finance.BudgetLimits', N'U') IS NOT NULL
+                          AND OBJECT_ID(N'risk.Risks', N'U') IS NOT NULL
+                         THEN 1 ELSE 0 END AS HasCoreTables,
+                    CASE WHEN EXISTS (
+                        SELECT 1
+                        FROM sys.partitions p
+                        JOIN sys.tables t ON p.object_id = t.object_id
+                        WHERE t.is_ms_shipped = 0 AND p.index_id IN (0, 1) AND p.rows > 0
+                    ) THEN 1 ELSE 0 END AS HasRows
+                """;
+            await using var reader = await inspectCmd.ExecuteReaderAsync(ct);
+            await reader.ReadAsync(ct);
+            int tableCount = reader.GetInt32(0);
+            bool hasCoreTables = reader.GetInt32(1) == 1;
+            hasRows = reader.GetInt32(2) == 1;
+            isIncomplete = tableCount > 0 && !hasCoreTables;
+        }
+
+        if (!isIncomplete)
+            return;
+
+        if (hasRows)
+            throw new InvalidOperationException(
+                $"База данных «{databaseName}» содержит неполный набор таблиц и непустые данные. Проверьте схему в SSMS.");
+
+        // Если предыдущая попытка создания пустой БД оборвалась на середине DDL, безопасно пересоздаём пустую БД
+        string escapedName = databaseName.Replace("]", "]]");
+        await using var masterConn = new SqlConnection(masterConnStr);
+        await masterConn.OpenAsync(ct);
+        await using var dropCmd = masterConn.CreateCommand();
+        dropCmd.CommandText = $"""
+            IF DB_ID(@dbName) IS NOT NULL
+            BEGIN
+                ALTER DATABASE [{escapedName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+                DROP DATABASE [{escapedName}];
+            END
+            """;
+        dropCmd.Parameters.AddWithValue("@dbName", databaseName);
+        await dropCmd.ExecuteNonQueryAsync(ct);
     }
 
     private static async Task EnsureSqlViewsAsync(AppDbContext db, CancellationToken ct)

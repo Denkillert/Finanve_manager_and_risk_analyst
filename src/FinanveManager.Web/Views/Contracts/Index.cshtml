@@ -50,6 +50,12 @@
         <div class="card-header">
             <h3 class="card-title">Регистрация нового договора</h3>
         </div>
+        @if (!Model.Projects.Any())
+        {
+            <p class="muted">Проекты отсутствуют — для создания договора добавьте проект в базе данных.</p>
+        }
+        else
+        {
         <form method="post" asp-controller="Contracts" asp-action="CreateContract" class="form-grid">
             <div class="field">
                 <label>Проект</label>
@@ -100,6 +106,7 @@
                 <button type="submit" class="btn">Зарегистрировать договор</button>
             </div>
         </form>
+        }
     </div>
 }
 

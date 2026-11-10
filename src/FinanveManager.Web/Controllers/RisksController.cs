@@ -60,6 +60,12 @@ public class RisksController : Controller
         Guid id, Guid projectId, decimal probability, decimal monetaryImpact,
         decimal? residualProbability, string comment, string? rowVersionBase64, CancellationToken ct)
     {
+        if (!ModelState.IsValid)
+        {
+            TempData["Error"] = string.Join(" ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
+            return RedirectToAction(nameof(Index), new { projectId });
+        }
+
         try
         {
             var (uid, login) = CurrentUser();
@@ -73,6 +79,10 @@ public class RisksController : Controller
         {
             TempData["Error"] = ex.Message;
         }
+        catch (DbUpdateException)
+        {
+            TempData["Error"] = "Ошибка сохранения оценки риска в БД. Обновите страницу и повторите.";
+        }
         return RedirectToAction(nameof(Index), new { projectId });
     }
 
@@ -84,18 +94,34 @@ public class RisksController : Controller
         decimal monetaryImpact, decimal? residualProbability, string ownerRole,
         string mitigation, string earlyIndicator, CancellationToken ct)
     {
+        if (!ModelState.IsValid)
+        {
+            TempData["Error"] = string.Join(" ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
+            return RedirectToAction(nameof(Index), new { projectId });
+        }
+
         try
         {
+            if (projectId == Guid.Empty || !await _db.Projects.AnyAsync(p => p.Id == projectId && !p.IsDeleted, ct))
+                throw new DomainException("Сначала выберите существующий проект (в базе данных нет активных проектов).");
+
+            if (string.IsNullOrWhiteSpace(eventText))
+                throw new DomainException("Укажите описание рискового события.");
+
+            string normalizedCode = string.IsNullOrWhiteSpace(code) ? $"R-{DateTime.UtcNow:HHmm}" : code.Trim().ToUpperInvariant();
+            if (await _db.Risks.AnyAsync(r => !r.IsDeleted && r.ProjectId == projectId && r.Code == normalizedCode, ct))
+                throw new DuplicateEntityException($"Риск с кодом {normalizedCode} уже существует в этом проекте.");
+
             var risk = new Risk
             {
                 ProjectId = projectId,
-                Code = string.IsNullOrWhiteSpace(code) ? $"R-{DateTime.UtcNow:HHmm}" : code.Trim().ToUpperInvariant(),
+                Code = normalizedCode,
                 Event = eventText.Trim(),
                 Cause = "Выявлено в ходе мониторинга проекта",
                 Consequence = "Потенциальное отклонение стоимости/срока",
                 Probability = Math.Clamp(probability, 0.01m, 0.99m),
                 MonetaryImpact = Math.Max(0m, monetaryImpact),
-                ResidualProbability = residualProbability,
+                ResidualProbability = residualProbability.HasValue ? Math.Clamp(residualProbability.Value, 0m, 0.99m) : null,
                 OwnerRole = string.IsNullOrWhiteSpace(ownerRole) ? "Руководитель проекта" : ownerRole.Trim(),
                 Mitigation = mitigation ?? string.Empty,
                 EarlyIndicator = earlyIndicator ?? string.Empty,
@@ -113,6 +139,10 @@ public class RisksController : Controller
         catch (DomainException ex)
         {
             TempData["Error"] = ex.Message;
+        }
+        catch (DbUpdateException)
+        {
+            TempData["Error"] = "Не удалось сохранить риск: проверьте уникальность кода риска в проекте.";
         }
         return RedirectToAction(nameof(Index), new { projectId });
     }

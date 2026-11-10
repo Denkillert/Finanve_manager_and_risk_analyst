@@ -10,7 +10,10 @@ public class LoginViewModel
     public string Password { get; set; } = string.Empty;
     public string? TwoFactorCode { get; set; }
     public string? ErrorMessage { get; set; }
+    public string? InfoMessage { get; set; }
     public bool RequiresTwoFactor { get; set; }
+    public bool HasUsers { get; set; } = true;
+    public string DatabaseName { get; set; } = string.Empty;
     public List<DemoAccountOption> DemoUsers { get; set; } = new();
 }
 
@@ -43,7 +46,7 @@ public class DashboardViewModel
     public decimal TotalReserveP80 { get; set; }
     public int GapDaysCount90d { get; set; }
     public decimal MaxCashGap90d { get; set; }
-    public string DatabaseProvider { get; set; } = "InMemory";
+    public string DatabaseProvider { get; set; } = "MS SQL Server";
 
     public List<ProjectForecastItem> Forecasts { get; set; } = new();
     public List<PaymentRequest> PendingRequests { get; set; } = new();

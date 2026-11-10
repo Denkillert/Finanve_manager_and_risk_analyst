@@ -1,12 +1,20 @@
 @model DashboardViewModel
 @{
     ViewData["Title"] = "Главная панель";
+    var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
 }
 
 <div class="alert alert-info">
     Подключение БД: <strong>@Model.DatabaseProvider</strong> · Референсная дата: <strong>10.11.2026</strong> ·
     Курсы НБ РБ: USD = 3,25 BYN, EUR = 3,52 BYN, RUB(100) = 3,45 BYN.
 </div>
+
+@if (!Model.Forecasts.Any())
+{
+    <div class="alert alert-info">
+        В подключённой базе данных пока нет проектов. Добавьте организации/проекты в базе данных или загрузите контрольные примеры при входе.
+    </div>
+}
 
 <div class="kpi-grid">
     <div class="kpi-card">
@@ -41,6 +49,10 @@
 <div class="card">
     <div class="card-header">
         <h3 class="card-title">Прогноз стоимости проектов по освоенному объёму (EVM + резерв P80)</h3>
+        @if (roleCode is "RiskSpecialist" or "ProjectManager")
+        {
+            <a class="btn btn-sm" asp-controller="Risks" asp-action="Index">Матрица рисков 5×5 и P80</a>
+        }
     </div>
     <div class="table-wrap">
         <table>
@@ -82,38 +94,76 @@
 </div>
 
 <div class="grid-2">
-    <div class="card">
-        <div class="card-header">
-            <h3 class="card-title">Заявки, требующие решения</h3>
-        </div>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Номер</th>
-                        <th>Статус</th>
-                        <th class="num">К оплате</th>
-                        <th>Дата</th>
-                        <th>Примечание</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var r in Model.PendingRequests)
-                    {
-                        var cls = r.Status == RequestStatus.Blocked ? "badge-danger"
-                            : r.Status == RequestStatus.Approved ? "badge-success" : "badge-warn";
+    @if (RolePermissions.CanAccess(roleCode, AppSection.PaymentRequests))
+    {
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Заявки, требующие решения</h3>
+                <a class="btn btn-outline btn-sm" asp-controller="Requests" asp-action="Index">Открыть все</a>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
                         <tr>
-                            <td><strong>@r.Number</strong></td>
-                            <td><span class="badge @cls">@RussianLabels.RequestStatusName(r.Status)</span></td>
-                            <td class="num">@r.PayableAmount.ToString("N2") @r.Currency</td>
-                            <td>@r.PlannedPaymentDate.ToString("dd.MM.yyyy")</td>
-                            <td>@(r.BlockReason ?? r.Purpose ?? "—")</td>
+                            <th>Номер</th>
+                            <th>Статус</th>
+                            <th class="num">К оплате</th>
+                            <th>Дата</th>
+                            <th>Примечание</th>
                         </tr>
-                    }
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in Model.PendingRequests)
+                        {
+                            var cls = r.Status == RequestStatus.Blocked ? "badge-danger"
+                                : r.Status == RequestStatus.Approved ? "badge-success" : "badge-warn";
+                            <tr>
+                                <td><strong>@r.Number</strong></td>
+                                <td><span class="badge @cls">@RussianLabels.RequestStatusName(r.Status)</span></td>
+                                <td class="num">@r.PayableAmount.ToString("N2") @r.Currency</td>
+                                <td>@r.PlannedPaymentDate.ToString("dd.MM.yyyy")</td>
+                                <td>@(r.BlockReason ?? r.Purpose ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
         </div>
-    </div>
+    }
+    else
+    {
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Сводка по рискам проектов (табл. 1.15–1.18)</h3>
+                <a class="btn btn-outline btn-sm" asp-controller="Reports" asp-action="Index">Отчёты и печать</a>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Проект</th>
+                            <th class="num">ΣEMV</th>
+                            <th class="num">СКО σ</th>
+                            <th class="num">Резерв P80</th>
+                            <th class="num">Остат. EMV</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var f in Model.Forecasts)
+                        {
+                            <tr>
+                                <td><strong>@f.Project.Code</strong></td>
+                                <td class="num">@f.RiskSummary.TotalEmv.ToString("N2")</td>
+                                <td class="num">@f.RiskSummary.Sigma.ToString("N2")</td>
+                                <td class="num"><strong>@f.RiskSummary.ReserveP80.ToString("N2")</strong></td>
+                                <td class="num">@f.RiskSummary.TotalResidualEmv.ToString("N2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
 
     <div class="card">
         <div class="card-header">

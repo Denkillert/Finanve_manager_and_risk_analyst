@@ -50,8 +50,7 @@ public static class RolePermissions
         ["Admin"] = ClientApp.Wpf,
         ["FinancialManager"] = ClientApp.Web,
         ["ProjectManager"] = ClientApp.Web,
-        ["RiskSpecialist"] = ClientApp.Web,
-        ["SiteWorker"] = ClientApp.Web
+        ["RiskSpecialist"] = ClientApp.Web
     };
 
     private static readonly Dictionary<string, AppSection[]> AllowedSections = new(StringComparer.OrdinalIgnoreCase)
@@ -105,10 +104,6 @@ public static class RolePermissions
         [
             AppSection.Administration,
             AppSection.AuditLog
-        ],
-        ["SiteWorker"] =
-        [
-            AppSection.SiteActs
         ]
     };
 
@@ -138,7 +133,7 @@ public static class RolePermissions
     public static IReadOnlyList<SectionDescriptor> GetSectionsForRole(string roleCode)
     {
         if (!AllowedSections.TryGetValue(roleCode, out var list))
-            list = [AppSection.SiteActs];
+            list = [AppSection.Dashboard];
 
         return list.Select(s => new SectionDescriptor(s, Meta[s].Title, Meta[s].Controller)).ToList();
     }
@@ -151,7 +146,6 @@ public static class RolePermissions
     public static (string Controller, string Action) GetLandingRoute(string roleCode) => roleCode switch
     {
         "Admin" => ("Admin", "Index"),
-        "SiteWorker" => ("Requests", "Acts"),
         _ => ("Dashboard", "Index")
     };
 }
@@ -213,7 +207,7 @@ public class AuthService
             return new AuthLoginResult(false, null, err);
         }
 
-        string roleCode = user.Role?.Code ?? "SiteWorker";
+        string roleCode = user.Role?.Code ?? "ProjectManager";
         if (!RolePermissions.IsClientAllowed(roleCode, requiredClient))
         {
             string targetClientName = RolePermissions.GetTargetClient(roleCode) == ClientApp.Wpf

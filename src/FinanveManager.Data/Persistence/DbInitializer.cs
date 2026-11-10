@@ -1,4 +1,5 @@
 using FinanveManager.Data.Models;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.Data.Persistence;
@@ -26,7 +27,6 @@ public static class SeedIds
     public static readonly Guid RolePm = Guid.Parse("60000000-0000-0000-0000-000000000005");
     public static readonly Guid RoleRisk = Guid.Parse("60000000-0000-0000-0000-000000000006");
     public static readonly Guid RoleAdmin = Guid.Parse("60000000-0000-0000-0000-000000000007");
-    public static readonly Guid RoleSite = Guid.Parse("60000000-0000-0000-0000-000000000008");
 
     public static readonly Guid UserCeo = Guid.Parse("70000000-0000-0000-0000-000000000001");
     public static readonly Guid UserFin = Guid.Parse("70000000-0000-0000-0000-000000000002");
@@ -35,7 +35,6 @@ public static class SeedIds
     public static readonly Guid UserPm = Guid.Parse("70000000-0000-0000-0000-000000000005");
     public static readonly Guid UserRisk = Guid.Parse("70000000-0000-0000-0000-000000000006");
     public static readonly Guid UserAdmin = Guid.Parse("70000000-0000-0000-0000-000000000007");
-    public static readonly Guid UserSite = Guid.Parse("70000000-0000-0000-0000-000000000008");
 
     public static readonly Guid Bv1 = Guid.Parse("80000000-0000-0000-0000-000000000001");
     public static readonly Guid Bv2 = Guid.Parse("80000000-0000-0000-0000-000000000002");
@@ -48,75 +47,272 @@ public static class SeedIds
     public const string DefaultDemoPasswordHash = "U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=";
 }
 
+public record DatabaseEnsureResult(
+    bool DatabaseCreatedEmpty,
+    bool HasUsers,
+    string ServerName,
+    string DatabaseName);
+
 public sealed class AppDatabaseFactory
 {
     public bool UsesSqlServer { get; }
-    public string ProviderLabel => UsesSqlServer ? "MS SQL Server 2022" : "InMemory (Локальная БД)";
+    public string ConnectionString { get; }
+    public string ProviderLabel => UsesSqlServer ? "MS SQL Server" : "InMemory (Только модульные тесты)";
+    public DatabaseEnsureResult? LastEnsureResult { get; private set; }
     private readonly DbContextOptions<AppDbContext> _options;
 
-    public AppDatabaseFactory(string? connectionString, string inMemoryName = "FinanveManagerSharedDb")
+    /// <summary>
+    /// Основной конструктор для работы с реальным MS SQL Server.
+    /// Не выполняет тихого переключения на локальную InMemory-БД: при ошибке подключения выбрасывает исключение.
+    /// </summary>
+    public AppDatabaseFactory(string? connectionString)
     {
-        UsesSqlServer = DbInitializer.CanUseSqlServer(connectionString);
-        var builder = new DbContextOptionsBuilder<AppDbContext>();
-        if (UsesSqlServer && !string.IsNullOrWhiteSpace(connectionString))
-            builder.UseSqlServer(connectionString);
-        else
-            builder.UseInMemoryDatabase(inMemoryName);
-        _options = builder.Options;
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException(
+                "Строка подключения к MS SQL Server не задана (ConnectionStrings:DefaultConnection пуста).");
+
+        UsesSqlServer = true;
+        ConnectionString = connectionString;
+        _options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlServer(connectionString)
+            .Options;
+    }
+
+    private AppDatabaseFactory(DbContextOptions<AppDbContext> testOptions, string label)
+    {
+        UsesSqlServer = false;
+        ConnectionString = label;
+        _options = testOptions;
+    }
+
+    /// <summary>
+    /// Изолированная фабрика InMemory исключительно для модульных тестов (xUnit).
+    /// </summary>
+    public static AppDatabaseFactory CreateInMemoryForTests(string inMemoryName)
+    {
+        var opts = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(inMemoryName)
+            .Options;
+        return new AppDatabaseFactory(opts, inMemoryName);
     }
 
     public AppDbContext CreateContext() => new(_options);
 
-    public async Task InitializeAsync(CancellationToken ct = default)
+    /// <summary>
+    /// Проверяет подключение к MS SQL Server (выбрасывает ошибку при недоступности).
+    /// Если база данных ещё не существует, создаёт её пустой (схемы, таблицы и представление без демо-данных).
+    /// </summary>
+    public async Task<DatabaseEnsureResult> InitializeAsync(CancellationToken ct = default)
     {
-        await using var db = CreateContext();
-        await DbInitializer.SeedIfEmptyAsync(db, ct);
+        if (!UsesSqlServer)
+        {
+            await using var memDb = CreateContext();
+            await DbInitializer.SeedIfEmptyAsync(memDb, ct);
+            LastEnsureResult = new DatabaseEnsureResult(false, await memDb.Users.AnyAsync(ct), "InMemory", ConnectionString);
+            return LastEnsureResult;
+        }
+
+        LastEnsureResult = await DbInitializer.EnsureSqlServerDatabaseAsync(ConnectionString, ct);
+        return LastEnsureResult;
     }
 }
 
 public static class DbInitializer
 {
-    public static bool CanUseSqlServer(string? connectionString)
+    /// <summary>
+    /// Проверяет доступность сервера MS SQL Server и наличие целевой БД.
+    /// 1) Если подключение к серверу невозможно — выбрасывает InvalidOperationException.
+    /// 2) Если целевая БД отсутствует (или пуста без таблиц) — создаёт её пустой (без начальных данных).
+    /// </summary>
+    public static async Task<DatabaseEnsureResult> EnsureSqlServerDatabaseAsync(
+        string? connectionString, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(connectionString)) return false;
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException(
+                "Строка подключения к MS SQL Server не задана (DefaultConnection пуста).");
+
+        SqlConnectionStringBuilder targetBuilder;
         try
         {
-            var probed = connectionString.Contains("Connect Timeout", StringComparison.OrdinalIgnoreCase)
-                ? connectionString
-                : $"{connectionString.TrimEnd(';')};Connect Timeout=2";
-            var opts = new DbContextOptionsBuilder<AppDbContext>()
-                .UseSqlServer(probed)
-                .Options;
-            using var ctx = new AppDbContext(opts);
-            if (!ctx.Database.CanConnect()) return false;
-            _ = ctx.Roles.Any();
-            return true;
+            targetBuilder = new SqlConnectionStringBuilder(connectionString);
         }
-        catch
+        catch (Exception ex)
         {
-            return false;
+            throw new InvalidOperationException(
+                $"Некорректная строка подключения к MS SQL Server: {ex.Message}", ex);
         }
+
+        string databaseName = targetBuilder.InitialCatalog;
+        if (string.IsNullOrWhiteSpace(databaseName))
+            throw new InvalidOperationException(
+                "В строке подключения к MS SQL Server не указано имя базы данных (Database / Initial Catalog).");
+
+        var masterBuilder = new SqlConnectionStringBuilder(targetBuilder.ConnectionString)
+        {
+            InitialCatalog = "master",
+            ConnectTimeout = targetBuilder.ConnectTimeout > 0 ? Math.Min(targetBuilder.ConnectTimeout, 10) : 5
+        };
+
+        try
+        {
+            await using var masterConn = new SqlConnection(masterBuilder.ConnectionString);
+            await masterConn.OpenAsync(ct);
+
+            await using var cmd = masterConn.CreateCommand();
+            cmd.CommandText = "SELECT DB_ID(@dbName)";
+            cmd.Parameters.AddWithValue("@dbName", databaseName);
+            _ = await cmd.ExecuteScalarAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Нет подключения к серверу MS SQL Server ({targetBuilder.DataSource}, БД «{databaseName}»): {ex.Message}\n" +
+                "Проверьте, что служба MS SQL Server запущена и строка DefaultConnection в appsettings.json указана верно.",
+                ex);
+        }
+
+        var appOpts = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlServer(targetBuilder.ConnectionString)
+            .Options;
+
+        await using var db = new AppDbContext(appOpts);
+        bool createdEmpty;
+        try
+        {
+            createdEmpty = await db.Database.EnsureCreatedAsync(ct);
+            await EnsureSqlViewsAsync(db, ct);
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Не удалось проверить или создать пустую базу данных «{databaseName}» на сервере {targetBuilder.DataSource}: {ex.Message}",
+                ex);
+        }
+
+        bool hasUsers = await db.Users.AnyAsync(ct);
+        return new DatabaseEnsureResult(createdEmpty, hasUsers, targetBuilder.DataSource, databaseName);
+    }
+
+    private static async Task EnsureSqlViewsAsync(AppDbContext db, CancellationToken ct)
+    {
+        const string createViewSql = """
+            IF OBJECT_ID('finance.vFreeLimit', 'V') IS NULL
+            EXEC(N'
+                CREATE VIEW finance.vFreeLimit
+                AS
+                SELECT
+                    p.Id AS ProjectId,
+                    p.Code AS ProjectCode,
+                    p.Name AS ProjectName,
+                    co.Id AS ConstructionObjectId,
+                    co.Name AS ConstructionObjectName,
+                    ci.Id AS CostItemId,
+                    ci.Code AS CostItemCode,
+                    ci.Name AS CostItemName,
+                    bv.Id AS BudgetVersionId,
+                    bv.VersionNumber,
+                    ISNULL(lim.BudgetAmount, 0) AS ApprovedBudget,
+                    ISNULL(obl.GrossObligations, 0) AS GrossObligations,
+                    ISNULL(obl.PaidFact, 0) AS PaidFact,
+                    ISNULL(req.SubmittedUnpaid, 0) AS SubmittedRequests,
+                    ISNULL(lim.BudgetAmount, 0) - ISNULL(obl.GrossObligations, 0) AS FreeLimit,
+                    ISNULL(obl.GrossObligations, 0) - ISNULL(obl.PaidFact, 0) AS ObligationRemainder,
+                    ISNULL(obl.GrossObligations, 0) - ISNULL(lim.BudgetAmount, 0) AS Deviation,
+                    CASE
+                        WHEN ISNULL(lim.BudgetAmount, 0) = 0 THEN NULL
+                        ELSE CAST(((ISNULL(obl.GrossObligations, 0) - lim.BudgetAmount) / lim.BudgetAmount) * 100.0 AS DECIMAL(10, 2))
+                    END AS DeviationPercent
+                FROM finance.Projects p
+                JOIN finance.BudgetVersions bv ON bv.ProjectId = p.Id AND bv.Status = N''Approved'' AND bv.IsDeleted = 0
+                JOIN finance.ConstructionObjects co ON co.ProjectId = p.Id AND co.IsDeleted = 0
+                CROSS JOIN finance.CostItems ci
+                LEFT JOIN (
+                    SELECT BudgetVersionId, ConstructionObjectId, CostItemId, SUM(Amount) AS BudgetAmount
+                    FROM finance.BudgetLimits
+                    WHERE IsDeleted = 0
+                    GROUP BY BudgetVersionId, ConstructionObjectId, CostItemId
+                ) lim ON lim.BudgetVersionId = bv.Id AND lim.ConstructionObjectId = co.Id AND lim.CostItemId = ci.Id
+                LEFT JOIN (
+                    SELECT ConstructionObjectId, CostItemId, SUM(GrossAmount) AS GrossObligations, SUM(PaidAmount) AS PaidFact
+                    FROM finance.Obligations
+                    WHERE IsDeleted = 0
+                    GROUP BY ConstructionObjectId, CostItemId
+                ) obl ON obl.ConstructionObjectId = co.Id AND obl.CostItemId = ci.Id
+                LEFT JOIN (
+                    SELECT ConstructionObjectId, CostItemId, SUM(AmountInByn) AS SubmittedUnpaid
+                    FROM finance.PaymentRequests
+                    WHERE IsDeleted = 0 AND Status IN (N''UnderReview'', N''Blocked'', N''PendingApproval'', N''ApprovedByManagement'', N''Approved'')
+                    GROUP BY ConstructionObjectId, CostItemId
+                ) req ON req.ConstructionObjectId = co.Id AND req.CostItemId = ci.Id
+                WHERE p.IsDeleted = 0 AND ci.IsDeleted = 0 AND (lim.BudgetAmount IS NOT NULL OR obl.GrossObligations IS NOT NULL)
+            ');
+            """;
+
+        await db.Database.ExecuteSqlRawAsync(createViewSql, ct);
+    }
+
+    public static List<Role> BuildStandardRoles() =>
+    [
+        new() { Id = SeedIds.RoleCeo, Code = "CEO", Name = "Руководитель организации", ClientType = "WPF", Description = "Портфель, ликвидность, утверждение бюджетов и перерасхода (UC04), критические риски" },
+        new() { Id = SeedIds.RoleFin, Code = "FinancialManager", Name = "Финансовый менеджер", ClientType = "Web", Description = "Бюджеты, платёжный календарь, согласование заявок с ЭЦП, контроль авансов и разрывов" },
+        new() { Id = SeedIds.RoleAcc, Code = "Accountant", Name = "Бухгалтер", ClientType = "WPF", Description = "Исполнение платежей, загрузка банковских выписок MT940/CSV, учёт факта и 1С" },
+        new() { Id = SeedIds.RoleProc, Code = "ProcurementSpecialist", Name = "Специалист по снабжению", ClientType = "WPF", Description = "Договоры, спецификации, заявки на закупки, контроль поставок" },
+        new() { Id = SeedIds.RolePm, Code = "ProjectManager", Name = "Руководитель проекта", ClientType = "Web", Description = "Создание заявок, акты С-2/С-3 с фотофиксацией, прогноз EAC, регистрация рисков" },
+        new() { Id = SeedIds.RoleRisk, Code = "RiskSpecialist", Name = "Специалист по рискам", ClientType = "Web", Description = "Реестр рисков 5×5, оценка EMV, σ и резерва P80, триггеры, чувствительность EAC" },
+        new() { Id = SeedIds.RoleAdmin, Code = "Admin", Name = "Администратор системы", ClientType = "WPF", Description = "Пользователи, роли, справочники, нормативные правила, аудит (2FA; фин. операции запрещены)" }
+    ];
+
+    /// <summary>
+    /// Минимальная инициализация пустой БД по явному действию пользователя:
+    /// создаёт только 7 ролей (табл. 1.8) и учётную запись администратора без демонстрационных проектов.
+    /// </summary>
+    public static async Task SeedRolesAndAdminOnlyAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        if (await db.Users.AnyAsync(ct))
+            return;
+
+        if (!await db.Roles.AnyAsync(ct))
+            await db.Roles.AddRangeAsync(BuildStandardRoles(), ct);
+
+        await db.Users.AddAsync(new User
+        {
+            Id = SeedIds.UserAdmin,
+            RoleId = SeedIds.RoleAdmin,
+            Login = "admin",
+            PasswordHash = SeedIds.DefaultDemoPasswordHash,
+            FullName = "Администратор системы",
+            Email = "admin@stroyfin.by",
+            IsActive = true,
+            TwoFactorEnabled = true,
+            TwoFactorSecret = "246810",
+            PersonalDataConsentGiven = true,
+            ConsentDate = DateTime.UtcNow
+        }, ct);
+
+        await db.AuditLogs.AddAsync(new AuditLog
+        {
+            UserId = SeedIds.UserAdmin,
+            UserLogin = "admin",
+            Timestamp = DateTime.UtcNow,
+            ObjectName = "System",
+            ObjectId = "INIT_ADMIN",
+            Action = "INIT_ROLES_AND_ADMIN",
+            NewValue = "Completed",
+            Details = "Созданы 7 ролей (табл. 1.8) и стартовая учётная запись администратора"
+        }, ct);
+
+        await db.SaveChangesAsync(ct);
     }
 
     public static async Task SeedIfEmptyAsync(AppDbContext db, CancellationToken ct = default)
     {
-        if (await db.Roles.AnyAsync(ct))
+        if (await db.Users.AnyAsync(ct))
             return;
 
         var baseDate = new DateTime(2026, 11, 10, 9, 0, 0, DateTimeKind.Utc);
 
-        var roles = new List<Role>
-        {
-            new() { Id = SeedIds.RoleCeo, Code = "CEO", Name = "Руководитель организации", ClientType = "WPF", Description = "Портфель, ликвидность, утверждение бюджетов и перерасхода (UC04), критические риски" },
-            new() { Id = SeedIds.RoleFin, Code = "FinancialManager", Name = "Финансовый менеджер", ClientType = "Web", Description = "Бюджеты, платёжный календарь, согласование заявок с ЭЦП, контроль авансов и разрывов" },
-            new() { Id = SeedIds.RoleAcc, Code = "Accountant", Name = "Бухгалтер", ClientType = "WPF", Description = "Исполнение платежей, загрузка банковских выписок MT940/CSV, учёт факта и 1С" },
-            new() { Id = SeedIds.RoleProc, Code = "ProcurementSpecialist", Name = "Специалист по снабжению", ClientType = "WPF", Description = "Договоры, спецификации, заявки на закупки, контроль поставок" },
-            new() { Id = SeedIds.RolePm, Code = "ProjectManager", Name = "Руководитель проекта", ClientType = "Web", Description = "Создание заявок, акты С-2/С-3 с фотофиксацией, прогноз EAC, регистрация рисков" },
-            new() { Id = SeedIds.RoleRisk, Code = "RiskSpecialist", Name = "Специалист по рискам", ClientType = "Web", Description = "Реестр рисков 5×5, оценка EMV, σ и резерва P80, триггеры, чувствительность EAC" },
-            new() { Id = SeedIds.RoleAdmin, Code = "Admin", Name = "Администратор системы", ClientType = "WPF", Description = "Пользователи, роли, справочники, нормативные правила, аудит (2FA; фин. операции запрещены)" },
-            new() { Id = SeedIds.RoleSite, Code = "SiteWorker", Name = "Работник на объекте", ClientType = "Web", Description = "Просмотр этапов строительства, подготовка актов С-2 и фотофиксация" }
-        };
-        await db.Roles.AddRangeAsync(roles, ct);
+        if (!await db.Roles.AnyAsync(ct))
+            await db.Roles.AddRangeAsync(BuildStandardRoles(), ct);
 
         var users = new List<User>
         {
@@ -126,8 +322,7 @@ public static class DbInitializer
             new() { Id = SeedIds.UserProc, RoleId = SeedIds.RoleProc, Login = "supply", PasswordHash = SeedIds.DefaultDemoPasswordHash, FullName = "Новиков Дмитрий Олегович", Email = "supply@stroyfin.by", IsActive = true, TwoFactorEnabled = false, PersonalDataConsentGiven = true, ConsentDate = baseDate },
             new() { Id = SeedIds.UserPm, RoleId = SeedIds.RolePm, Login = "pm", PasswordHash = SeedIds.DefaultDemoPasswordHash, FullName = "Громов Алексей Николаевич", Email = "pm@stroyfin.by", IsActive = true, TwoFactorEnabled = false, PersonalDataConsentGiven = true, ConsentDate = baseDate },
             new() { Id = SeedIds.UserRisk, RoleId = SeedIds.RoleRisk, Login = "risk", PasswordHash = SeedIds.DefaultDemoPasswordHash, FullName = "Волкова Марина Петровна", Email = "risk@stroyfin.by", IsActive = true, TwoFactorEnabled = false, PersonalDataConsentGiven = true, ConsentDate = baseDate },
-            new() { Id = SeedIds.UserAdmin, RoleId = SeedIds.RoleAdmin, Login = "admin", PasswordHash = SeedIds.DefaultDemoPasswordHash, FullName = "Титов Сергей Владимирович", Email = "admin@stroyfin.by", IsActive = true, TwoFactorEnabled = true, TwoFactorSecret = "246810", PersonalDataConsentGiven = true, ConsentDate = baseDate },
-            new() { Id = SeedIds.UserSite, RoleId = SeedIds.RoleSite, Login = "siteworker", PasswordHash = SeedIds.DefaultDemoPasswordHash, FullName = "Орлов Максим Игоревич", Email = "site@stroyfin.by", IsActive = true, TwoFactorEnabled = false, PersonalDataConsentGiven = true, ConsentDate = baseDate }
+            new() { Id = SeedIds.UserAdmin, RoleId = SeedIds.RoleAdmin, Login = "admin", PasswordHash = SeedIds.DefaultDemoPasswordHash, FullName = "Титов Сергей Владимирович", Email = "admin@stroyfin.by", IsActive = true, TwoFactorEnabled = true, TwoFactorSecret = "246810", PersonalDataConsentGiven = true, ConsentDate = baseDate }
         };
         await db.Users.AddRangeAsync(users, ct);
 

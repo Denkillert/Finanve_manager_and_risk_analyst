@@ -1,11 +1,12 @@
 using FinanveManager.Data.Persistence;
 using FinanveManager.Data.Services;
+using FinanveManager.Web.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 
 var builder = WebApplication.CreateBuilder(args);
 
 var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddFinanveManagerData(connStr, "FinanveManagerWebDb");
+builder.Services.AddFinanveManagerData(connStr);
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -17,15 +18,15 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 
 builder.Services.AddAuthorization();
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options =>
+{
+    options.ModelBinderProviders.Insert(0, new FlexibleDecimalModelBinderProvider());
+});
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
-{
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await DbInitializer.SeedIfEmptyAsync(db);
-}
+// Проверка подключения к MS SQL Server (ошибка при недоступности; если БД отсутствует — создаётся пустой)
+await DbInitializer.EnsureSqlServerDatabaseAsync(connStr);
 
 if (!app.Environment.IsDevelopment())
 {

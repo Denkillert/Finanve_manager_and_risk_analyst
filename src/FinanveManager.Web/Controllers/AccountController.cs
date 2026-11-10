@@ -33,7 +33,14 @@ public class AccountController : Controller
         }
 
         ViewBag.ReturnUrl = returnUrl;
-        return View(new LoginViewModel { DemoUsers = await LoadDemoUsersAsync(ct) });
+        bool hasUsers = await _db.Users.AnyAsync(u => !u.IsDeleted, ct);
+        return View(new LoginViewModel
+        {
+            HasUsers = hasUsers,
+            DatabaseName = _db.Database.GetDbConnection().Database,
+            InfoMessage = TempData["LoginInfo"] as string,
+            DemoUsers = await LoadDemoUsersAsync(ct)
+        });
     }
 
     [AllowAnonymous]
@@ -41,6 +48,8 @@ public class AccountController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Login(LoginViewModel model, string? returnUrl = null, CancellationToken ct = default)
     {
+        model.HasUsers = await _db.Users.AnyAsync(u => !u.IsDeleted, ct);
+        model.DatabaseName = _db.Database.GetDbConnection().Database;
         model.DemoUsers = await LoadDemoUsersAsync(ct);
         ViewBag.ReturnUrl = returnUrl;
 
@@ -58,6 +67,26 @@ public class AccountController : Controller
 
         var (ctrl, act) = RolePermissions.GetLandingRoute(res.Session.RoleCode);
         return RedirectToAction(act, ctrl);
+    }
+
+    [AllowAnonymous]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> InitializeDemoData(CancellationToken ct = default)
+    {
+        await DbInitializer.SeedIfEmptyAsync(_db, ct);
+        TempData["LoginInfo"] = "Демонстрационные данные (7 ролей, контрольные примеры и 12 рисков) загружены в MS SQL Server.";
+        return RedirectToAction(nameof(Login));
+    }
+
+    [AllowAnonymous]
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> InitializeRolesAndAdmin(CancellationToken ct = default)
+    {
+        await DbInitializer.SeedRolesAndAdminOnlyAsync(_db, ct);
+        TempData["LoginInfo"] = "Созданы 7 стандартных ролей (табл. 1.8) и учётная запись администратора (admin / StroyFin2026!, 2FA: 246810). Создайте веб-пользователей через WPF-клиент администратора.";
+        return RedirectToAction(nameof(Login));
     }
 
     [HttpPost]
@@ -98,7 +127,7 @@ public class AccountController : Controller
             .Select(u => new DemoAccountOption(
                 u.Login,
                 u.FullName,
-                u.Role != null ? u.Role.Code : "SiteWorker",
+                u.Role != null ? u.Role.Code : "ProjectManager",
                 u.Role != null ? u.Role.Name : "",
                 u.TwoFactorEnabled))
             .ToListAsync(ct);

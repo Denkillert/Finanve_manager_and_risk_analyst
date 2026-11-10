@@ -59,7 +59,7 @@ public class RequestsController : Controller
     }
 
     [HttpGet]
-    [Authorize(Roles = "SiteWorker,ProjectManager,Accountant,ProcurementSpecialist")]
+    [Authorize(Roles = "ProjectManager,Accountant,ProcurementSpecialist")]
     public async Task<IActionResult> Acts(CancellationToken ct = default)
     {
         var vm = new SiteActsViewModel
@@ -94,14 +94,28 @@ public class RequestsController : Controller
         bool vatIncluded = true,
         CancellationToken ct = default)
     {
+        if (!ModelState.IsValid)
+        {
+            TempData["Error"] = string.Join(" ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
+            return RedirectToAction(nameof(Index));
+        }
+
         try
         {
             var obj = await _db.ConstructionObjects.FirstOrDefaultAsync(o => o.Id == constructionObjectId && !o.IsDeleted, ct)
                 ?? throw new DomainException("Объект строительства не найден.");
+            if (!await _db.Contracts.AnyAsync(c => c.Id == contractId && !c.IsDeleted, ct))
+                throw new DomainException("Договор не найден.");
+            if (!await _db.CostItems.AnyAsync(ci => ci.Id == costItemId && !ci.IsDeleted, ct))
+                throw new DomainException("Статья затрат не найдена.");
+
+            decimal effectiveAmount = type == RequestType.CurrentPayment && actAmount > 0 ? actAmount : amount;
+            if (effectiveAmount <= 0)
+                throw new DomainException("Сумма заявки должна быть положительной.");
 
             var dto = new CreatePaymentRequestDto(
                 obj.ProjectId, constructionObjectId, contractId, costItemId,
-                amount, actAmount, advanceOffset, retentionAmount, vatIncluded,
+                effectiveAmount, actAmount, advanceOffset, retentionAmount, vatIncluded,
                 string.IsNullOrWhiteSpace(currency) ? "BYN" : currency.Trim().ToUpperInvariant(),
                 type,
                 plannedPaymentDate == default ? new DateTime(2026, 11, 15) : plannedPaymentDate,
@@ -115,8 +129,34 @@ public class RequestsController : Controller
 
             var (uid, login) = CurrentUser();
             var (created, checks) = await _requestService.CreateAsync(dto, uid, login, ct);
-            var msg = $"Заявка {created.Number} создана в статусе {created.Status}. " + string.Join(" | ", checks.Messages);
+            var msg = $"Заявка {created.Number} создана в статусе «{RussianLabels.RequestStatusName(created.Status)}». " + string.Join(" | ", checks.Messages);
             if (created.Status == RequestStatus.Blocked)
+                TempData["Error"] = msg;
+            else
+                TempData["Success"] = msg;
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        catch (DbUpdateException)
+        {
+            TempData["Error"] = "Не удалось создать заявку: проверьте уникальность номера документа и корректность данных.";
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProjectManager,ProcurementSpecialist,FinancialManager,CEO")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Resubmit(Guid id, string? rowVersionBase64, CancellationToken ct)
+    {
+        try
+        {
+            var (uid, login) = CurrentUser();
+            var (req, checks) = await _requestService.SubmitAsync(id, DecodeRv(rowVersionBase64), uid, login, ct);
+            var msg = $"Заявка {req.Number} отправлена повторно: статус «{RussianLabels.RequestStatusName(req.Status)}». " + string.Join(" | ", checks.Messages);
+            if (req.Status == RequestStatus.Blocked)
                 TempData["Error"] = msg;
             else
                 TempData["Success"] = msg;
@@ -205,7 +245,7 @@ public class RequestsController : Controller
     }
 
     [HttpPost]
-    [Authorize(Roles = "ProjectManager,SiteWorker,Accountant,ProcurementSpecialist")]
+    [Authorize(Roles = "ProjectManager,Accountant,ProcurementSpecialist")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateAct(
         Guid contractId,
@@ -220,16 +260,34 @@ public class RequestsController : Controller
         string? returnTo,
         CancellationToken ct)
     {
+        if (!ModelState.IsValid)
+        {
+            TempData["Error"] = string.Join(" ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
+            return string.Equals(returnTo, "Acts", StringComparison.OrdinalIgnoreCase)
+                ? RedirectToAction(nameof(Acts))
+                : RedirectToAction(nameof(Index));
+        }
+
         try
         {
+            if (contractId == Guid.Empty || constructionObjectId == Guid.Empty)
+                throw new DomainException("Выберите договор и объект строительства.");
+
+            var docType = documentType == DocumentType.CertificateS3 ? DocumentType.CertificateS3 : DocumentType.ActS2;
+            string docNumber = string.IsNullOrWhiteSpace(number) ? $"С-2/{DateTime.UtcNow:MMdd-HHmm}" : number.Trim();
+            var docDate = new DateTime(2026, 11, 10);
+
+            if (await _db.Documents.AnyAsync(d => !d.IsDeleted && d.Type == docType && d.Number == docNumber && d.Date == docDate, ct))
+                throw new DuplicateEntityException($"Документ {docNumber} от {docDate:dd.MM.yyyy} уже зарегистрирован.");
+
             decimal payable = FinancialCalculator.CalculateActPayable(grossAmount, advanceOffset, retentionAmount).PayableAmount;
             var doc = new Document
             {
                 ContractId = contractId,
                 ConstructionObjectId = constructionObjectId,
-                Type = documentType == DocumentType.CertificateS3 ? DocumentType.CertificateS3 : DocumentType.ActS2,
-                Number = string.IsNullOrWhiteSpace(number) ? $"С-2/{DateTime.UtcNow:MMdd-HHmm}" : number.Trim(),
-                Date = new DateTime(2026, 11, 10),
+                Type = docType,
+                Number = docNumber,
+                Date = docDate,
                 GrossAmount = grossAmount,
                 AdvanceOffset = advanceOffset,
                 RetentionAmount = retentionAmount,
@@ -251,6 +309,10 @@ public class RequestsController : Controller
         catch (DomainException ex)
         {
             TempData["Error"] = ex.Message;
+        }
+        catch (DbUpdateException)
+        {
+            TempData["Error"] = "Не удалось зарегистрировать акт: проверьте уникальность номера и корректность сумм.";
         }
         return string.Equals(returnTo, "Acts", StringComparison.OrdinalIgnoreCase)
             ? RedirectToAction(nameof(Acts))

@@ -64,15 +64,27 @@ public class ContractsController : Controller
         Guid projectId, string number, string counterparty, string counterpartyUnp,
         ContractDirection direction, decimal totalAmount, string currency, string? specificationNotes, CancellationToken ct)
     {
+        if (!ModelState.IsValid)
+        {
+            TempData["Error"] = string.Join(" ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
+            return RedirectToAction(nameof(Index));
+        }
+
         try
         {
+            if (projectId == Guid.Empty || !await _db.Projects.AnyAsync(p => p.Id == projectId && !p.IsDeleted, ct))
+                throw new DomainException("Выберите существующий проект для регистрации договора.");
             if (string.IsNullOrWhiteSpace(number) || string.IsNullOrWhiteSpace(counterparty) || totalAmount <= 0)
                 throw new DomainException("Укажите номер договора, контрагента и положительную сумму.");
+
+            string normNum = number.Trim();
+            if (await _db.Contracts.AnyAsync(c => !c.IsDeleted && c.ProjectId == projectId && c.Number == normNum, ct))
+                throw new DuplicateEntityException($"Договор № {normNum} уже существует в выбранном проекте.");
 
             var contract = new Contract
             {
                 ProjectId = projectId,
-                Number = number.Trim(),
+                Number = normNum,
                 Counterparty = counterparty.Trim(),
                 CounterpartyUnp = string.IsNullOrWhiteSpace(counterpartyUnp) ? "190000001" : counterpartyUnp.Trim(),
                 Direction = direction,
@@ -92,6 +104,10 @@ public class ContractsController : Controller
         catch (DomainException ex)
         {
             TempData["Error"] = ex.Message;
+        }
+        catch (DbUpdateException)
+        {
+            TempData["Error"] = "Ошибка сохранения договора: проверьте уникальность номера в проекте.";
         }
         return RedirectToAction(nameof(Index));
     }
@@ -123,8 +139,17 @@ public class ContractsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> OffsetAdvance(Guid advanceId, decimal offsetAmount, CancellationToken ct)
     {
+        if (!ModelState.IsValid)
+        {
+            TempData["Error"] = string.Join(" ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
+            return RedirectToAction(nameof(Index));
+        }
+
         try
         {
+            if (offsetAmount <= 0)
+                throw new DomainException("Сумма зачёта аванса должна быть положительной.");
+
             var adv = await _db.Advances.FirstOrDefaultAsync(a => a.Id == advanceId && !a.IsDeleted, ct)
                 ?? throw new DomainException("Аванс не найден.");
             decimal prev = adv.UsedAmount;

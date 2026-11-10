@@ -208,16 +208,13 @@ public class InMemoryNotificationPublisher : INotificationPublisher
 public static class DataServiceCollectionExtensions
 {
     public static IServiceCollection AddFinanveManagerData(
-        this IServiceCollection services, string? connectionString, string inMemoryName = "FinanveManagerWebDb")
+        this IServiceCollection services, string? connectionString)
     {
-        bool useSqlServer = DbInitializer.CanUseSqlServer(connectionString);
-        services.AddDbContext<AppDbContext>(opt =>
-        {
-            if (useSqlServer && !string.IsNullOrWhiteSpace(connectionString))
-                opt.UseSqlServer(connectionString);
-            else
-                opt.UseInMemoryDatabase(inMemoryName);
-        });
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException(
+                "Строка подключения к MS SQL Server не задана (ConnectionStrings:DefaultConnection).");
+
+        services.AddDbContext<AppDbContext>(opt => opt.UseSqlServer(connectionString));
 
         services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork>();

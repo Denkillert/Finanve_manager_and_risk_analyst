@@ -1,12 +1,17 @@
+@using FinanveManager.Data.Services
+@using System.Security.Claims
 @{
     ViewData["Title"] = "Доступ ограничен";
+    var roleCode = User.FindFirstValue(ClaimTypes.Role) ?? "ProjectManager";
+    var (landingCtrl, landingAct) = RolePermissions.GetLandingRoute(roleCode);
 }
 <div class="card">
     <h2 style="margin-top:0;color:#991b1b">Доступ к разделу запрещён (HTTP 403)</h2>
-    <p>Данный раздел не входит в полномочия вашей роли. Используйте разделы, доступные в меню слева.</p>
-    <p>
+    <p>Данный раздел не входит в полномочия вашей роли (<code>@roleCode</code>). Используйте разделы, доступные в меню слева.</p>
+    <div class="inline-form">
+        <a class="btn" asp-controller="@landingCtrl" asp-action="@landingAct">Вернуться в доступный раздел</a>
         <form method="post" asp-controller="Account" asp-action="Logout" style="display:inline">
             <button type="submit" class="btn btn-outline">Выйти и войти под другой ролью</button>
         </form>
-    </p>
+    </div>
 </div>

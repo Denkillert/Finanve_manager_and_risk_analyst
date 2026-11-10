@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Авторизация — СтройФинРиск"
-        Width="440"
+        Width="460"
         SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
@@ -11,7 +11,31 @@
         <StackPanel>
             <TextBlock Text="СтройФинРиск" FontSize="22" FontWeight="Bold" Foreground="#0F172A"/>
             <TextBlock Text="Управление финансами и рисками строительных проектов"
-                       FontSize="12" Foreground="#64748B" Margin="0,2,0,16" TextWrapping="Wrap"/>
+                       FontSize="12" Foreground="#64748B" Margin="0,2,0,14" TextWrapping="Wrap"/>
+
+            <Border x:Name="EmptyDbBanner"
+                    Background="#EFF6FF"
+                    BorderBrush="#BFDBFE"
+                    BorderThickness="1"
+                    CornerRadius="6"
+                    Padding="10,8"
+                    Margin="0,0,0,12"
+                    Visibility="Collapsed">
+                <StackPanel>
+                    <TextBlock Text="База данных пуста (структура таблиц создана, учётные записи отсутствуют). Выполните database/02_seed_data.sql в SSMS или выберите инициализацию:"
+                               Foreground="#1E3A8A" TextWrapping="Wrap" FontSize="11.5" Margin="0,0,0,8"/>
+                    <Button x:Name="InitRolesAdminButton"
+                            Content="Создать только 7 ролей (табл. 1.8) и admin"
+                            Margin="0,0,0,6"
+                            Padding="8,6"
+                            Click="InitRolesAdminButton_OnClick"/>
+                    <Button x:Name="InitDemoDataButton"
+                            Content="Загрузить контрольные примеры главы 1 (7 ролей + 12 рисков)"
+                            Style="{StaticResource PrimaryButton}"
+                            Padding="8,6"
+                            Click="InitDemoDataButton_OnClick"/>
+                </StackPanel>
+            </Border>
 
             <TextBlock Text="Учётная запись WPF-клиента (табл. 1.8, НФТ-1)" FontSize="11.5" Foreground="#475569" Margin="0,0,0,4"/>
             <ComboBox x:Name="DemoUsersCombo"
@@ -48,7 +72,7 @@
                     Padding="14,10"
                     Click="LoginButton_OnClick"/>
 
-            <TextBlock Text="Пароль: StroyFin2026! · Веб-роли (finmanager, pm, risk, siteworker) работают в браузере"
+            <TextBlock Text="Пароль: StroyFin2026! · Веб-роли (finmanager, pm, risk) работают в браузере"
                        FontSize="11" Foreground="#64748B" Margin="0,12,0,0" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
         </StackPanel>
     </Border>

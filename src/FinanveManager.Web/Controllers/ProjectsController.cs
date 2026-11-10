@@ -51,6 +51,9 @@ public class ProjectsController : Controller
     {
         try
         {
+            if (projectId == Guid.Empty)
+                throw new DomainException("Выберите проект (в базе данных нет активных проектов).");
+
             var (uid, login) = CurrentUser();
             var bv = await _budgetService.CreateNewVersionAsync(projectId, string.IsNullOrWhiteSpace(comment) ? "Корректировка бюджета" : comment, uid, login, ct);
             TempData["Success"] = $"Создана новая черновая версия бюджета v{bv.VersionNumber}.";
@@ -67,6 +70,12 @@ public class ProjectsController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateLimit(Guid limitId, decimal amount, string? rowVersionBase64, CancellationToken ct)
     {
+        if (!ModelState.IsValid)
+        {
+            TempData["Error"] = string.Join(" ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
+            return RedirectToAction(nameof(Index));
+        }
+
         try
         {
             var limit = await _db.BudgetLimits.FirstOrDefaultAsync(l => l.Id == limitId && !l.IsDeleted, ct)

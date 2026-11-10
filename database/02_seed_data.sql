@@ -29,7 +29,6 @@ DECLARE @RoleProc UNIQUEIDENTIFIER = '60000000-0000-0000-0000-000000000004';
 DECLARE @RolePm UNIQUEIDENTIFIER = '60000000-0000-0000-0000-000000000005';
 DECLARE @RoleRisk UNIQUEIDENTIFIER = '60000000-0000-0000-0000-000000000006';
 DECLARE @RoleAdmin UNIQUEIDENTIFIER = '60000000-0000-0000-0000-000000000007';
-DECLARE @RoleSite UNIQUEIDENTIFIER = '60000000-0000-0000-0000-000000000008';
 
 DECLARE @UserCeo UNIQUEIDENTIFIER = '70000000-0000-0000-0000-000000000001';
 DECLARE @UserFin UNIQUEIDENTIFIER = '70000000-0000-0000-0000-000000000002';
@@ -38,20 +37,18 @@ DECLARE @UserProc UNIQUEIDENTIFIER = '70000000-0000-0000-0000-000000000004';
 DECLARE @UserPm UNIQUEIDENTIFIER = '70000000-0000-0000-0000-000000000005';
 DECLARE @UserRisk UNIQUEIDENTIFIER = '70000000-0000-0000-0000-000000000006';
 DECLARE @UserAdmin UNIQUEIDENTIFIER = '70000000-0000-0000-0000-000000000007';
-DECLARE @UserSite UNIQUEIDENTIFIER = '70000000-0000-0000-0000-000000000008';
 
--- 1. Роли (8 ролей по таблице 1.8 и НФТ-8)
+-- 1. Роли (7 ролей по таблице 1.8 и разд. 2.1.3 / НФТ-8)
 INSERT INTO security.Roles (Id, Code, Name, ClientType, Description) VALUES
-(@RoleCeo, N'CEO', N'Руководитель организации', N'Both', N'Портфель, утверждение бюджетов и перерасхода, согласование критических рисков'),
+(@RoleCeo, N'CEO', N'Руководитель организации', N'WPF', N'Портфель, ликвидность, утверждение бюджетов и перерасхода (UC04), критические риски'),
 (@RoleFin, N'FinancialManager', N'Финансовый менеджер', N'Web', N'Ведение бюджетов, платёжный календарь, согласование заявок, контроль авансов'),
 (@RoleAcc, N'Accountant', N'Бухгалтер', N'WPF', N'Исполнение платежей, загрузка выписок, учёт факта и закрытие обязательств'),
 (@RoleProc, N'ProcurementSpecialist', N'Специалист по снабжению', N'WPF', N'Ведение договоров, спецификаций, заявок по поставкам и контроль сроков'),
 (@RolePm, N'ProjectManager', N'Руководитель проекта', N'Web', N'Оформление заявок, подготовка актов С-2/С-3 с фотофиксацией, прогноз EAC, риски'),
 (@RoleRisk, N'RiskSpecialist', N'Специалист по рискам', N'Web', N'Реестр рисков, оценка EMV и резерва P80, триггеры, остаточный риск'),
-(@RoleAdmin, N'Admin', N'Администратор системы', N'WPF', N'Учётные записи, роли, справочники, интеграции, журнал аудита'),
-(@RoleSite, N'SiteWorker', N'Работник на объекте', N'Web', N'Просмотр этапов объекта и загрузка фотофиксации к актам С-2');
+(@RoleAdmin, N'Admin', N'Администратор системы', N'WPF', N'Учётные записи, роли, справочники, интеграции, журнал аудита');
 
--- Пароль для всех 8 демо-учёток: StroyFin2026! (PBKDF2-SHA256, 100 000 итераций, совместим с PasswordHasher.cs)
+-- Пароль для всех 7 демо-учёток: StroyFin2026! (PBKDF2-SHA256, 100 000 итераций, совместим с PasswordHasher.cs)
 INSERT INTO security.Users (Id, RoleId, Login, PasswordHash, FullName, Email, IsActive, TwoFactorEnabled, PersonalDataConsentGiven, ConsentDate) VALUES
 (@UserCeo, @RoleCeo, N'director', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Ковалёв Андрей Сергеевич', N'director@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
 (@UserFin, @RoleFin, N'finmanager', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Петрова Елена Викторовна', N'finmanager@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
@@ -59,8 +56,7 @@ INSERT INTO security.Users (Id, RoleId, Login, PasswordHash, FullName, Email, Is
 (@UserProc, @RoleProc, N'supply', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Новиков Дмитрий Олегович', N'supply@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
 (@UserPm, @RolePm, N'pm', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Громов Алексей Николаевич', N'pm@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
 (@UserRisk, @RoleRisk, N'risk', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Волкова Марина Петровна', N'risk@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
-(@UserAdmin, @RoleAdmin, N'admin', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Титов Сергей Владимирович', N'admin@stroyfin.by', 1, 1, 1, SYSUTCDATETIME()),
-(@UserSite, @RoleSite, N'siteworker', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Орлов Максим Игоревич', N'site@stroyfin.by', 1, 0, 1, SYSUTCDATETIME());
+(@UserAdmin, @RoleAdmin, N'admin', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Титов Сергей Владимирович', N'admin@stroyfin.by', 1, 1, 1, SYSUTCDATETIME());
 
 -- 2. Иерархия организации и проектов (контрольные примеры 1.3.1, 1.3.2, 1.3.3)
 INSERT INTO finance.Organizations (Id, Name, Unp) VALUES

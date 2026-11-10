@@ -264,7 +264,7 @@ public sealed class MainViewModel : ViewModelBase
     public bool CanApproveOverrun => RoleCode == "CEO";
     public bool CanApproveRequest => RoleCode is "FinancialManager" or "CEO";
     public bool CanExecutePayment => RoleCode == "Accountant";
-    public bool CanCreateAct => RoleCode is "SiteWorker" or "ProjectManager" or "Accountant" or "ProcurementSpecialist";
+    public bool CanCreateAct => RoleCode is "ProjectManager" or "Accountant" or "ProcurementSpecialist";
     public bool CanRescheduleCalendar => RoleCode is "FinancialManager" or "CEO";
     public bool CanCreateContract => RoleCode is "ProcurementSpecialist" or "FinancialManager";
     public bool CanOffsetAdvance => RoleCode is "Accountant" or "FinancialManager";

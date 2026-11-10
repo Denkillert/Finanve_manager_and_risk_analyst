@@ -26,15 +26,23 @@ public partial class LoginWindow : Window
 
     private async void LoginWindow_OnLoaded(object sender, RoutedEventArgs e)
     {
+        await ReloadUsersAsync();
+    }
+
+    private async Task ReloadUsersAsync()
+    {
         try
         {
             using var scope = _dbFactory.CreateScope();
+            bool hasAnyUser = await scope.Db.Users.AnyAsync(u => !u.IsDeleted);
+            EmptyDbBanner.Visibility = hasAnyUser ? Visibility.Collapsed : Visibility.Visible;
+
             var allUsers = await scope.Db.Users.Include(u => u.Role)
                 .Where(u => !u.IsDeleted && u.IsActive)
                 .OrderBy(u => u.Login)
                 .Select(u => new DemoAccountChoice(
                     u.Login,
-                    u.Role != null ? u.Role.Code : "SiteWorker",
+                    u.Role != null ? u.Role.Code : "Admin",
                     u.Role != null ? u.Role.Name : u.Login,
                     u.TwoFactorEnabled))
                 .ToListAsync();
@@ -46,6 +54,36 @@ public partial class LoginWindow : Window
             {
                 DemoUsersCombo.SelectedItem = defaultChoice;
             }
+        }
+        catch (Exception ex)
+        {
+            ShowError(ex.Message);
+        }
+    }
+
+    private async void InitRolesAdminButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        ErrorBanner.Visibility = Visibility.Collapsed;
+        try
+        {
+            using var scope = _dbFactory.CreateScope();
+            await DbInitializer.SeedRolesAndAdminOnlyAsync(scope.Db);
+            await ReloadUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowError(ex.Message);
+        }
+    }
+
+    private async void InitDemoDataButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        ErrorBanner.Visibility = Visibility.Collapsed;
+        try
+        {
+            using var scope = _dbFactory.CreateScope();
+            await DbInitializer.SeedIfEmptyAsync(scope.Db);
+            await ReloadUsersAsync();
         }
         catch (Exception ex)
         {

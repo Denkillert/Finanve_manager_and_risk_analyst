@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.Web.Controllers;
 
-[Authorize(Roles = "CEO,FinancialManager,ProjectManager")]
+[Authorize(Roles = "CEO,FinancialManager,Accountant,ProcurementSpecialist,ProjectManager,RiskSpecialist")]
 public class DashboardController : Controller
 {
     private readonly AppDbContext _db;
@@ -37,6 +37,7 @@ public class DashboardController : Controller
             .Take(12)
             .ToListAsync(ct);
 
+        string dbName = _db.Database.GetDbConnection().Database;
         var vm = new DashboardViewModel
         {
             ProjectCount = forecasts.Count,
@@ -47,7 +48,7 @@ public class DashboardController : Controller
             TotalReserveP80 = forecasts.Sum(f => f.RiskSummary.ReserveP80),
             GapDaysCount90d = calendar.GapDaysCount,
             MaxCashGap90d = calendar.MaxCashGap,
-            DatabaseProvider = _db.Database.ProviderName?.Contains("InMemory") == true ? "InMemory (Локальная БД)" : "MS SQL Server 2022",
+            DatabaseProvider = $"MS SQL Server ({dbName})",
             Forecasts = forecasts,
             PendingRequests = pending,
             Notifications = notifications

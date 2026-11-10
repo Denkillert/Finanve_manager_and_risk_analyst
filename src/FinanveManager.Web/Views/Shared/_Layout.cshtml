@@ -3,7 +3,7 @@
     var currentAction = ViewContext.RouteData.Values["action"]?.ToString() ?? "Index";
     var fullName = User.FindFirst("FullName")?.Value ?? User.Identity?.Name ?? "Гость";
     var roleName = User.FindFirst("RoleName")?.Value ?? "";
-    var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "SiteWorker";
+    var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "ProjectManager";
     var sections = RolePermissions.GetSectionsForRole(roleCode);
 }
 <!DOCTYPE html>

@@ -58,6 +58,12 @@
         </div>
         @if (roleCode is "FinancialManager" or "CEO")
         {
+            @if (!Model.Projects.Any())
+            {
+                <p class="muted" style="margin-bottom:12px">Проекты отсутствуют — создание версии бюджета доступно после добавления проектов.</p>
+            }
+            else
+            {
             <form method="post" asp-controller="Projects" asp-action="CreateVersion" class="form-grid" style="margin-bottom:12px">
                 <div class="field">
                     <label>Проект</label>
@@ -76,6 +82,7 @@
                     <button type="submit" class="btn">Создать черновую версию (Draft)</button>
                 </div>
             </form>
+            }
         }
         <div class="table-wrap">
             <table>
@@ -107,6 +114,10 @@
                                         <input type="hidden" name="rowVersionBase64" value="@Convert.ToBase64String(v.RowVersion)" />
                                         <button type="submit" class="btn btn-success btn-sm">Утвердить</button>
                                     </form>
+                                }
+                                else if (v.Status == BudgetVersionStatus.Draft)
+                                {
+                                    <span class="muted">Утверждается Руководителем (WPF)</span>
                                 }
                                 else
                                 {
@@ -180,7 +191,7 @@
                         <td><code>@ci?.Code</code> @ci?.Name</td>
                         <td class="num"><strong>@l.Amount.ToString("N2")</strong></td>
                         <td>
-                            @if (roleCode is "FinancialManager" or "CEO")
+                            @if (bv?.Status == BudgetVersionStatus.Draft && roleCode is "FinancialManager" or "CEO")
                             {
                                 <form method="post" asp-controller="Projects" asp-action="UpdateLimit" class="inline-form">
                                     <input type="hidden" name="limitId" value="@l.Id" />
@@ -188,6 +199,10 @@
                                     <input type="number" step="0.01" name="amount" value="@l.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)" style="width:110px;padding:4px 6px" />
                                     <button type="submit" class="btn btn-outline btn-sm">Сохранить</button>
                                 </form>
+                            }
+                            else if (bv?.Status != BudgetVersionStatus.Draft)
+                            {
+                                <span class="muted">Зафиксировано (для изменения создайте Draft)</span>
                             }
                             else
                             {

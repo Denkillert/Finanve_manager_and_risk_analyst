@@ -152,8 +152,8 @@ public class ControlExamplesAndWorkflowTests
         var adminSections = RolePermissions.GetSectionsForRole("Admin").Select(s => s.Section).ToList();
         Assert.Equal(new[] { AppSection.Administration, AppSection.AuditLog }, adminSections);
 
-        var siteSections = RolePermissions.GetSectionsForRole("SiteWorker").Select(s => s.Section).ToList();
-        Assert.Equal(new[] { AppSection.SiteActs }, siteSections);
+        var pmSections = RolePermissions.GetSectionsForRole("ProjectManager").Select(s => s.Section).ToList();
+        Assert.Contains(AppSection.SiteActs, pmSections);
 
         var riskSections = RolePermissions.GetSectionsForRole("RiskSpecialist").Select(s => s.Section).ToList();
         Assert.Equal(new[] { AppSection.Dashboard, AppSection.RisksAndP80, AppSection.Reports }, riskSections);
@@ -162,27 +162,32 @@ public class ControlExamplesAndWorkflowTests
         Assert.False(RolePermissions.CanAccess("FinancialManager", AppSection.Administration));
         Assert.False(RolePermissions.CanAccess("Admin", AppSection.Dashboard));
 
-        // Табл. 1.8 и НФТ-1: 4 роли в WPF, 4 роли в Веб
+        // Табл. 1.8 и НФТ-1: строго 7 ролей (4 в WPF, 3 в Веб)
         Assert.True(RolePermissions.IsClientAllowed("CEO", ClientApp.Wpf));
         Assert.False(RolePermissions.IsClientAllowed("CEO", ClientApp.Web));
         Assert.True(RolePermissions.IsClientAllowed("FinancialManager", ClientApp.Web));
         Assert.False(RolePermissions.IsClientAllowed("FinancialManager", ClientApp.Wpf));
+        Assert.True(RolePermissions.IsClientAllowed("RiskSpecialist", ClientApp.Web));
+        Assert.True(RolePermissions.IsClientAllowed("ProjectManager", ClientApp.Web));
 
         Assert.Equal(("Admin", "Index"), RolePermissions.GetLandingRoute("Admin"));
-        Assert.Equal(("Requests", "Acts"), RolePermissions.GetLandingRoute("SiteWorker"));
+        Assert.Equal(("Dashboard", "Index"), RolePermissions.GetLandingRoute("RiskSpecialist"));
         Assert.Equal("Заблокирована", RussianLabels.RequestStatusName(RequestStatus.Blocked));
     }
 
     [Fact]
     public async Task AppDatabaseFactory_And_AuthService_Enforce2FaClientSplitAndSeeding()
     {
-        var factory = new AppDatabaseFactory(null, $"FactoryTestDb_{Guid.NewGuid():N}");
+        Assert.Throws<InvalidOperationException>(() => new AppDatabaseFactory(null));
+        Assert.Throws<InvalidOperationException>(() => new AppDatabaseFactory("   "));
+
+        var factory = AppDatabaseFactory.CreateInMemoryForTests($"FactoryTestDb_{Guid.NewGuid():N}");
         await factory.InitializeAsync();
         Assert.False(factory.UsesSqlServer);
 
         using var scope = factory.CreateScope();
-        Assert.Equal(8, await scope.Db.Roles.CountAsync());
-        Assert.Equal(8, await scope.Db.Users.CountAsync());
+        Assert.Equal(7, await scope.Db.Roles.CountAsync());
+        Assert.Equal(7, await scope.Db.Users.CountAsync());
         Assert.Equal(12, await scope.Db.Risks.CountAsync(r => r.ProjectId == SeedIds.Project1));
 
         var no2Fa = await scope.Auth.LoginAsync("admin", "StroyFin2026!", null, "Tests", ClientApp.Wpf);

@@ -1,0 +1,161 @@
+@model ContractsViewModel
+@{
+    ViewData["Title"] = "Договоры, авансы и интеграции (банк / сметы / 1С)";
+    var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var refDate = new DateTime(2026, 11, 10);
+}
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Реестр договоров, доп. соглашений и обязательств</h3>
+        <a class="btn btn-outline btn-sm" asp-controller="Contracts" asp-action="Export1C">Выгрузить проводки для 1С (CSV)</a>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Номер</th>
+                    <th>Контрагент (УНП)</th>
+                    <th>Направление</th>
+                    <th class="num">Цена с доп. согл.</th>
+                    <th class="num">Удержание %</th>
+                    <th class="num">Обязательства (O / F)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var c in Model.Contracts)
+                {
+                    var gross = c.Obligations.Where(o => !o.IsDeleted).Sum(o => o.GrossAmount);
+                    var paid = c.Obligations.Where(o => !o.IsDeleted).Sum(o => o.PaidAmount);
+                    <tr>
+                        <td><strong>@c.Number</strong><div class="muted">@c.SpecificationNotes</div></td>
+                        <td>@c.Counterparty<div class="muted">УНП @c.CounterpartyUnp</div></td>
+                        <td><span class="badge @(c.Direction == ContractDirection.CustomerIncoming ? "badge-success" : "badge-info")">@c.Direction</span></td>
+                        <td class="num"><strong>@c.EffectiveTotalAmount.ToString("N2")</strong> @c.Currency</td>
+                        <td class="num">@c.RetentionPercent.ToString("N1") %</td>
+                        <td class="num">@gross.ToString("N2") / @paid.ToString("N2")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Контроль выданных авансов (Aост = A − Aисп, Kисп = Aисп / A × 100 %)</h3>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Договор</th>
+                    <th>Источник</th>
+                    <th class="num">Выдан A</th>
+                    <th class="num">Зачтено Aисп</th>
+                    <th class="num">Остаток Aост</th>
+                    <th class="num">Kисп %</th>
+                    <th>Срок возврата/зачёта</th>
+                    <th>Зачёт аванса</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var a in Model.Advances)
+                {
+                    bool overdue = a.IsOverdueAt(refDate);
+                    <tr>
+                        <td><strong>@a.Contract?.Number</strong></td>
+                        <td>@a.FundingSource</td>
+                        <td class="num">@a.Amount.ToString("N2")</td>
+                        <td class="num">@a.UsedAmount.ToString("N2")</td>
+                        <td class="num"><strong>@a.Remainder.ToString("N2")</strong></td>
+                        <td class="num">@((a.UtilizationPercent ?? 0m).ToString("N1")) %</td>
+                        <td>
+                            @a.DueDate.ToString("dd.MM.yyyy")
+                            @if (overdue)
+                            {
+                                <span class="badge badge-danger">Просрочен!</span>
+                            }
+                            else
+                            {
+                                <span class="badge badge-success">@a.Status</span>
+                            }
+                        </td>
+                        <td>
+                            @if (a.Remainder > 0 && roleCode is "Accountant" or "FinancialManager")
+                            {
+                                <form method="post" asp-controller="Contracts" asp-action="OffsetAdvance" class="inline-form">
+                                    <input type="hidden" name="advanceId" value="@a.Id" />
+                                    <input type="number" step="0.01" name="offsetAmount" value="50.00" style="width:90px;padding:4px 6px" />
+                                    <button type="submit" class="btn btn-outline btn-sm">Зачесть</button>
+                                </form>
+                            }
+                            else
+                            {
+                                <span class="muted">—</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <h3 class="card-title" style="margin-bottom:8px">Импорт банковской выписки CSV / MT940 (контроль дублей по BankOperationId)</h3>
+        @if (!string.IsNullOrEmpty(Model.ImportReportSummary))
+        {
+            <div class="alert alert-info">@Model.ImportReportSummary</div>
+        }
+        @if (roleCode is "Accountant" or "Admin")
+        {
+            <form method="post" asp-controller="Contracts" asp-action="ImportStatement">
+                <div class="field" style="margin-bottom:8px">
+                    <label>Имя файла</label>
+                    <input name="fileName" value="bank_statement_2026_11_10.csv" />
+                </div>
+                <div class="field" style="margin-bottom:10px">
+                    <label>Строки выписки (с заголовком: OpId;Date;Amount;Currency;Counterparty;RequestNumber;Purpose;OrderNo)</label>
+                    <textarea name="content" rows="4">BankOperationId;Date;Amount;Currency;Counterparty;RequestNumber;Purpose;OrderNo
+OP-2026-9001;2026-11-10;850.00;BYN;ОАО Белорусский цементный завод;ЗП-20261110-0003;Оплата по акту С-2 № 18;ПП-103</textarea>
+                </div>
+                <button type="submit" class="btn">Загрузить и сверить выписку</button>
+            </form>
+        }
+        else
+        {
+            <p class="muted">Импорт банковских выписок доступен ролям <strong>Accountant</strong> и <strong>Admin</strong>.</p>
+        }
+    </div>
+
+    <div class="card">
+        <h3 class="card-title" style="margin-bottom:8px">Импорт локальной сметы и маппинг статей затрат (≥ 95 %)</h3>
+        @if (!string.IsNullOrEmpty(Model.EstimateImportSummary))
+        {
+            <div class="alert alert-info">@Model.EstimateImportSummary</div>
+        }
+        @if (roleCode is "FinancialManager" or "ProjectManager" or "ProcurementSpecialist")
+        {
+            <form method="post" asp-controller="Contracts" asp-action="ImportEstimate">
+                <div class="field" style="margin-bottom:8px">
+                    <label>Имя сметного файла</label>
+                    <input name="fileName" value="smeta_zh32.csv" />
+                </div>
+                <div class="field" style="margin-bottom:10px">
+                    <label>Позиции сметы (с заголовком: КодСтатьи;Описание;Сумма)</label>
+                    <textarea name="content" rows="4">Code;Name;Amount
+ST-01;Строительные материалы, бетон и ЖБИ;6000.00
+ST-02;Субподрядные монтажные работы;3500.00
+ST-03;Инженерное оборудование;520.00</textarea>
+                </div>
+                <button type="submit" class="btn btn-outline">Выполнить маппинг сметы</button>
+            </form>
+        }
+        else
+        {
+            <p class="muted">Импорт смет доступен ролям <strong>FinancialManager</strong>, <strong>ProjectManager</strong>, <strong>ProcurementSpecialist</strong>.</p>
+        }
+    </div>
+</div>

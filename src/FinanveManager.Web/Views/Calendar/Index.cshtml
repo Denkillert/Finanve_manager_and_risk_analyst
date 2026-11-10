@@ -1,0 +1,155 @@
+@model CalendarViewModel
+@{
+    ViewData["Title"] = "Платёжный календарь и кассовые разрывы";
+    var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    int horizonDays = ViewBag.HorizonDays is int h ? h : 90;
+}
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Параметры прогноза (формулы 1.8–1.9: C(t) = C(t−1) + P(t) − V(t), Разрыв = max(0, Cmin − C(t)))</h3>
+        <form method="get" asp-controller="Calendar" asp-action="Index" class="inline-form">
+            <select name="projectId" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px">
+                <option value="" selected="@(!Model.SelectedProjectId.HasValue)">Все проекты (портфель)</option>
+                @foreach (var p in Model.Projects)
+                {
+                    <option value="@p.Id" selected="@(Model.SelectedProjectId == p.Id)">@p.Code — @p.Name</option>
+                }
+            </select>
+            <select name="horizonDays" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px">
+                <option value="5" selected="@(horizonDays == 5)">5 дней (табл. 1.5)</option>
+                <option value="30" selected="@(horizonDays == 30)">30 дней</option>
+                <option value="90" selected="@(horizonDays == 90)">90 дней (Т-12)</option>
+            </select>
+            <button type="submit" class="btn btn-sm">Обновить расчёт</button>
+        </form>
+    </div>
+
+    <div class="kpi-grid" style="margin-bottom:0">
+        <div class="kpi-card">
+            <div class="kpi-label">Начальный остаток C(0)</div>
+            <div class="kpi-value">@Model.InitialCash.ToString("N2") тыс. р.</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Неснижаемый минимум Cmin</div>
+            <div class="kpi-value">@Model.MinCashBalance.ToString("N2") тыс. р.</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Дней с кассовым разрывом</div>
+            <div class="kpi-value" style="color:@(Model.GapDaysCount > 0 ? "#b91c1c" : "#065f46")">@Model.GapDaysCount</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Максимальный кассовый разрыв</div>
+            <div class="kpi-value" style="color:@(Model.MaxCashGap > 0 ? "#b91c1c" : "#065f46")">@Model.MaxCashGap.ToString("N2") тыс. р.</div>
+        </div>
+    </div>
+</div>
+
+@if (Model.OverdueCustomerItems.Any())
+{
+    <div class="alert alert-warn">
+        <strong>Риск R-08 (просроченная дебиторская задолженность заказчика &gt; 10 дней):</strong>
+        @foreach (var oc in Model.OverdueCustomerItems)
+        {
+            <span>@oc.Description (@oc.Amount.ToString("N0") тыс. р., срок @oc.PlannedDate.ToString("dd.MM.yyyy")); </span>
+        }
+    </div>
+}
+
+<div class="grid-2">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Поденный график остатка средств (@Model.Days.Count записей)</h3>
+        </div>
+        <div class="table-wrap" style="max-height:520px;overflow-y:auto">
+            <table>
+                <thead>
+                    <tr>
+                        <th>День</th>
+                        <th>Дата</th>
+                        <th class="num">Нач. остаток</th>
+                        <th class="num">Поступления P</th>
+                        <th class="num">Выплаты V</th>
+                        <th class="num">Кон. остаток C(t)</th>
+                        <th class="num">Разрыв</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var d in Model.Days.Where(x => x.DayIndex <= 10 || x.Inflows > 0 || x.Outflows > 0 || x.CashGap > 0))
+                    {
+                        <tr style="background:@(d.CashGap > 0 ? "#fef2f2" : "transparent")">
+                            <td>+@d.DayIndex</td>
+                            <td>@d.Date.ToString("dd.MM.yyyy")</td>
+                            <td class="num">@d.OpeningBalance.ToString("N2")</td>
+                            <td class="num" style="color:#065f46">@(d.Inflows > 0 ? $"+{d.Inflows:N2}" : "0.00")</td>
+                            <td class="num" style="color:#b91c1c">@(d.Outflows > 0 ? $"-{d.Outflows:N2}" : "0.00")</td>
+                            <td class="num"><strong>@d.ClosingBalance.ToString("N2")</strong></td>
+                            <td class="num">
+                                @if (d.CashGap > 0)
+                                {
+                                    <span class="badge badge-danger">@d.CashGap.ToString("N2")</span>
+                                }
+                                else
+                                {
+                                    <span class="muted">0.00</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="muted" style="margin-bottom:0">Показаны дни 0–10, а также все даты с движениями или кассовыми разрывами на горизонте @horizonDays дн.</p>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Плановые позиции договоров (перенос даты платежа)</h3>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Позиция</th>
+                        <th class="num">Сумма</th>
+                        <th>Сдвиг срока</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.ScheduleItems)
+                    {
+                        <tr>
+                            <td>@s.PlannedDate.ToString("dd.MM.yyyy")</td>
+                            <td>
+                                @s.Description
+                                <div>
+                                    <span class="badge @(s.IsIncoming ? "badge-success" : "badge-warn")">
+                                        @(s.IsIncoming ? "Поступление" : "Выплата")
+                                    </span>
+                                </div>
+                            </td>
+                            <td class="num"><strong>@s.Amount.ToString("N2")</strong></td>
+                            <td>
+                                @if (roleCode is "FinancialManager" or "CEO")
+                                {
+                                    <form method="post" asp-controller="Calendar" asp-action="Reschedule" class="inline-form">
+                                        <input type="hidden" name="scheduleItemId" value="@s.Id" />
+                                        <input type="hidden" name="projectId" value="@Model.SelectedProjectId" />
+                                        <input type="hidden" name="horizonDays" value="@horizonDays" />
+                                        <input type="date" name="newDate" value="@s.PlannedDate.ToString("yyyy-MM-dd")" style="padding:4px 6px" />
+                                        <button type="submit" class="btn btn-outline btn-sm">Перенести</button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <span class="muted">—</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

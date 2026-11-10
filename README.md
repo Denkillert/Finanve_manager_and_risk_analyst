@@ -14,10 +14,11 @@ Finanve_manager_and_risk_analyst.sln
 ├── src/
 │   ├── FinanveManager.Domain/             # Сущности предметной области, Enums, калькуляторы (Lдост, EVM, Cashflow, P80, С-2/С-3)
 │   ├── FinanveManager.Application/        # DTO, интерфейсы, WorkflowEngine, BudgetService, PaymentRequestService, RiskService
-│   ├── FinanveManager.Infrastructure/     # EF Core 9 (AppDbContext), MT940/CSV, 1С, сметы XML/CSV, ЭЦП, PBKDF2-SHA256
+│   ├── FinanveManager.Infrastructure/     # EF Core 9 (AppDbContext, SqlServer + InMemory fallback), MT940/CSV, 1С, сметы, PBKDF2-SHA256
+│   ├── FinanveManager.Web/                # Веб-приложение ASP.NET Core 9 MVC + Razor Views (C#, запуск из Visual Studio по F5) + JWT /api/*
 │   ├── FinanveManager.Api/                # ASP.NET Core 9 Web API (TLS 1.3 Kestrel, JWT Bearer, OpenAPI 9, контроллеры)
 │   ├── FinanveManager.WpfClient/          # Настольный WPF-клиент (.NET 9 Windows, MVVM) для desktop-ролей
-│   └── WebClient/                         # Адаптивный веб-клиент React 18 + TypeScript + Tailwind CSS (от 360 px)
+│   └── WebClient/                         # Дополнительный SPA-клиент React 18 + TypeScript + Tailwind CSS (опционально с demo-server)
 ├── tests/
 │   └── FinanveManager.Tests/              # Модульные и интеграционные тесты xUnit (.NET 9.0)
 └── demo-server/                           # Локальный Node.js/TypeScript + SQLite REST-сервер (XLSX/PDF, MT940, Vitest)
@@ -85,18 +86,25 @@ npm run start   # Открыть в браузере: http://localhost:5050
 
 ---
 
-## Сборка и запуск решения .NET 9.0 и MS SQL Server 2022 (Windows / SDK .NET 9.0)
+## Сборка и запуск решения .NET 9.0 в Visual Studio (ASP.NET Core Web + WPF + MS SQL Server 2022)
 
-1. Выполнить SQL-скрипты развёртывания БД в MS SQL Server 2022 (в SSMS или `sqlcmd`):
+1. *(Опционально для MS SQL Server 2022)* Выполнить SQL-скрипты развёртывания БД в SSMS или `sqlcmd`:
    ```bash
    sqlcmd -S localhost -i database/01_schemas_and_tables.sql
    sqlcmd -S localhost -i database/02_seed_data.sql
    ```
-2. Настроить строку подключения в `src/FinanveManager.Api/appsettings.json`.
-3. Выполнить восстановление, сборку и прогон модульных тестов xUnit:
+   > **Автономный режим (`InMemory`):** если MS SQL Server недоступен или база ещё не развёрнута, проекты **`FinanveManager.Web`** и **`FinanveManager.Api`** автоматически переключаются на встроенную БД `EF Core InMemory` и заполняют её всеми контрольными данными (`DbInitializer.SeedIfEmptyAsync`).
+2. **Запуск веб-приложения на C# (`FinanveManager.Web`) из Visual Studio:**
+   - Откройте `Finanve_manager_and_risk_analyst.sln` в Visual Studio 2022 (17.12+ / .NET 9 SDK).
+   - В обозревателе решений щёлкните правой кнопкой по **`FinanveManager.Web`** → **Назначить запускаемым проектом (Set as Startup Project)** и нажмите **F5** (или выполните `dotnet run --project src/FinanveManager.Web`).
+   - Браузер откроет страницу входа `https://localhost:5051/Account/Login` (или `http://localhost:5050`) с быстрым входом по всем 8 ролям (`StroyFin2026!`, для `admin` — 2FA `246810`).
+   - Веб-приложение `FinanveManager.Web` также предоставляет JWT REST-эндпоинты `/api/auth/login` и `/api/payment-requests`, поэтому к нему можно подключаться и из настольного **`FinanveManager.WpfClient`**.
+3. **Запуск API и/или WPF-клиента из командной строки или Visual Studio:**
    ```bash
    dotnet restore Finanve_manager_and_risk_analyst.sln
    dotnet build Finanve_manager_and_risk_analyst.sln -c Release
    dotnet test tests/FinanveManager.Tests/FinanveManager.Tests.csproj
+   dotnet run --project src/FinanveManager.Web     # Веб-приложение ASP.NET Core 9 MVC (https://localhost:5051)
+   dotnet run --project src/FinanveManager.Api     # Отдельный Web API (https://localhost:5001)
+   dotnet run --project src/FinanveManager.WpfClient # WPF-клиент (Windows; работает как с сервером, так и автономно)
    ```
-4. Запустить API (`dotnet run --project src/FinanveManager.Api`, спецификация OpenAPI доступна в режиме Development по пути `/openapi/v1.json`) и, при необходимости на Windows, настольный WPF-клиент (`dotnet run --project src/FinanveManager.WpfClient`).

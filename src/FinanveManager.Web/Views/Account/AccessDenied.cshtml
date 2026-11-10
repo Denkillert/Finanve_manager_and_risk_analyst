@@ -1,0 +1,11 @@
+@{
+    ViewData["Title"] = "Доступ ограничен";
+}
+<div class="card">
+    <h2 style="margin-top:0;color:#991b1b">Недостаточно прав (HTTP 403)</h2>
+    <p>Текущая роль не имеет доступа к запрошенному действию согласно матрице полномочий RBAC.</p>
+    <p>
+        <a class="btn" asp-controller="Dashboard" asp-action="Index">На дашборд</a>
+        <a class="btn btn-outline" asp-controller="Account" asp-action="Login">Сменить роль</a>
+    </p>
+</div>

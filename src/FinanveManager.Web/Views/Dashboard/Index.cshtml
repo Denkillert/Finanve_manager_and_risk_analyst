@@ -1,0 +1,147 @@
+@model DashboardViewModel
+@{
+    ViewData["Title"] = "Портфельный дашборд";
+}
+
+<div class="alert alert-info">
+    Подключение БД: <strong>@Model.DatabaseProvider</strong> · Референсная дата контрольного примера: <strong>10.11.2026</strong> ·
+    Курсы НБ РБ: USD = 3,25 BYN, EUR = 3,52 BYN, RUB(100) = 3,45 BYN.
+</div>
+
+<div class="kpi-grid">
+    <div class="kpi-card">
+        <div class="kpi-label">Проекты и контрактная цена</div>
+        <div class="kpi-value">@Model.TotalContractValue.ToString("N0") тыс. р.</div>
+        <div class="kpi-sub">Активных проектов: @Model.ProjectCount</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Утверждённый бюджет (BAC / B)</div>
+        <div class="kpi-value">@Model.TotalApprovedBudget.ToString("N0") тыс. р.</div>
+        <div class="kpi-sub">Обязательства O: @Model.TotalGrossObligations.ToString("N0") тыс. р.</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Свободный лимит Lдост = B − O</div>
+        <div class="kpi-value">@Model.TotalFreeLimit.ToString("N2") тыс. р.</div>
+        <div class="kpi-sub">Без двойного списания заявок Q</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Резерв рисков P80</div>
+        <div class="kpi-value">@Model.TotalReserveP80.ToString("N2") тыс. р.</div>
+        <div class="kpi-sub">Портфельный квантиль z = 0,8416</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Кассовые разрывы (90 дн.)</div>
+        <div class="kpi-value" style="color:@(Model.GapDaysCount90d > 0 ? "#b91c1c" : "#065f46")">
+            @(Model.GapDaysCount90d > 0 ? $"{Model.MaxCashGap90d:N0} тыс. р." : "Нет")
+        </div>
+        <div class="kpi-sub">Дней с дефицитом: @Model.GapDaysCount90d</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Прогноз стоимости проектов по освоенному объёму (EVM + резерв P80)</h3>
+        <a class="btn btn-outline btn-sm" asp-controller="Projects" asp-action="Index">Проекты и vFreeLimit →</a>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Код</th>
+                    <th>Проект</th>
+                    <th class="num">Цена V</th>
+                    <th class="num">BAC</th>
+                    <th class="num">PV / EV / AC</th>
+                    <th class="num">CPI</th>
+                    <th class="num">SPI</th>
+                    <th class="num">EAC</th>
+                    <th class="num">Резерв P80</th>
+                    <th class="num">Фин. результат Rфин</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in Model.Forecasts)
+                {
+                    <tr>
+                        <td><strong>@f.Project.Code</strong></td>
+                        <td>@f.Project.Name</td>
+                        <td class="num">@f.Forecast.ContractValue.ToString("N0")</td>
+                        <td class="num">@f.Forecast.Bac.ToString("N0")</td>
+                        <td class="num">@f.Forecast.Pv.ToString("N0") / @f.Forecast.Ev.ToString("N0") / @f.Forecast.Ac.ToString("N0")</td>
+                        <td class="num"><span class="badge @(f.Forecast.Cpi >= 1m ? "badge-success" : "badge-warn")">@f.Forecast.Cpi.ToString("N3")</span></td>
+                        <td class="num"><span class="badge @(f.Forecast.Spi >= 1m ? "badge-success" : "badge-warn")">@f.Forecast.Spi.ToString("N3")</span></td>
+                        <td class="num">@f.Forecast.Eac.ToString("N2")</td>
+                        <td class="num">@f.RiskSummary.ReserveP80.ToString("N2")</td>
+                        <td class="num"><strong>@f.Forecast.FinancialResultWithReserve.ToString("N2")</strong></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Заявки, требующие внимания</h3>
+            <a class="btn btn-outline btn-sm" asp-controller="Requests" asp-action="Index">Все заявки →</a>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Номер</th>
+                        <th>Статус</th>
+                        <th class="num">К оплате</th>
+                        <th>Дата</th>
+                        <th>Примечание</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Model.PendingRequests)
+                    {
+                        var cls = r.Status == RequestStatus.Blocked ? "badge-danger"
+                            : r.Status == RequestStatus.Approved ? "badge-success" : "badge-warn";
+                        <tr>
+                            <td><strong>@r.Number</strong></td>
+                            <td><span class="badge @cls">@r.Status</span></td>
+                            <td class="num">@r.PayableAmount.ToString("N2") @r.Currency</td>
+                            <td>@r.PlannedPaymentDate.ToString("dd.MM.yyyy")</td>
+                            <td>@(r.BlockReason ?? r.Purpose ?? "—")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Системные уведомления и триггеры рисков</h3>
+            <form method="post" asp-controller="Dashboard" asp-action="ReadAllNotifications">
+                <button type="submit" class="btn btn-outline btn-sm">Отметить все прочитанными</button>
+            </form>
+        </div>
+        @if (!Model.Notifications.Any())
+        {
+            <p class="muted">Новых уведомлений нет.</p>
+        }
+        else
+        {
+            <div style="display:flex;flex-direction:column;gap:8px">
+                @foreach (var n in Model.Notifications)
+                {
+                    var badge = n.Severity == NotificationSeverity.Critical ? "badge-danger"
+                        : n.Severity == NotificationSeverity.Warning ? "badge-warn" : "badge-info";
+                    <div style="padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;opacity:@(n.IsRead ? "0.65" : "1")">
+                        <div style="display:flex;justify-content:space-between;gap:8px">
+                            <strong>@n.Title</strong>
+                            <span class="badge @badge">@n.Severity</span>
+                        </div>
+                        <div class="muted">@n.Message</div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>

@@ -1,0 +1,70 @@
+@model LoginViewModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Вход — СтройФинРиск (ASP.NET Core 9)</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="login-page">
+<div class="login-shell">
+    <div class="card">
+        <h2 style="margin-top:0">СтройФинРиск</h2>
+        <p class="muted">Веб-система учёта финансов и рисков строительных проектов на C# / ASP.NET Core 9</p>
+
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div class="alert alert-danger">@Model.ErrorMessage</div>
+        }
+
+        <form method="post" asp-controller="Account" asp-action="Login">
+            <div class="field" style="margin-bottom:10px">
+                <label for="Login">Логин</label>
+                <input id="Login" name="Login" value="@Model.Login" required />
+            </div>
+            <div class="field" style="margin-bottom:10px">
+                <label for="Password">Пароль</label>
+                <input id="Password" name="Password" type="password" value="@Model.Password" required />
+            </div>
+            <div class="field" style="margin-bottom:14px">
+                <label for="TwoFactorCode">Код 2FA (для admin: <code>246810</code>)</label>
+                <input id="TwoFactorCode" name="TwoFactorCode" value="@Model.TwoFactorCode" placeholder="Необязательно для не-admin" />
+            </div>
+            <button type="submit" class="btn" style="width:100%">Войти в систему</button>
+        </form>
+        <p class="muted" style="margin-top:12px">
+            Общий демонстрационный пароль всех ролей: <code>StroyFin2026!</code><br />
+            Блокировка после 5 неудачных попыток входа (НФТ-7).
+        </p>
+    </div>
+
+    <div class="card">
+        <h3 style="margin-top:0">Быстрый вход по ролям (8 учётных записей)</h3>
+        <p class="muted">Выберите любую роль для проверки ролевой модели (RBAC) и рабочих процессов:</p>
+        <div class="demo-grid">
+            @foreach (var u in Model.DemoUsers)
+            {
+                <form method="post" asp-controller="Account" asp-action="QuickLogin">
+                    <input type="hidden" name="login" value="@u.Login" />
+                    <button type="submit" class="demo-btn">
+                        <div style="font-weight:700">@u.RoleName</div>
+                        <div class="muted">@u.FullName</div>
+                        <div style="margin-top:4px;font-size:11.5px">
+                            <code>@u.Login</code> · <span class="badge badge-info">@u.RoleCode</span>
+                            @if (u.Requires2Fa)
+                            {
+                                <span class="badge badge-warn">2FA: 246810</span>
+                            }
+                        </div>
+                    </button>
+                </form>
+            }
+        </div>
+    </div>
+</div>
+</body>
+</html>

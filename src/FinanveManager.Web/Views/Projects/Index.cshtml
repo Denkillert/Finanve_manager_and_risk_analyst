@@ -1,0 +1,202 @@
+@model ProjectsBudgetsViewModel
+@{
+    ViewData["Title"] = "Проекты, объекты, этапы и версионирование бюджетов";
+    var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var objDict = Model.Objects.ToDictionary(o => o.Id);
+    var itemDict = Model.CostItems.ToDictionary(c => c.Id);
+    var versionDict = Model.BudgetVersions.ToDictionary(v => v.Id);
+}
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Витрина свободного лимита <code>finance.vFreeLimit</code> (Lдост = B − O, Oост = O − F)</h3>
+        <span class="muted">Контрольные примеры: PRJ-2026-01/ST-01 (B=10 000, O=6 000, F=3 000, Q=1 000 → Lдост=4 000) и PRJ-2026-02/ST-02 (Lдост=−500)</span>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Проект</th>
+                    <th>Объект</th>
+                    <th>Статья</th>
+                    <th class="num">Бюджет B</th>
+                    <th class="num">Обязат. O</th>
+                    <th class="num">Оплачено F</th>
+                    <th class="num">Заявки Q</th>
+                    <th class="num">Своб. лимит Lдост</th>
+                    <th class="num">Остаток Oост</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var l in Model.FreeLimits)
+                {
+                    <tr>
+                        <td><strong>@l.ProjectCode</strong></td>
+                        <td>@l.ObjectName</td>
+                        <td><code>@l.CostItemCode</code> @l.CostItemName</td>
+                        <td class="num">@l.Result.ApprovedBudget.ToString("N2")</td>
+                        <td class="num">@l.Result.GrossObligations.ToString("N2")</td>
+                        <td class="num">@l.Result.PaidFact.ToString("N2")</td>
+                        <td class="num">@l.Result.SubmittedRequests.ToString("N2")</td>
+                        <td class="num">
+                            <strong style="color:@(l.Result.FreeLimit < 0 ? "#b91c1c" : "#065f46")">
+                                @l.Result.FreeLimit.ToString("N2")
+                            </strong>
+                        </td>
+                        <td class="num">@l.Result.ObligationRemainder.ToString("N2")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Версии бюджетов (правило 12: редактируется только Draft)</h3>
+        </div>
+        @if (roleCode is "FinancialManager" or "CEO")
+        {
+            <form method="post" asp-controller="Projects" asp-action="CreateVersion" class="form-grid" style="margin-bottom:12px">
+                <div class="field">
+                    <label>Проект</label>
+                    <select name="projectId">
+                        @foreach (var p in Model.Projects)
+                        {
+                            <option value="@p.Project.Id">@p.Project.Code — @p.Project.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Комментарий к новой версии</label>
+                    <input name="comment" value="Плановая корректировка лимитов" required />
+                </div>
+                <div>
+                    <button type="submit" class="btn">Создать черновую версию (Draft)</button>
+                </div>
+            </form>
+        }
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Проект</th>
+                        <th>Версия</th>
+                        <th>Статус</th>
+                        <th>Комментарий</th>
+                        <th>Действие</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var v in Model.BudgetVersions)
+                    {
+                        var prj = Model.Projects.FirstOrDefault(p => p.Project.Id == v.ProjectId)?.Project.Code ?? "—";
+                        var badge = v.Status == BudgetVersionStatus.Approved ? "badge-success"
+                            : v.Status == BudgetVersionStatus.Draft ? "badge-warn" : "badge-neutral";
+                        <tr>
+                            <td><strong>@prj</strong></td>
+                            <td>v@(v.VersionNumber)</td>
+                            <td><span class="badge @badge">@v.Status</span></td>
+                            <td>@v.Comment</td>
+                            <td>
+                                @if (v.Status == BudgetVersionStatus.Draft && roleCode == "CEO")
+                                {
+                                    <form method="post" asp-controller="Projects" asp-action="ApproveVersion">
+                                        <input type="hidden" name="versionId" value="@v.Id" />
+                                        <input type="hidden" name="rowVersionBase64" value="@Convert.ToBase64String(v.RowVersion)" />
+                                        <button type="submit" class="btn btn-success btn-sm">Утвердить</button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <span class="muted">—</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Этапы работ (PV / EV / AC по объектам)</h3>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Объект</th>
+                        <th>Этап</th>
+                        <th class="num">PV</th>
+                        <th class="num">EV</th>
+                        <th class="num">AC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.Stages)
+                    {
+                        var objName = objDict.TryGetValue(s.ConstructionObjectId, out var o) ? o.Name : "—";
+                        <tr>
+                            <td>@objName</td>
+                            <td>@s.Name</td>
+                            <td class="num">@s.PlannedValuePV.ToString("N0")</td>
+                            <td class="num">@s.EarnedValueEV.ToString("N0")</td>
+                            <td class="num">@s.ActualCostAC.ToString("N0")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Лимиты по версиям и статьям затрат</h3>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Версия</th>
+                    <th>Объект</th>
+                    <th>Статья</th>
+                    <th class="num">Лимит (тыс. р.)</th>
+                    <th>Изменение (только Draft)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var l in Model.BudgetLimits)
+                {
+                    versionDict.TryGetValue(l.BudgetVersionId, out var bv);
+                    objDict.TryGetValue(l.ConstructionObjectId, out var obj);
+                    itemDict.TryGetValue(l.CostItemId, out var ci);
+                    <tr>
+                        <td>v@(bv?.VersionNumber) (@bv?.Status)</td>
+                        <td>@obj?.Name</td>
+                        <td><code>@ci?.Code</code> @ci?.Name</td>
+                        <td class="num"><strong>@l.Amount.ToString("N2")</strong></td>
+                        <td>
+                            @if (roleCode is "FinancialManager" or "CEO")
+                            {
+                                <form method="post" asp-controller="Projects" asp-action="UpdateLimit" class="inline-form">
+                                    <input type="hidden" name="limitId" value="@l.Id" />
+                                    <input type="hidden" name="rowVersionBase64" value="@Convert.ToBase64String(l.RowVersion)" />
+                                    <input type="number" step="0.01" name="amount" value="@l.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)" style="width:110px;padding:4px 6px" />
+                                    <button type="submit" class="btn btn-outline btn-sm">Сохранить</button>
+                                </form>
+                            }
+                            else
+                            {
+                                <span class="muted">Только чтение</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

@@ -1,0 +1,197 @@
+@model RisksViewModel
+@{
+    ViewData["Title"] = "Реестр рисков, матрица 5×5, резерв P80 и торнадо-анализ";
+    var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+}
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Портфельная оценка рисков (формулы 1.15–1.18, квантиль P80 = ΣEMV + 0,8416·σ)</h3>
+        <form method="get" asp-controller="Risks" asp-action="Index" class="inline-form">
+            <select name="projectId" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px">
+                @foreach (var p in Model.Projects)
+                {
+                    <option value="@p.Id" selected="@(p.Id == Model.SelectedProjectId)">@p.Code — @p.Name</option>
+                }
+            </select>
+            <button type="submit" class="btn btn-sm">Показать проект</button>
+        </form>
+    </div>
+
+    <div class="kpi-grid" style="margin-bottom:0">
+        <div class="kpi-card">
+            <div class="kpi-label">ΣEMV (ожидаемые потери)</div>
+            <div class="kpi-value">@Model.Summary.TotalEmv.ToString("N2") тыс. р.</div>
+            <div class="kpi-sub">Контроль PRJ-2026-01: 1 340,00 тыс. р.</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Портфельное СКО σ</div>
+            <div class="kpi-value">@Model.Summary.Sigma.ToString("N2") тыс. р.</div>
+            <div class="kpi-sub">Контроль PRJ-2026-01: 723,22 тыс. р.</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Резерв P80</div>
+            <div class="kpi-value" style="color:#1d4ed8">@Model.Summary.ReserveP80.ToString("N2") тыс. р.</div>
+            <div class="kpi-sub">Контроль PRJ-2026-01: 1 947,51 / 1 948 тыс. р.</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Остаточный EMV после мер</div>
+            <div class="kpi-value" style="color:#065f46">@Model.Summary.TotalResidualEmv.ToString("N2") тыс. р.</div>
+            <div class="kpi-sub">Снижение риска ΔEMV: −@Model.Summary.EmvReduction.ToString("N2")</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Реестр рисков проекта (@Model.Risks.Count записей)</h3>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Код</th>
+                    <th>Событие и меры снижения</th>
+                    <th class="num">Вероятность p</th>
+                    <th class="num">Ущерб C</th>
+                    <th>Интеграл R (Зона)</th>
+                    <th class="num">EMV / Остат. EMV</th>
+                    <th>Статус</th>
+                    <th>Переоценка (RiskSpecialist / PM / CEO)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in Model.Risks)
+                {
+                    var zone = RiskCalculator.GetRiskZone(r.IntegralScore);
+                    var zBadge = r.IntegralScore >= 17 ? "badge-danger"
+                        : r.IntegralScore >= 10 ? "badge-warn"
+                        : r.IntegralScore >= 5 ? "badge-info" : "badge-success";
+                    <tr>
+                        <td><strong>@r.Code</strong><div class="muted">@r.OwnerRole</div></td>
+                        <td>
+                            <strong>@r.Event</strong>
+                            <div class="muted">Индикатор: @r.EarlyIndicator</div>
+                            <div class="muted">Меры: @r.Mitigation</div>
+                        </td>
+                        <td class="num">@r.Probability.ToString("P0")</td>
+                        <td class="num">@r.MonetaryImpact.ToString("N0")</td>
+                        <td><span class="badge @zBadge">R=@r.IntegralScore (@zone)</span></td>
+                        <td class="num"><strong>@r.Emv.ToString("N2")</strong> / @((r.ResidualEmv ?? r.Emv).ToString("N2"))</td>
+                        <td><span class="badge badge-neutral">@r.Status (v@(r.CurrentAssessmentVersion))</span></td>
+                        <td>
+                            @if (roleCode is "RiskSpecialist" or "ProjectManager" or "CEO")
+                            {
+                                <form method="post" asp-controller="Risks" asp-action="UpdateAssessment" class="inline-form">
+                                    <input type="hidden" name="id" value="@r.Id" />
+                                    <input type="hidden" name="projectId" value="@Model.SelectedProjectId" />
+                                    <input type="hidden" name="rowVersionBase64" value="@Convert.ToBase64String(r.RowVersion)" />
+                                    <input type="number" step="0.01" min="0.01" max="0.99" name="probability"
+                                           value="@r.Probability.ToString(System.Globalization.CultureInfo.InvariantCulture)" style="width:65px;padding:4px" title="Вероятность p" />
+                                    <input type="number" step="1" min="0" name="monetaryImpact"
+                                           value="@r.MonetaryImpact.ToString(System.Globalization.CultureInfo.InvariantCulture)" style="width:72px;padding:4px" title="Ущерб C" />
+                                    <input type="number" step="0.01" min="0" max="0.99" name="residualProbability"
+                                           value="@((r.ResidualProbability ?? r.Probability).ToString(System.Globalization.CultureInfo.InvariantCulture))" style="width:65px;padding:4px" title="Остат. p" />
+                                    <input type="hidden" name="comment" value="Переоценка из веб-интерфейса" />
+                                    <button type="submit" class="btn btn-outline btn-sm">Обновить</button>
+                                </form>
+                            }
+                            else
+                            {
+                                <span class="muted">Только чтение</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <h3 class="card-title" style="margin-bottom:10px">Анализ чувствительности EAC (диаграмма «торнадо», табл. 1.18)</h3>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Фактор</th>
+                        <th class="num">База</th>
+                        <th>Сдвиг</th>
+                        <th class="num">Влияние ΔEAC</th>
+                        <th>Относительный размах</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        decimal maxSwing = Model.Sensitivity.Any() ? Model.Sensitivity.Max(s => Math.Abs(s.ImpactOnEac)) : 1m;
+                    }
+                    @foreach (var f in Model.Sensitivity)
+                    {
+                        var pct = maxSwing > 0 ? Math.Round(Math.Abs(f.ImpactOnEac) / maxSwing * 100m, 0) : 0m;
+                        <tr>
+                            <td><strong>@f.FactorName</strong><div class="muted">@f.Comment</div></td>
+                            <td class="num">@f.BaseAmount.ToString("N0")</td>
+                            <td>@f.RangeLabel</td>
+                            <td class="num"><strong>+@f.ImpactOnEac.ToString("N2")</strong></td>
+                            <td style="width:160px">
+                                <div style="background:#e2e8f0;border-radius:4px;height:12px;overflow:hidden">
+                                    <div style="background:#2563eb;height:100%;width:@(pct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3 class="card-title" style="margin-bottom:10px">Идентификация нового риска</h3>
+        @if (roleCode is "RiskSpecialist" or "ProjectManager" or "CEO")
+        {
+            <form method="post" asp-controller="Risks" asp-action="Create" class="form-grid">
+                <input type="hidden" name="projectId" value="@Model.SelectedProjectId" />
+                <div class="field">
+                    <label>Код риска</label>
+                    <input name="code" value="R-13" required />
+                </div>
+                <div class="field">
+                    <label>Владелец</label>
+                    <input name="ownerRole" value="PM" />
+                </div>
+                <div class="field">
+                    <label>Рисковое событие</label>
+                    <input name="eventText" value="Задержка поставки электрощитового оборудования" required />
+                </div>
+                <div class="field">
+                    <label>Вероятность p (0..1)</label>
+                    <input type="number" step="0.01" min="0.01" max="0.99" name="probability" value="0.25" required />
+                </div>
+                <div class="field">
+                    <label>Ущерб C (тыс. р.)</label>
+                    <input type="number" step="1" name="monetaryImpact" value="280" required />
+                </div>
+                <div class="field">
+                    <label>Остаточная вероятность</label>
+                    <input type="number" step="0.01" min="0.01" max="0.99" name="residualProbability" value="0.10" />
+                </div>
+                <div class="field">
+                    <label>Ранний индикатор</label>
+                    <input name="earlyIndicator" value="Отставание от графика поставки > 5 дн." />
+                </div>
+                <div class="field">
+                    <label>План реагирования</label>
+                    <input name="mitigation" value="Резервный поставщик и аванс под гарантию" />
+                </div>
+                <div>
+                    <button type="submit" class="btn">Добавить риск в реестр</button>
+                </div>
+            </form>
+        }
+        else
+        {
+            <p class="muted">Добавление рисков доступно ролям <strong>RiskSpecialist</strong>, <strong>ProjectManager</strong>, <strong>CEO</strong>.</p>
+        }
+    </div>
+</div>

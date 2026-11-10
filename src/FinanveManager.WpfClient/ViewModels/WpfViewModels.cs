@@ -639,8 +639,6 @@ public class RequestViewModel : ViewModelBase
         _hasRole = hasRole;
         _recordAudit = recordAudit;
 
-        SeedDefaultRequests();
-
         RefreshCommand = new RelayCommand(async _ => await LoadAsync());
 
         CreateRequestCommand = new RelayCommand(
@@ -662,15 +660,17 @@ public class RequestViewModel : ViewModelBase
         ExecutePaymentCommand = new RelayCommand(
             async param => await ExecuteAsync(param as RequestRowDto ?? SelectedRequest),
             _ => _hasRole("Accountant"));
+
+        SeedDefaultRequests();
     }
 
     public void RaiseAllCanExecute()
     {
-        CreateRequestCommand.RaiseCanExecuteChanged();
-        ApproveOverrunCommand.RaiseCanExecuteChanged();
-        ApproveWithEdsCommand.RaiseCanExecuteChanged();
-        ReturnRequestCommand.RaiseCanExecuteChanged();
-        ExecutePaymentCommand.RaiseCanExecuteChanged();
+        CreateRequestCommand?.RaiseCanExecuteChanged();
+        ApproveOverrunCommand?.RaiseCanExecuteChanged();
+        ApproveWithEdsCommand?.RaiseCanExecuteChanged();
+        ReturnRequestCommand?.RaiseCanExecuteChanged();
+        ExecutePaymentCommand?.RaiseCanExecuteChanged();
     }
 
     private void SeedDefaultRequests()
@@ -1018,6 +1018,7 @@ public class MainViewModel : ViewModelBase
     public IReadOnlyList<string> ServerOptions { get; } =
     [
         "http://localhost:5050",
+        "https://localhost:5051",
         "https://localhost:5001",
         "http://localhost:5000"
     ];

@@ -1,0 +1,50 @@
+@model ReportGridModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <title>@Model.Title</title>
+    <style>
+        body { font-family: "Segoe UI", Arial, sans-serif; color: #0f172a; margin: 28px; font-size: 13px; }
+        h1 { font-size: 18px; margin-bottom: 4px; }
+        p { color: #475569; margin-top: 0; }
+        table { width: 100%; border-collapse: collapse; margin-top: 14px; }
+        th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+        th { background: #f1f5f9; }
+        .no-print { margin-bottom: 14px; }
+        @@media print { .no-print { display: none; } }
+    </style>
+</head>
+<body>
+<div class="no-print">
+    <button onclick="window.print()">Печать / Сохранить как PDF</button>
+    <span style="margin-left:10px;color:#64748b">Сформировано @DateTime.Now.ToString("dd.MM.yyyy HH:mm")</span>
+</div>
+<h1>@Model.Title</h1>
+<p>@Model.Subtitle</p>
+<table>
+    <thead>
+        <tr>
+            @foreach (var h in Model.Headers)
+            {
+                <th>@h</th>
+            }
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                @foreach (var cell in row)
+                {
+                    <td>@cell</td>
+                }
+            </tr>
+        }
+    </tbody>
+</table>
+</body>
+</html>

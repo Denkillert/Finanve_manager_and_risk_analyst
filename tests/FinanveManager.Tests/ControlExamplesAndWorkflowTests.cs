@@ -7,6 +7,8 @@ using FinanveManager.Domain.Entities;
 using FinanveManager.Domain.Enums;
 using FinanveManager.Domain.Services;
 using FinanveManager.Infrastructure.Adapters;
+using FinanveManager.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace FinanveManager.Tests;
@@ -149,5 +151,26 @@ public class ControlExamplesAndWorkflowTests
         Assert.True(FinanveManager.Infrastructure.Security.PasswordHasher.VerifyPassword(
             "StroyFin2026!",
             "U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw="));
+    }
+
+    [Fact]
+    public async Task DbInitializer_SeedsInMemoryDatabase_WithAllRolesAndControlData()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase($"TestDb_{Guid.NewGuid():N}")
+            .Options;
+
+        await using var db = new AppDbContext(options);
+        await DbInitializer.SeedIfEmptyAsync(db);
+
+        Assert.Equal(8, await db.Roles.CountAsync());
+        Assert.Equal(8, await db.Users.CountAsync());
+        Assert.Equal(12, await db.Risks.CountAsync(r => r.ProjectId == SeedIds.Project1));
+        Assert.Equal(3, await db.PaymentRequests.CountAsync());
+
+        var riskSummary = RiskCalculator.CalculatePortfolioSummary(
+            await db.Risks.Where(r => r.ProjectId == SeedIds.Project1).ToListAsync(), 0.8416m);
+        Assert.Equal(1340m, riskSummary.TotalEmv);
+        Assert.InRange(riskSummary.ReserveP80, 1947m, 1949m);
     }
 }

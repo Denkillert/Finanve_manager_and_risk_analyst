@@ -22,8 +22,16 @@ builder.WebHost.ConfigureKestrel(options =>
     });
 });
 
+var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+bool useSqlServer = DbInitializer.CanUseSqlServer(connStr);
+
 builder.Services.AddDbContext<AppDbContext>(opt =>
-    opt.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+{
+    if (useSqlServer)
+        opt.UseSqlServer(connStr);
+    else
+        opt.UseInMemoryDatabase("FinanveManagerApiDb");
+});
 
 builder.Services.AddScoped(typeof(IRepository<>), typeof(EfRepository<>));
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -67,6 +75,12 @@ builder.Services.AddOpenApi();
 
 var app = builder.Build();
 
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await DbInitializer.SeedIfEmptyAsync(db);
+}
+
 app.UseExceptionHandler(errApp =>
 {
     errApp.Run(async context =>
@@ -94,10 +108,26 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.MapGet("/", () => Results.Content(
+    """
+    <!doctype html><html lang="ru"><head><meta charset="utf-8"><title>FinanveManager.Api</title></head>
+    <body style="font-family:Segoe UI,sans-serif;max-width:720px;margin:40px auto;line-height:1.6">
+      <h2>FinanveManager.Api (.NET 9.0) запущен</h2>
+      <p>REST API системы «СтройФинРиск» активен.</p>
+      <ul>
+        <li><a href="/api/health">/api/health</a> — статус сервиса</li>
+        <li><a href="/openapi/v1.json">/openapi/v1.json</a> — спецификация OpenAPI (в режиме Development)</li>
+      </ul>
+      <p>Для интерактивного веб-интерфейса на C# ASP.NET запустите проект <strong>FinanveManager.Web</strong>.</p>
+    </body></html>
+    """,
+    "text/html; charset=utf-8"));
+
 app.MapGet("/api/health", () => Results.Ok(new
 {
     status = "ok",
     service = "FinanveManager.Api",
+    database = useSqlServer ? "SqlServer" : "InMemory",
     runtime = Environment.Version.ToString(),
     timestamp = DateTime.UtcNow
 }));

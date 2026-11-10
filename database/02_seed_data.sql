@@ -51,16 +51,16 @@ INSERT INTO security.Roles (Id, Code, Name, ClientType, Description) VALUES
 (@RoleAdmin, N'Admin', N'Администратор системы', N'WPF', N'Учётные записи, роли, справочники, интеграции, журнал аудита'),
 (@RoleSite, N'SiteWorker', N'Работник на объекте', N'Web', N'Просмотр этапов объекта и загрузка фотофиксации к актам С-2');
 
--- Пароль для демо-учёток (хеш SHA256/PBKDF2 формируется приложением; здесь демонстрационный маркер)
+-- Пароль для всех 8 демо-учёток: StroyFin2026! (PBKDF2-SHA256, 100 000 итераций, совместим с PasswordHasher.cs)
 INSERT INTO security.Users (Id, RoleId, Login, PasswordHash, FullName, Email, IsActive, TwoFactorEnabled, PersonalDataConsentGiven, ConsentDate) VALUES
-(@UserCeo, @RoleCeo, N'director', N'DEMO_PBKDF2_HASH_12CHARS', N'Ковалёв Андрей Сергеевич', N'director@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
-(@UserFin, @RoleFin, N'finmanager', N'DEMO_PBKDF2_HASH_12CHARS', N'Петрова Елена Викторовна', N'finmanager@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
-(@UserAcc, @RoleAcc, N'accountant', N'DEMO_PBKDF2_HASH_12CHARS', N'Сидорова Наталья Ивановна', N'accountant@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
-(@UserProc, @RoleProc, N'supply', N'DEMO_PBKDF2_HASH_12CHARS', N'Новиков Дмитрий Олегович', N'supply@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
-(@UserPm, @RolePm, N'pm', N'DEMO_PBKDF2_HASH_12CHARS', N'Громов Алексей Николаевич', N'pm@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
-(@UserRisk, @RoleRisk, N'risk', N'DEMO_PBKDF2_HASH_12CHARS', N'Волкова Марина Петровна', N'risk@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
-(@UserAdmin, @RoleAdmin, N'admin', N'DEMO_PBKDF2_HASH_12CHARS', N'Титов Сергей Владимирович', N'admin@stroyfin.by', 1, 1, 1, SYSUTCDATETIME()),
-(@UserSite, @RoleSite, N'siteworker', N'DEMO_PBKDF2_HASH_12CHARS', N'Орлов Максим Игоревич', N'site@stroyfin.by', 1, 0, 1, SYSUTCDATETIME());
+(@UserCeo, @RoleCeo, N'director', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Ковалёв Андрей Сергеевич', N'director@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
+(@UserFin, @RoleFin, N'finmanager', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Петрова Елена Викторовна', N'finmanager@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
+(@UserAcc, @RoleAcc, N'accountant', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Сидорова Наталья Ивановна', N'accountant@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
+(@UserProc, @RoleProc, N'supply', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Новиков Дмитрий Олегович', N'supply@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
+(@UserPm, @RolePm, N'pm', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Громов Алексей Николаевич', N'pm@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
+(@UserRisk, @RoleRisk, N'risk', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Волкова Марина Петровна', N'risk@stroyfin.by', 1, 0, 1, SYSUTCDATETIME()),
+(@UserAdmin, @RoleAdmin, N'admin', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Титов Сергей Владимирович', N'admin@stroyfin.by', 1, 1, 1, SYSUTCDATETIME()),
+(@UserSite, @RoleSite, N'siteworker', N'U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw=', N'Орлов Максим Игоревич', N'site@stroyfin.by', 1, 0, 1, SYSUTCDATETIME());
 
 -- 2. Иерархия организации и проектов (контрольные примеры 1.3.1, 1.3.2, 1.3.3)
 INSERT INTO finance.Organizations (Id, Name, Unp) VALUES

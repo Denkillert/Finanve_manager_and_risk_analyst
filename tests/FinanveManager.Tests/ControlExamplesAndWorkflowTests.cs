@@ -146,5 +146,8 @@ public class ControlExamplesAndWorkflowTests
         string hash = FinanveManager.Infrastructure.Security.PasswordHasher.HashPassword("StroyFin2026!");
         Assert.True(FinanveManager.Infrastructure.Security.PasswordHasher.VerifyPassword("StroyFin2026!", hash));
         Assert.False(FinanveManager.Infrastructure.Security.PasswordHasher.VerifyPassword("WrongPassword123", hash));
+        Assert.True(FinanveManager.Infrastructure.Security.PasswordHasher.VerifyPassword(
+            "StroyFin2026!",
+            "U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw="));
     }
 }

@@ -35,26 +35,40 @@ Finanve_manager_and_risk_analyst.sln
 
 ---
 
-## Быстрый запуск в веб-режиме (Node.js 22+ / Linux & Windows)
+## Быстрый запуск в веб-режиме (Node.js 22.5+ / Linux & Windows)
 
-### 1. Запуск REST API и тестов (`demo-server`)
+> **Важно:** для встроенного модуля `node:sqlite` требуется **Node.js 22.5 или выше** (`node -v`). Папка `src/WebClient/dist` исключена из Git, поэтому после клонирования сначала соберите веб-клиент или запустите dev-сервер Vite.
 
-```bash
-cd demo-server
-npm install
-npm run typecheck
-npm test        # 13 модульных и интеграционных тестов (Vitest + Supertest)
-npm run dev     # Запуск сервера на http://0.0.0.0:5050 (раздаёт собранный WebClient/dist)
-```
-
-### 2. Запуск веб-клиента в режиме разработки (`src/WebClient`)
+### Вариант А. Запуск всего веб-приложения на одном порту (`http://localhost:5050`)
 
 ```bash
+# 1. Собрать production-бандл веб-клиента (src/WebClient/dist)
 cd src/WebClient
 npm install
-npm run build   # Сборка production bundle в src/WebClient/dist
-npm run dev     # Vite dev-сервер на http://0.0.0.0:5173 с прокси /api -> http://127.0.0.1:5050
+npm run build
+
+# 2. Запустить REST API и раздачу веб-интерфейса
+cd ../../demo-server
+npm install
+npm run start   # Открыть в браузере: http://localhost:5050
 ```
+
+### Вариант Б. Режим разработки с hot-reload (два терминала)
+
+1. **Терминал 1 (`demo-server` на порту `5050`):**
+   ```bash
+   cd demo-server
+   npm install
+   npm run typecheck
+   npm test        # 13 модульных и интеграционных тестов (Vitest + Supertest)
+   npm run dev     # API на http://localhost:5050
+   ```
+2. **Терминал 2 (`src/WebClient` на порту `5173`):**
+   ```bash
+   cd src/WebClient
+   npm install
+   npm run dev     # Открыть в браузере: http://localhost:5173 (прокси /api -> 127.0.0.1:5050)
+   ```
 
 ### Демонстрационные учётные записи (пароль для всех: `StroyFin2026!`)
 

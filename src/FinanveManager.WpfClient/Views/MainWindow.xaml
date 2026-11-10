@@ -3,105 +3,580 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:FinanveManager.WpfClient.ViewModels"
         Title="Управление финансами и рисками строительной организации (WPF-клиент .NET 9)"
-        Height="760" Width="1240" WindowStartupLocation="CenterScreen" Background="#F4F6F9">
+        Height="820" Width="1340" MinHeight="680" MinWidth="1060"
+        WindowStartupLocation="CenterScreen" Background="#F4F6F9">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </Window.Resources>
     <Window.DataContext>
         <vm:MainViewModel />
     </Window.DataContext>
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="240" />
+            <ColumnDefinition Width="260" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
         <!-- Навигационная боковая панель по ролям WPF (табл. 1.8, табл. 2.5, рис. 2.24) -->
         <Border Grid.Column="0" Background="#12263F" Padding="14">
-            <StackPanel>
-                <TextBlock Text="СтройФинРиск" Foreground="White" FontSize="20" FontWeight="Bold" Margin="4,8,4,4" />
-                <TextBlock Text="WPF-клиент (.NET 9)" Foreground="#8EA8C3" FontSize="12" Margin="4,0,4,16" />
+            <DockPanel LastChildFill="False">
+                <StackPanel DockPanel.Dock="Top">
+                    <TextBlock Text="СтройФинРиск" Foreground="White" FontSize="20" FontWeight="Bold" Margin="4,8,4,2" />
+                    <TextBlock Text="WPF-клиент (.NET 9)" Foreground="#8EA8C3" FontSize="12" Margin="4,0,4,14" />
 
-                <Button Content="Главная панель" Command="{Binding NavigateCommand}" CommandParameter="Главная панель" HorizontalContentAlignment="Left" />
-                <Button Content="Проекты и бюджеты" Command="{Binding NavigateCommand}" CommandParameter="Проекты и бюджеты" HorizontalContentAlignment="Left" />
-                <Button Content="Платёжные заявки" Command="{Binding NavigateCommand}" CommandParameter="Платёжные заявки" HorizontalContentAlignment="Left" />
-                <Button Content="Платёжный календарь" Command="{Binding NavigateCommand}" CommandParameter="Платёжный календарь" HorizontalContentAlignment="Left" />
-                <Button Content="Договоры и закупки" Command="{Binding NavigateCommand}" CommandParameter="Договоры и закупки" HorizontalContentAlignment="Left" />
-                <Button Content="Отчёты (XLSX / PDF)" Command="{Binding NavigateCommand}" CommandParameter="Отчёты" HorizontalContentAlignment="Left" />
-                <Button Content="Администрирование" Command="{Binding NavigateCommand}" CommandParameter="Администрирование" HorizontalContentAlignment="Left" />
-                <Button Content="Журнал аудита" Command="{Binding NavigateCommand}" CommandParameter="Журнал аудита" HorizontalContentAlignment="Left" />
-            </StackPanel>
+                    <Button Content="Главная панель" Command="{Binding NavigateCommand}" CommandParameter="Главная панель" HorizontalContentAlignment="Left" />
+                    <Button Content="Проекты и бюджеты" Command="{Binding NavigateCommand}" CommandParameter="Проекты и бюджеты" HorizontalContentAlignment="Left" />
+                    <Button Content="Платёжные заявки" Command="{Binding NavigateCommand}" CommandParameter="Платёжные заявки" HorizontalContentAlignment="Left" />
+                    <Button Content="Платёжный календарь" Command="{Binding NavigateCommand}" CommandParameter="Платёжный календарь" HorizontalContentAlignment="Left" />
+                    <Button Content="Договоры и закупки" Command="{Binding NavigateCommand}" CommandParameter="Договоры и закупки" HorizontalContentAlignment="Left" />
+                    <Button Content="Риски и резерв P80" Command="{Binding NavigateCommand}" CommandParameter="Риски (P80)" HorizontalContentAlignment="Left" />
+                    <Button Content="Отчёты (Предпросмотр / CSV)" Command="{Binding NavigateCommand}" CommandParameter="Отчёты" HorizontalContentAlignment="Left" />
+                    <Button Content="Администрирование" Command="{Binding NavigateCommand}" CommandParameter="Администрирование" HorizontalContentAlignment="Left" />
+                    <Button Content="Журнал аудита" Command="{Binding NavigateCommand}" CommandParameter="Журнал аудита" HorizontalContentAlignment="Left" />
+                </StackPanel>
+
+                <!-- Текущая учётная запись внизу боковой панели -->
+                <Border DockPanel.Dock="Bottom" Background="#193352" CornerRadius="8" Padding="10" Margin="2,12,2,4">
+                    <StackPanel>
+                        <TextBlock Text="ТЕКУЩАЯ УЧЁТНАЯ ЗАПИСЬ" Foreground="#8EA8C3" FontSize="10" FontWeight="Bold" />
+                        <TextBlock Text="{Binding CurrentUserName}" Foreground="White" FontWeight="SemiBold" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0" />
+                        <TextBlock Text="{Binding CurrentRoleName}" Foreground="#90CDF4" FontSize="12" TextWrapping="Wrap" Margin="0,2,0,0" />
+                        <TextBlock Text="{Binding ConnectionModeText}" Foreground="#A0AEC0" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,8" />
+                        <Button Content="Сменить учётную запись" Command="{Binding ToggleLoginPanelCommand}" Background="#2B6CB0" Margin="0" />
+                    </StackPanel>
+                </Border>
+            </DockPanel>
         </Border>
 
         <!-- Рабочая область -->
-        <Grid Grid.Column="1" Margin="20">
+        <Grid Grid.Column="1" Margin="18">
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+            <!-- Верхняя шапка с быстрой сменой роли/пользователя -->
+            <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="14" Margin="0,0,0,10">
                 <DockPanel>
-                    <TextBlock Text="{Binding ActiveSection}" FontSize="20" FontWeight="SemiBold" Foreground="#12263F" DockPanel.Dock="Left" />
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                        <TextBlock Text="{Binding CurrentRole, StringFormat='Роль: {0}'}" VerticalAlignment="Center" Margin="0,0,16,0" Foreground="#4A5568" />
-                        <Button Content="Обновить заявки" Command="{Binding RequestVm.RefreshCommand}" />
+                    <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding ActiveSection}" FontSize="20" FontWeight="SemiBold" Foreground="#12263F" />
+                        <TextBlock Text="{Binding CurrentUserDisplay}" FontSize="12" Foreground="#4A5568" Margin="0,2,0,0" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <ComboBox Width="230" Margin="4" VerticalContentAlignment="Center"
+                                  ItemsSource="{Binding DemoAccounts}"
+                                  SelectedItem="{Binding SelectedDemoAccount}"
+                                  DisplayMemberPath="DisplayTitle" />
+                        <Button Content="Войти под выбранной ролью" Command="{Binding SwitchSelectedAccountCommand}" Background="#2B6CB0" />
+                        <Button Content="Логин / Пароль / API" Command="{Binding ToggleLoginPanelCommand}" Background="#4A5568" />
+                        <Button Content="Обновить" Command="{Binding RefreshAllCommand}" />
                     </StackPanel>
                 </DockPanel>
             </Border>
 
-            <TabControl Grid.Row="1" Background="White" Padding="12">
-                <TabItem Header="Сводка и лимиты">
-                    <StackPanel Margin="8">
-                        <TextBlock Text="Контроль бюджета и свободного лимита (Lдост = B - O, Oост = O - F)" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,12" />
-                        <UniformGrid Columns="4" Margin="0,0,0,16">
-                            <Border Background="#EDF2F7" Padding="12" Margin="4" CornerRadius="6">
-                                <StackPanel>
-                                    <TextBlock Text="Бюджет (B)" Foreground="#4A5568" />
-                                    <TextBlock Text="{Binding BudgetVm.ApprovedBudget, StringFormat='{}{0:N2} тыс. р.'}" FontSize="18" FontWeight="Bold" />
-                                </StackPanel>
-                            </Border>
-                            <Border Background="#EDF2F7" Padding="12" Margin="4" CornerRadius="6">
-                                <StackPanel>
-                                    <TextBlock Text="Обязательства (O)" Foreground="#4A5568" />
-                                    <TextBlock Text="{Binding BudgetVm.GrossObligations, StringFormat='{}{0:N2} тыс. р.'}" FontSize="18" FontWeight="Bold" />
-                                </StackPanel>
-                            </Border>
-                            <Border Background="#E6FFFA" Padding="12" Margin="4" CornerRadius="6">
-                                <StackPanel>
-                                    <TextBlock Text="Свободный лимит (Lдост)" Foreground="#234E52" />
-                                    <TextBlock Text="{Binding BudgetVm.FreeLimit, StringFormat='{}{0:N2} тыс. р.'}" FontSize="18" FontWeight="Bold" Foreground="#234E52" />
-                                </StackPanel>
-                            </Border>
-                            <Border Background="#FFF5F5" Padding="12" Margin="4" CornerRadius="6">
-                                <StackPanel>
-                                    <TextBlock Text="Резерв на риски P80" Foreground="#742A2A" />
-                                    <TextBlock Text="{Binding RiskVm.ReserveP80, StringFormat='{}{0:N2} тыс. р.'}" FontSize="18" FontWeight="Bold" Foreground="#742A2A" />
-                                </StackPanel>
-                            </Border>
-                        </UniformGrid>
-                        <TextBlock Text="{Binding RequestVm.StatusMessage}" Foreground="#2B6CB0" FontWeight="Medium" />
-                    </StackPanel>
-                </TabItem>
+            <!-- Панель авторизации, смены учётной записи, 2FA и выбора сервера API -->
+            <Border Grid.Row="1" Background="#EBF8FF" BorderBrush="#90CDF4" BorderThickness="1" CornerRadius="8" Padding="12" Margin="0,0,0,10"
+                    Visibility="{Binding IsLoginPanelOpen, Converter={StaticResource BoolToVis}}">
+                <StackPanel>
+                    <WrapPanel VerticalAlignment="Center">
+                        <StackPanel Margin="0,0,10,4">
+                            <TextBlock Text="Логин" FontSize="11" Foreground="#2C5282" FontWeight="SemiBold" />
+                            <TextBox Width="130" Padding="6,4" Text="{Binding Login, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Margin="0,0,10,4">
+                            <TextBlock Text="Пароль (демо: StroyFin2026!)" FontSize="11" Foreground="#2C5282" FontWeight="SemiBold" />
+                            <PasswordBox x:Name="LoginPasswordBox" Width="165" Padding="6,4" PasswordChanged="LoginPasswordBox_OnPasswordChanged" />
+                        </StackPanel>
+                        <StackPanel Margin="0,0,10,4">
+                            <TextBlock Text="Код 2FA (для admin: 246810)" FontSize="11" Foreground="#2C5282" FontWeight="SemiBold" />
+                            <TextBox Width="155" Padding="6,4" Text="{Binding TwoFactorCode, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Margin="0,0,10,4">
+                            <TextBlock Text="Сервер API (Node / .NET 9)" FontSize="11" Foreground="#2C5282" FontWeight="SemiBold" />
+                            <ComboBox Width="205" Padding="6,4" IsEditable="True"
+                                      ItemsSource="{Binding ServerOptions}"
+                                      Text="{Binding ApiBaseUrl, UpdateSourceTrigger=PropertyChanged}" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom" Margin="0,0,0,4">
+                            <Button Content="Войти / Сменить" Command="{Binding LoginCommand}" Background="#2F855A" />
+                            <Button Content="Скрыть панель" Command="{Binding ToggleLoginPanelCommand}" Background="#718096" />
+                        </StackPanel>
+                    </WrapPanel>
+                    <TextBlock Text="{Binding AuthMessage}" FontSize="12" Foreground="#1A365D" TextWrapping="Wrap" Margin="0,4,0,0" />
+                </StackPanel>
+            </Border>
 
-                <TabItem Header="Реестр платёжных заявок">
-                    <Grid>
+            <!-- Содержимое 9 разделов, синхронизированное с боковым меню -->
+            <TabControl Grid.Row="2" Background="White" Padding="10"
+                        SelectedIndex="{Binding SelectedSectionIndex, Mode=TwoWay}">
+
+                <!-- 0: Главная панель -->
+                <TabItem Header="Главная панель">
+                    <Grid Margin="6">
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <DataGrid ItemsSource="{Binding RequestVm.Requests}" AutoGenerateColumns="False" IsReadOnly="True" x:Name="RequestsGrid">
+
+                        <UniformGrid Grid.Row="0" Columns="5" Margin="0,0,0,10">
+                            <Border Background="#EDF2F7" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Бюджет (B, Пример 1)" Foreground="#4A5568" FontSize="12" />
+                                    <TextBlock Text="{Binding BudgetVm.ApprovedBudget, StringFormat='{}{0:N2} тыс. р.'}" FontSize="17" FontWeight="Bold" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#EDF2F7" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Обязательства (O)" Foreground="#4A5568" FontSize="12" />
+                                    <TextBlock Text="{Binding BudgetVm.GrossObligations, StringFormat='{}{0:N2} тыс. р.'}" FontSize="17" FontWeight="Bold" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#E6FFFA" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Свободный лимит (Lдост)" Foreground="#234E52" FontSize="12" />
+                                    <TextBlock Text="{Binding BudgetVm.FreeLimit, StringFormat='{}{0:N2} тыс. р.'}" FontSize="17" FontWeight="Bold" Foreground="#234E52" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#FFF5F5" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Резерв на риски P80" Foreground="#742A2A" FontSize="12" />
+                                    <TextBlock Text="{Binding RiskVm.ReserveP80, StringFormat='{}{0:N2} тыс. р.'}" FontSize="17" FontWeight="Bold" Foreground="#742A2A" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#FEFCBF" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Кассовые разрывы (90 дн.)" Foreground="#744210" FontSize="12" />
+                                    <TextBlock Text="{Binding CalendarMaxCashGap, StringFormat='{}{0:N2} тыс. р.'}" FontSize="17" FontWeight="Bold" Foreground="#744210" />
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+
+                        <Border Grid.Row="1" Background="#F7FAFC" BorderBrush="#CBD5E0" BorderThickness="1" CornerRadius="6" Padding="10" Margin="4,0,4,10">
+                            <StackPanel>
+                                <TextBlock Text="Полномочия текущей роли (RBAC)" FontWeight="SemiBold" Foreground="#1A202C" />
+                                <TextBlock Text="{Binding RoleCapabilitiesText}" TextWrapping="Wrap" Foreground="#2D3748" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Border>
+
+                        <DataGrid Grid.Row="2" ItemsSource="{Binding ProjectForecasts}" AutoGenerateColumns="False" IsReadOnly="True" Margin="4">
                             <DataGrid.Columns>
-                                <DataGridTextColumn Header="Номер" Binding="{Binding Number}" Width="160" />
-                                <DataGridTextColumn Header="Тип" Binding="{Binding Type}" Width="130" />
-                                <DataGridTextColumn Header="К оплате" Binding="{Binding PayableAmount, StringFormat='N2'}" Width="120" />
-                                <DataGridTextColumn Header="Валюта" Binding="{Binding Currency}" Width="80" />
-                                <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="160" />
+                                <DataGridTextColumn Header="Код" Binding="{Binding Code}" Width="105" />
+                                <DataGridTextColumn Header="Проект" Binding="{Binding Name}" Width="260" />
+                                <DataGridTextColumn Header="Цена V" Binding="{Binding ContractValue, StringFormat=N0}" Width="90" />
+                                <DataGridTextColumn Header="BAC" Binding="{Binding Bac, StringFormat=N0}" Width="80" />
+                                <DataGridTextColumn Header="EV" Binding="{Binding Ev, StringFormat=N0}" Width="75" />
+                                <DataGridTextColumn Header="AC" Binding="{Binding Ac, StringFormat=N0}" Width="75" />
+                                <DataGridTextColumn Header="CPI" Binding="{Binding Cpi, StringFormat=N3}" Width="70" />
+                                <DataGridTextColumn Header="SPI" Binding="{Binding Spi, StringFormat=N3}" Width="70" />
+                                <DataGridTextColumn Header="Прогноз EAC" Binding="{Binding Eac, StringFormat=N2}" Width="105" />
+                                <DataGridTextColumn Header="Результат (с P80)" Binding="{Binding FinancialResultWithReserve, StringFormat=N2}" Width="125" />
                             </DataGrid.Columns>
                         </DataGrid>
-                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0">
-                            <Button Content="Согласовать перерасход (Руководитель)" Command="{Binding RequestVm.ApproveOverrunCommand}" CommandParameter="{Binding ElementName=RequestsGrid, Path=SelectedItem}" />
-                            <Button Content="Исполнить платёж (Бухгалтер)" Command="{Binding RequestVm.ExecutePaymentCommand}" CommandParameter="{Binding ElementName=RequestsGrid, Path=SelectedItem}" />
-                        </StackPanel>
+
+                        <DataGrid Grid.Row="3" ItemsSource="{Binding Notifications}" AutoGenerateColumns="False" IsReadOnly="True" MaxHeight="140" Margin="4,8,4,0">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Уровень" Binding="{Binding Severity}" Width="90" />
+                                <DataGridTextColumn Header="Категория" Binding="{Binding Category}" Width="110" />
+                                <DataGridTextColumn Header="Уведомление" Binding="{Binding Title}" Width="260" />
+                                <DataGridTextColumn Header="Описание" Binding="{Binding Message}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
                     </Grid>
                 </TabItem>
+
+                <!-- 1: Проекты и бюджеты -->
+                <TabItem Header="Проекты и бюджеты">
+                    <Grid Margin="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="170" />
+                        </Grid.RowDefinitions>
+
+                        <DockPanel Grid.Row="0" Margin="0,0,0,8">
+                            <TextBlock Text="Контроль свободного лимита по статьям (представление vFreeLimit: Lдост = B - O, Oост = O - F)"
+                                       FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <Button DockPanel.Dock="Right" Content="Создать новую версию бюджета (Draft)"
+                                    Command="{Binding CreateDraftBudgetVersionCommand}" HorizontalAlignment="Right" />
+                        </DockPanel>
+
+                        <DataGrid Grid.Row="1" ItemsSource="{Binding FreeLimits}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Проект" Binding="{Binding ProjectCode}" Width="100" />
+                                <DataGridTextColumn Header="Объект" Binding="{Binding ObjectName}" Width="180" />
+                                <DataGridTextColumn Header="Статья" Binding="{Binding CostItemCode}" Width="75" />
+                                <DataGridTextColumn Header="Бюджет B" Binding="{Binding ApprovedBudget, StringFormat=N2}" Width="95" />
+                                <DataGridTextColumn Header="Обязательства O" Binding="{Binding GrossObligations, StringFormat=N2}" Width="115" />
+                                <DataGridTextColumn Header="Оплачено F" Binding="{Binding PaidFact, StringFormat=N2}" Width="95" />
+                                <DataGridTextColumn Header="Заявки Q" Binding="{Binding SubmittedRequests, StringFormat=N2}" Width="90" />
+                                <DataGridTextColumn Header="Lдост = B - O" Binding="{Binding FreeLimit, StringFormat=N2}" Width="105" />
+                                <DataGridTextColumn Header="Oост = O - F" Binding="{Binding ObligationRemainder, StringFormat=N2}" Width="105" />
+                                <DataGridTextColumn Header="Состояние" Binding="{Binding LimitStatus}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <TextBlock Grid.Row="2" Text="Версии бюджетов (утверждённые версии неизменяемы — правило 12)"
+                                   FontWeight="SemiBold" Margin="0,12,0,6" />
+
+                        <DataGrid Grid.Row="3" ItemsSource="{Binding BudgetVersions}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Проект" Binding="{Binding ProjectCode}" Width="110" />
+                                <DataGridTextColumn Header="Версия" Binding="{Binding VersionNumber}" Width="75" />
+                                <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="105" />
+                                <DataGridTextColumn Header="Дата утверждения" Binding="{Binding ApprovedAt}" Width="135" />
+                                <DataGridTextColumn Header="Комментарий" Binding="{Binding Comment}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </TabItem>
+
+                <!-- 2: Платёжные заявки -->
+                <TabItem Header="Платёжные заявки">
+                    <Grid Margin="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Фильтр по статусу:" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="SemiBold" />
+                            <ComboBox Width="180" ItemsSource="{Binding RequestVm.FilterOptions}" SelectedItem="{Binding RequestVm.SelectedFilter}" />
+                            <Button Content="Обновить реестр" Command="{Binding RequestVm.RefreshCommand}" Margin="10,0,0,0" />
+                        </StackPanel>
+
+                        <Border Grid.Row="1" Background="#F7FAFC" BorderBrush="#CBD5E0" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,0,8">
+                            <WrapPanel VerticalAlignment="Center">
+                                <StackPanel Margin="0,0,8,4">
+                                    <TextBlock Text="Объект" FontSize="11" Foreground="#4A5568" />
+                                    <ComboBox Width="180" ItemsSource="{Binding RequestVm.ObjectOptions}" SelectedItem="{Binding RequestVm.NewObjectName}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,8,4">
+                                    <TextBlock Text="Статья" FontSize="11" Foreground="#4A5568" />
+                                    <ComboBox Width="85" ItemsSource="{Binding RequestVm.CostItemOptions}" SelectedItem="{Binding RequestVm.NewCostItemCode}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,8,4">
+                                    <TextBlock Text="Тип" FontSize="11" Foreground="#4A5568" />
+                                    <ComboBox Width="130" ItemsSource="{Binding RequestVm.TypeOptions}" SelectedItem="{Binding RequestVm.NewRequestType}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,8,4">
+                                    <TextBlock Text="Сумма (BYN)" FontSize="11" Foreground="#4A5568" />
+                                    <TextBox Width="90" Padding="4" Text="{Binding RequestVm.NewAmount, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,8,4">
+                                    <TextBlock Text="Документ" FontSize="11" Foreground="#4A5568" />
+                                    <TextBox Width="95" Padding="4" Text="{Binding RequestVm.NewDocNumber, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <StackPanel Margin="0,0,8,4">
+                                    <TextBlock Text="Назначение" FontSize="11" Foreground="#4A5568" />
+                                    <TextBox Width="210" Padding="4" Text="{Binding RequestVm.NewPurpose, UpdateSourceTrigger=PropertyChanged}" />
+                                </StackPanel>
+                                <Button Content="Создать заявку" Command="{Binding RequestVm.CreateRequestCommand}" VerticalAlignment="Bottom" Background="#2B6CB0" />
+                            </WrapPanel>
+                        </Border>
+
+                        <DataGrid Grid.Row="2" x:Name="RequestsGrid"
+                                  ItemsSource="{Binding RequestVm.Requests}"
+                                  SelectedItem="{Binding RequestVm.SelectedRequest, Mode=TwoWay}"
+                                  AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Номер" Binding="{Binding Number}" Width="145" />
+                                <DataGridTextColumn Header="Тип" Binding="{Binding TypeDisplay}" Width="125" />
+                                <DataGridTextColumn Header="Объект" Binding="{Binding ObjectName}" Width="165" />
+                                <DataGridTextColumn Header="Статья" Binding="{Binding CostItemCode}" Width="65" />
+                                <DataGridTextColumn Header="К оплате" Binding="{Binding PayableAmount, StringFormat=N2}" Width="95" />
+                                <DataGridTextColumn Header="Валюта" Binding="{Binding Currency}" Width="65" />
+                                <DataGridTextColumn Header="Дата" Binding="{Binding PlannedPaymentDate}" Width="95" />
+                                <DataGridTextColumn Header="Статус" Binding="{Binding StatusDisplay}" Width="145" />
+                                <DataGridTextColumn Header="Причина блокировки / Назначение" Binding="{Binding Purpose}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <WrapPanel Grid.Row="3" Margin="0,8,0,4">
+                            <Button Content="Согласовать перерасход (CEO, UC04)" Command="{Binding RequestVm.ApproveOverrunCommand}" CommandParameter="{Binding RequestVm.SelectedRequest}" Background="#C53030" />
+                            <Button Content="Согласовать с ЭЦП (Фин. менеджер / CEO)" Command="{Binding RequestVm.ApproveWithEdsCommand}" CommandParameter="{Binding RequestVm.SelectedRequest}" Background="#2F855A" />
+                            <Button Content="Вернуть на доработку" Command="{Binding RequestVm.ReturnRequestCommand}" CommandParameter="{Binding RequestVm.SelectedRequest}" Background="#B7791F" />
+                            <Button Content="Исполнить платёж (Бухгалтер)" Command="{Binding RequestVm.ExecutePaymentCommand}" CommandParameter="{Binding RequestVm.SelectedRequest}" Background="#2B6CB0" />
+                        </WrapPanel>
+
+                        <TextBlock Grid.Row="4" Text="{Binding RequestVm.StatusMessage}" Foreground="#2B6CB0" FontWeight="SemiBold" TextWrapping="Wrap" Margin="2,4,2,0" />
+                    </Grid>
+                </TabItem>
+
+                <!-- 3: Платёжный календарь -->
+                <TabItem Header="Платёжный календарь">
+                    <Grid Margin="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <UniformGrid Grid.Row="0" Columns="4" Margin="0,0,0,10">
+                            <Border Background="#EDF2F7" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Начальный остаток (Cash₀)" Foreground="#4A5568" />
+                                    <TextBlock Text="2 000,00 тыс. р." FontSize="16" FontWeight="Bold" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#EDF2F7" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Минимальный порог (Cash_min)" Foreground="#4A5568" />
+                                    <TextBlock Text="1 000,00 тыс. р." FontSize="16" FontWeight="Bold" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#FFF5F5" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Дней с разрывом (90 дн.)" Foreground="#742A2A" />
+                                    <TextBlock Text="{Binding CalendarGapDaysCount, StringFormat='{}{0} дн.'}" FontSize="16" FontWeight="Bold" Foreground="#742A2A" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#FFF5F5" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Макс. кассовый разрыв" Foreground="#742A2A" />
+                                    <TextBlock Text="{Binding CalendarMaxCashGap, StringFormat='{}{0:N2} тыс. р.'}" FontSize="16" FontWeight="Bold" Foreground="#742A2A" />
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+
+                        <DataGrid Grid.Row="1" ItemsSource="{Binding CalendarDays}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Дата" Binding="{Binding Date}" Width="105" />
+                                <DataGridTextColumn Header="День" Binding="{Binding DayIndex}" Width="55" />
+                                <DataGridTextColumn Header="Нач. остаток" Binding="{Binding OpeningBalance, StringFormat=N2}" Width="110" />
+                                <DataGridTextColumn Header="Поступления In" Binding="{Binding Inflows, StringFormat=N2}" Width="115" />
+                                <DataGridTextColumn Header="Выплаты Out" Binding="{Binding Outflows, StringFormat=N2}" Width="110" />
+                                <DataGridTextColumn Header="Кон. остаток" Binding="{Binding ClosingBalance, StringFormat=N2}" Width="110" />
+                                <DataGridTextColumn Header="Разрыв Gap_t" Binding="{Binding CashGap, StringFormat=N2}" Width="105" />
+                                <DataGridTextColumn Header="События платежа" Binding="{Binding EventNote}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </TabItem>
+
+                <!-- 4: Договоры и закупки -->
+                <TabItem Header="Договоры и закупки">
+                    <Grid Margin="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="180" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="Реестр договоров (с учётом дополнительных соглашений)" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <DataGrid Grid.Row="1" ItemsSource="{Binding Contracts}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Номер" Binding="{Binding Number}" Width="115" />
+                                <DataGridTextColumn Header="Контрагент" Binding="{Binding Counterparty}" Width="240" />
+                                <DataGridTextColumn Header="УНП" Binding="{Binding Unp}" Width="95" />
+                                <DataGridTextColumn Header="Тип договора" Binding="{Binding Direction}" Width="170" />
+                                <DataGridTextColumn Header="Базовая сумма" Binding="{Binding BaseAmount, StringFormat=N2}" Width="115" />
+                                <DataGridTextColumn Header="С учётом ДС" Binding="{Binding EffectiveAmount, StringFormat=N2}" Width="115" />
+                                <DataGridTextColumn Header="Валюта" Binding="{Binding Currency}" Width="70" />
+                                <DataGridTextColumn Header="Удержание %" Binding="{Binding RetentionPercent, StringFormat=N1}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <TextBlock Grid.Row="2" Text="Контроль выданных авансов (Aост = A - Aисп, Kисп = Aисп / A × 100 %)" FontSize="14" FontWeight="SemiBold" Margin="0,12,0,8" />
+                        <DataGrid Grid.Row="3" ItemsSource="{Binding Advances}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Договор" Binding="{Binding ContractNumber}" Width="115" />
+                                <DataGridTextColumn Header="Объект" Binding="{Binding ObjectName}" Width="180" />
+                                <DataGridTextColumn Header="Выдан аванс" Binding="{Binding Amount, StringFormat=N2}" Width="110" />
+                                <DataGridTextColumn Header="Зачтено" Binding="{Binding UsedAmount, StringFormat=N2}" Width="100" />
+                                <DataGridTextColumn Header="Остаток Aост" Binding="{Binding Remainder, StringFormat=N2}" Width="110" />
+                                <DataGridTextColumn Header="Освоение Kисп %" Binding="{Binding UtilizationPercent, StringFormat=N1}" Width="115" />
+                                <DataGridTextColumn Header="Срок закрытия" Binding="{Binding DueDate}" Width="115" />
+                                <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </TabItem>
+
+                <!-- 5: Риски и резерв P80 -->
+                <TabItem Header="Риски (P80)">
+                    <Grid Margin="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="150" />
+                        </Grid.RowDefinitions>
+
+                        <UniformGrid Grid.Row="0" Columns="5" Margin="0,0,0,10">
+                            <Border Background="#EDF2F7" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Суммарный EMV" Foreground="#4A5568" FontSize="12" />
+                                    <TextBlock Text="{Binding RiskVm.TotalEmv, StringFormat='{}{0:N2} тыс. р.'}" FontSize="16" FontWeight="Bold" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#EDF2F7" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Ср.-кв. откл. (σ)" Foreground="#4A5568" FontSize="12" />
+                                    <TextBlock Text="{Binding RiskVm.Sigma, StringFormat='{}{0:N2} тыс. р.'}" FontSize="16" FontWeight="Bold" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#FFF5F5" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Резерв P80 (z=0,84)" Foreground="#742A2A" FontSize="12" />
+                                    <TextBlock Text="{Binding RiskVm.ReserveP80, StringFormat='{}{0:N2} тыс. р.'}" FontSize="16" FontWeight="Bold" Foreground="#742A2A" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#E6FFFA" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Остаточный EMV" Foreground="#234E52" FontSize="12" />
+                                    <TextBlock Text="{Binding RiskVm.ResidualEmv, StringFormat='{}{0:N2} тыс. р.'}" FontSize="16" FontWeight="Bold" Foreground="#234E52" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#EBF8FF" Padding="10" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Снижение риска" Foreground="#2C5282" FontSize="12" />
+                                    <TextBlock Text="{Binding RiskVm.EmvReduction, StringFormat='{}{0:N2} тыс. р.'}" FontSize="16" FontWeight="Bold" Foreground="#2C5282" />
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+
+                        <DataGrid Grid.Row="1" ItemsSource="{Binding Risks}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Код" Binding="{Binding Code}" Width="60" />
+                                <DataGridTextColumn Header="Рисковое событие" Binding="{Binding Event}" Width="240" />
+                                <DataGridTextColumn Header="p" Binding="{Binding Probability, StringFormat=P0}" Width="60" />
+                                <DataGridTextColumn Header="Ущерб C" Binding="{Binding MonetaryImpact, StringFormat=N0}" Width="80" />
+                                <DataGridTextColumn Header="R = pб·Iб" Binding="{Binding IntegralScore}" Width="75" />
+                                <DataGridTextColumn Header="Зона" Binding="{Binding Zone}" Width="95" />
+                                <DataGridTextColumn Header="EMV" Binding="{Binding Emv, StringFormat=N2}" Width="80" />
+                                <DataGridTextColumn Header="Остат. EMV" Binding="{Binding ResidualEmv, StringFormat=N2}" Width="90" />
+                                <DataGridTextColumn Header="Триггер" Binding="{Binding TriggerFired}" Width="65" />
+                                <DataGridTextColumn Header="Владелец риска" Binding="{Binding OwnerRole}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <TextBlock Grid.Row="2" Text="Анализ чувствительности EAC по 4 факторам («торнадо», табл. 1.18)" FontWeight="SemiBold" Margin="0,10,0,6" />
+                        <DataGrid Grid.Row="3" ItemsSource="{Binding SensitivityFactors}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Фактор" Binding="{Binding FactorName}" Width="210" />
+                                <DataGridTextColumn Header="Диапазон" Binding="{Binding RangeLabel}" Width="105" />
+                                <DataGridTextColumn Header="База" Binding="{Binding BaseAmount, StringFormat=N2}" Width="105" />
+                                <DataGridTextColumn Header="Влияние на EAC" Binding="{Binding ImpactOnEac, StringFormat=N2}" Width="125" />
+                                <DataGridTextColumn Header="Комментарий" Binding="{Binding Comment}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </TabItem>
+
+                <!-- 6: Отчёты -->
+                <TabItem Header="Отчёты">
+                    <Grid Margin="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="Отчёт:" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="SemiBold" />
+                            <ComboBox Width="260" ItemsSource="{Binding ReportTypes}" SelectedItem="{Binding SelectedReportType}" />
+                            <Button Content="Сформировать предпросмотр" Command="{Binding GenerateReportCommand}" Margin="10,0,0,0" />
+                            <Button Content="Сохранить в CSV" Command="{Binding ExportReportCsvCommand}" Background="#2F855A" />
+                        </StackPanel>
+
+                        <TextBlock Grid.Row="1" Margin="0,0,0,6" Foreground="#4A5568" FontSize="12">
+                            <Run Text="Столбцы отчёта: " FontWeight="SemiBold" />
+                            <Run Text="{Binding ReportCol1Header}" /> |
+                            <Run Text="{Binding ReportCol2Header}" /> |
+                            <Run Text="{Binding ReportCol3Header}" /> |
+                            <Run Text="{Binding ReportCol4Header}" /> |
+                            <Run Text="{Binding ReportCol5Header}" /> |
+                            <Run Text="{Binding ReportCol6Header}" />
+                        </TextBlock>
+
+                        <DataGrid Grid.Row="2" ItemsSource="{Binding ReportRows}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Столбец 1" Binding="{Binding Col1}" Width="130" />
+                                <DataGridTextColumn Header="Столбец 2" Binding="{Binding Col2}" Width="260" />
+                                <DataGridTextColumn Header="Столбец 3" Binding="{Binding Col3}" Width="130" />
+                                <DataGridTextColumn Header="Столбец 4" Binding="{Binding Col4}" Width="150" />
+                                <DataGridTextColumn Header="Столбец 5" Binding="{Binding Col5}" Width="150" />
+                                <DataGridTextColumn Header="Столбец 6" Binding="{Binding Col6}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <TextBlock Grid.Row="3" Text="{Binding ReportStatusMessage}" Foreground="#2B6CB0" FontWeight="SemiBold" Margin="2,8,2,0" />
+                    </Grid>
+                </TabItem>
+
+                <!-- 7: Администрирование -->
+                <TabItem Header="Администрирование">
+                    <Grid Margin="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="185" />
+                        </Grid.RowDefinitions>
+
+                        <Border Grid.Row="0" Background="#FFF5F5" BorderBrush="#FEB2B2" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8"
+                                Visibility="{Binding IsAdminRestrictedFromFinance, Converter={StaticResource BoolToVis}}">
+                            <TextBlock Text="Режим Администратора (НФТ-8): доступно управление ролями, нормативными правилами и аудитом; согласование и исполнение платежей заблокированы."
+                                       Foreground="#9B2C2C" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        </Border>
+
+                        <TextBlock Grid.Row="1" Text="Пользователи и ролевая модель RBAC (8 ролей, пароль по умолчанию: StroyFin2026!)" FontWeight="SemiBold" Margin="0,0,0,6" />
+                        <DataGrid Grid.Row="2" ItemsSource="{Binding DemoAccounts}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Логин" Binding="{Binding Login}" Width="110" />
+                                <DataGridTextColumn Header="ФИО" Binding="{Binding FullName}" Width="220" />
+                                <DataGridTextColumn Header="Код роли" Binding="{Binding RoleCode}" Width="155" />
+                                <DataGridTextColumn Header="Роль" Binding="{Binding RoleName}" Width="190" />
+                                <DataGridTextColumn Header="Клиент" Binding="{Binding ClientType}" Width="95" />
+                                <DataGridTextColumn Header="2FA" Binding="{Binding RequiresTwoFactor}" Width="55" />
+                                <DataGridTextColumn Header="Права" Binding="{Binding PermissionsSummary}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <TextBlock Grid.Row="3" Text="Нормативные правила и параметры расчёта (табл. 1.13)" FontWeight="SemiBold" Margin="0,12,0,6" />
+                        <DataGrid Grid.Row="4" ItemsSource="{Binding NormRules}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Код" Binding="{Binding Code}" Width="140" />
+                                <DataGridTextColumn Header="Наименование" Binding="{Binding Name}" Width="220" />
+                                <DataGridTextColumn Header="Основание" Binding="{Binding DocumentSource}" Width="200" />
+                                <DataGridTextColumn Header="Значение" Binding="{Binding ValueText}" Width="190" />
+                                <DataGridTextColumn Header="Ред." Binding="{Binding Revision}" Width="50" />
+                                <DataGridTextColumn Header="Ответственный" Binding="{Binding ResponsibleRole}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </TabItem>
+
+                <!-- 8: Журнал аудита -->
+                <TabItem Header="Журнал аудита">
+                    <Grid Margin="6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="Неизменяемый журнал аудита действий пользователей (AuditLogs — включая смену учётных записей и workflow заявок)"
+                                   FontWeight="SemiBold" Margin="0,0,0,8" />
+                        <DataGrid Grid.Row="1" ItemsSource="{Binding AuditLogs}" AutoGenerateColumns="False" IsReadOnly="True">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Время" Binding="{Binding Timestamp}" Width="145" />
+                                <DataGridTextColumn Header="Логин" Binding="{Binding UserLogin}" Width="105" />
+                                <DataGridTextColumn Header="Объект" Binding="{Binding ObjectName}" Width="125" />
+                                <DataGridTextColumn Header="Действие" Binding="{Binding Action}" Width="165" />
+                                <DataGridTextColumn Header="Старое знач." Binding="{Binding OldValue}" Width="120" />
+                                <DataGridTextColumn Header="Новое знач." Binding="{Binding NewValue}" Width="150" />
+                                <DataGridTextColumn Header="Детали" Binding="{Binding Details}" Width="*" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </TabItem>
+
             </TabControl>
         </Grid>
     </Grid>

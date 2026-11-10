@@ -1,0 +1,108 @@
+<Window x:Class="FinanveManager.WpfClient.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:FinanveManager.WpfClient.ViewModels"
+        Title="Управление финансами и рисками строительной организации (WPF-клиент .NET 8)"
+        Height="760" Width="1240" WindowStartupLocation="CenterScreen" Background="#F4F6F9">
+    <Window.DataContext>
+        <vm:MainViewModel />
+    </Window.DataContext>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="240" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Навигационная боковая панель по ролям WPF (табл. 1.8, табл. 2.5, рис. 2.24) -->
+        <Border Grid.Column="0" Background="#12263F" Padding="14">
+            <StackPanel>
+                <TextBlock Text="СтройФинРиск" Foreground="White" FontSize="20" FontWeight="Bold" Margin="4,8,4,4" />
+                <TextBlock Text="WPF-клиент (.NET 8)" Foreground="#8EA8C3" FontSize="12" Margin="4,0,4,16" />
+
+                <Button Content="Главная панель" Command="{Binding NavigateCommand}" CommandParameter="Главная панель" HorizontalContentAlignment="Left" />
+                <Button Content="Проекты и бюджеты" Command="{Binding NavigateCommand}" CommandParameter="Проекты и бюджеты" HorizontalContentAlignment="Left" />
+                <Button Content="Платёжные заявки" Command="{Binding NavigateCommand}" CommandParameter="Платёжные заявки" HorizontalContentAlignment="Left" />
+                <Button Content="Платёжный календарь" Command="{Binding NavigateCommand}" CommandParameter="Платёжный календарь" HorizontalContentAlignment="Left" />
+                <Button Content="Договоры и закупки" Command="{Binding NavigateCommand}" CommandParameter="Договоры и закупки" HorizontalContentAlignment="Left" />
+                <Button Content="Отчёты (XLSX / PDF)" Command="{Binding NavigateCommand}" CommandParameter="Отчёты" HorizontalContentAlignment="Left" />
+                <Button Content="Администрирование" Command="{Binding NavigateCommand}" CommandParameter="Администрирование" HorizontalContentAlignment="Left" />
+                <Button Content="Журнал аудита" Command="{Binding NavigateCommand}" CommandParameter="Журнал аудита" HorizontalContentAlignment="Left" />
+            </StackPanel>
+        </Border>
+
+        <!-- Рабочая область -->
+        <Grid Grid.Column="1" Margin="20">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="White" CornerRadius="8" Padding="16" Margin="0,0,0,16">
+                <DockPanel>
+                    <TextBlock Text="{Binding ActiveSection}" FontSize="20" FontWeight="SemiBold" Foreground="#12263F" DockPanel.Dock="Left" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="{Binding CurrentRole, StringFormat='Роль: {0}'}" VerticalAlignment="Center" Margin="0,0,16,0" Foreground="#4A5568" />
+                        <Button Content="Обновить заявки" Command="{Binding RequestVm.RefreshCommand}" />
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+
+            <TabControl Grid.Row="1" Background="White" Padding="12">
+                <TabItem Header="Сводка и лимиты">
+                    <StackPanel Margin="8">
+                        <TextBlock Text="Контроль бюджета и свободного лимита (Lдост = B - O, Oост = O - F)" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,12" />
+                        <UniformGrid Columns="4" Margin="0,0,0,16">
+                            <Border Background="#EDF2F7" Padding="12" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Бюджет (B)" Foreground="#4A5568" />
+                                    <TextBlock Text="{Binding BudgetVm.ApprovedBudget, StringFormat='{}{0:N2} тыс. р.'}" FontSize="18" FontWeight="Bold" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#EDF2F7" Padding="12" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Обязательства (O)" Foreground="#4A5568" />
+                                    <TextBlock Text="{Binding BudgetVm.GrossObligations, StringFormat='{}{0:N2} тыс. р.'}" FontSize="18" FontWeight="Bold" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#E6FFFA" Padding="12" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Свободный лимит (Lдост)" Foreground="#234E52" />
+                                    <TextBlock Text="{Binding BudgetVm.FreeLimit, StringFormat='{}{0:N2} тыс. р.'}" FontSize="18" FontWeight="Bold" Foreground="#234E52" />
+                                </StackPanel>
+                            </Border>
+                            <Border Background="#FFF5F5" Padding="12" Margin="4" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock Text="Резерв на риски P80" Foreground="#742A2A" />
+                                    <TextBlock Text="{Binding RiskVm.ReserveP80, StringFormat='{}{0:N2} тыс. р.'}" FontSize="18" FontWeight="Bold" Foreground="#742A2A" />
+                                </StackPanel>
+                            </Border>
+                        </UniformGrid>
+                        <TextBlock Text="{Binding RequestVm.StatusMessage}" Foreground="#2B6CB0" FontWeight="Medium" />
+                    </StackPanel>
+                </TabItem>
+
+                <TabItem Header="Реестр платёжных заявок">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <DataGrid ItemsSource="{Binding RequestVm.Requests}" AutoGenerateColumns="False" IsReadOnly="True" x:Name="RequestsGrid">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Номер" Binding="{Binding Number}" Width="160" />
+                                <DataGridTextColumn Header="Тип" Binding="{Binding Type}" Width="130" />
+                                <DataGridTextColumn Header="К оплате" Binding="{Binding PayableAmount, StringFormat='N2'}" Width="120" />
+                                <DataGridTextColumn Header="Валюта" Binding="{Binding Currency}" Width="80" />
+                                <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="160" />
+                            </DataGrid.Columns>
+                        </DataGrid>
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,8,0,0">
+                            <Button Content="Согласовать перерасход (Руководитель)" Command="{Binding RequestVm.ApproveOverrunCommand}" CommandParameter="{Binding ElementName=RequestsGrid, Path=SelectedItem}" />
+                            <Button Content="Исполнить платёж (Бухгалтер)" Command="{Binding RequestVm.ExecutePaymentCommand}" CommandParameter="{Binding ElementName=RequestsGrid, Path=SelectedItem}" />
+                        </StackPanel>
+                    </Grid>
+                </TabItem>
+            </TabControl>
+        </Grid>
+    </Grid>
+</Window>

@@ -361,3 +361,13 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Node.js / Vite / Local demo SQLite runtime
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+demo-server/data/
+*.db
+*.sqlite
+*.sqlite3

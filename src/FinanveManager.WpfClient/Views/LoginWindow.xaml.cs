@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.WpfClient.Views;
 
-public sealed record DemoAccountChoice(string Login, string RoleName, bool RequiresTwoFactor)
+public sealed record DemoAccountChoice(string Login, string RoleCode, string RoleName, bool RequiresTwoFactor)
 {
     public string Display => RequiresTwoFactor ? $"{RoleName} ({Login}, 2FA)" : $"{RoleName} ({Login})";
 }
@@ -29,17 +29,19 @@ public partial class LoginWindow : Window
         try
         {
             using var scope = _dbFactory.CreateScope();
-            var users = await scope.Db.Users.Include(u => u.Role)
+            var allUsers = await scope.Db.Users.Include(u => u.Role)
                 .Where(u => !u.IsDeleted && u.IsActive)
                 .OrderBy(u => u.Login)
                 .Select(u => new DemoAccountChoice(
                     u.Login,
+                    u.Role != null ? u.Role.Code : "SiteWorker",
                     u.Role != null ? u.Role.Name : u.Login,
                     u.TwoFactorEnabled))
                 .ToListAsync();
 
+            var users = allUsers.Where(u => RolePermissions.IsClientAllowed(u.RoleCode, ClientApp.Wpf)).ToList();
             DemoUsersCombo.ItemsSource = users;
-            var defaultChoice = users.FirstOrDefault(u => u.Login == "finmanager") ?? users.FirstOrDefault();
+            var defaultChoice = users.FirstOrDefault(u => u.Login == "director") ?? users.FirstOrDefault();
             if (defaultChoice != null)
             {
                 DemoUsersCombo.SelectedItem = defaultChoice;
@@ -73,7 +75,8 @@ public partial class LoginWindow : Window
                 LoginTextBox.Text,
                 PasswordBox.Password,
                 TwoFactorTextBox.Text,
-                "WPF Desktop");
+                "WPF Desktop",
+                ClientApp.Wpf);
 
             if (!result.Success || result.Session == null)
             {

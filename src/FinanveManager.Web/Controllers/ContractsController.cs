@@ -42,6 +42,7 @@ public class ContractsController : Controller
     {
         var vm = new ContractsViewModel
         {
+            Projects = await _db.Projects.Where(p => !p.IsDeleted).OrderBy(p => p.Code).ToListAsync(ct),
             Contracts = await _db.Contracts
                 .Include(c => c.Supplements)
                 .Include(c => c.Obligations)
@@ -54,6 +55,45 @@ public class ContractsController : Controller
             EstimateImportSummary = TempData["EstimateReport"] as string
         };
         return View(vm);
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "FinancialManager,ProcurementSpecialist")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateContract(
+        Guid projectId, string number, string counterparty, string counterpartyUnp,
+        ContractDirection direction, decimal totalAmount, string currency, string? specificationNotes, CancellationToken ct)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(number) || string.IsNullOrWhiteSpace(counterparty) || totalAmount <= 0)
+                throw new DomainException("Укажите номер договора, контрагента и положительную сумму.");
+
+            var contract = new Contract
+            {
+                ProjectId = projectId,
+                Number = number.Trim(),
+                Counterparty = counterparty.Trim(),
+                CounterpartyUnp = string.IsNullOrWhiteSpace(counterpartyUnp) ? "190000001" : counterpartyUnp.Trim(),
+                Direction = direction,
+                TotalAmount = totalAmount,
+                Currency = string.IsNullOrWhiteSpace(currency) ? "BYN" : currency.Trim().ToUpperInvariant(),
+                StartDate = new DateTime(2026, 11, 10),
+                EndDate = new DateTime(2027, 11, 10),
+                SpecificationNotes = specificationNotes?.Trim()
+            };
+            await _db.Contracts.AddAsync(contract, ct);
+            var (uid, login) = CurrentUser();
+            await _audit.LogAsync(uid, login, nameof(Contract), contract.Number, "CREATE_CONTRACT", null,
+                $"{contract.TotalAmount:N2} {contract.Currency}", contract.Counterparty, ct);
+            await _db.SaveChangesAsync(ct);
+            TempData["Success"] = $"Договор {contract.Number} зарегистрирован.";
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]

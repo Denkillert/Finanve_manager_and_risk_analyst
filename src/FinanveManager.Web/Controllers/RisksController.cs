@@ -47,6 +47,7 @@ public class RisksController : Controller
             SelectedProjectId = selectedProject,
             Projects = projects,
             Risks = risks,
+            Matrix = RiskCalculator.BuildRiskMatrix(risks),
             Summary = summary,
             Sensitivity = sensitivity
         });

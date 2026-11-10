@@ -107,7 +107,7 @@ public static class DbInitializer
 
         var roles = new List<Role>
         {
-            new() { Id = SeedIds.RoleCeo, Code = "CEO", Name = "Руководитель организации", ClientType = "Both", Description = "Портфель, ликвидность, утверждение бюджетов и перерасхода (UC04), критические риски" },
+            new() { Id = SeedIds.RoleCeo, Code = "CEO", Name = "Руководитель организации", ClientType = "WPF", Description = "Портфель, ликвидность, утверждение бюджетов и перерасхода (UC04), критические риски" },
             new() { Id = SeedIds.RoleFin, Code = "FinancialManager", Name = "Финансовый менеджер", ClientType = "Web", Description = "Бюджеты, платёжный календарь, согласование заявок с ЭЦП, контроль авансов и разрывов" },
             new() { Id = SeedIds.RoleAcc, Code = "Accountant", Name = "Бухгалтер", ClientType = "WPF", Description = "Исполнение платежей, загрузка банковских выписок MT940/CSV, учёт факта и 1С" },
             new() { Id = SeedIds.RoleProc, Code = "ProcurementSpecialist", Name = "Специалист по снабжению", ClientType = "WPF", Description = "Договоры, спецификации, заявки на закупки, контроль поставок" },

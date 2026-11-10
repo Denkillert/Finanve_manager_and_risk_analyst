@@ -198,7 +198,7 @@ public static class WebPortfolioHelper
                         $"{r.Probability:P0} / {r.MonetaryImpact:N0}",
                         $"{r.IntegralScore} ({RiskCalculator.GetRiskZone(r.IntegralScore)})",
                         $"{r.Emv:N2} / {(r.ResidualEmv ?? r.Emv):N2}",
-                        $"{r.OwnerRole} ({r.Status})"
+                        $"{r.OwnerRole} ({RussianLabels.RiskStatusName(r.Status)})"
                     }).ToList()
                 };
             }
@@ -223,7 +223,7 @@ public static class WebPortfolioHelper
                             a.Amount.ToString("N2"),
                             a.UsedAmount.ToString("N2"),
                             $"{a.Remainder:N2} ({(a.UtilizationPercent?.ToString("N1") ?? "0.0")} %)",
-                            $"{a.DueDate:dd.MM.yyyy} / {a.Status}"
+                            $"{a.DueDate:dd.MM.yyyy} / {RussianLabels.AdvanceStatusName(a.Status)}"
                         };
                     }).ToList()
                 };
@@ -241,10 +241,10 @@ public static class WebPortfolioHelper
                     Rows = reqs.Select(r => new List<string>
                     {
                         r.Number,
-                        r.Type.ToString(),
+                        RussianLabels.RequestTypeName(r.Type),
                         $"{r.PayableAmount:N2} {r.Currency}",
                         r.PlannedPaymentDate.ToString("dd.MM.yyyy"),
-                        r.Status.ToString(),
+                        RussianLabels.RequestStatusName(r.Status),
                         r.BlockReason ?? r.EdsSignatureThumbprint ?? r.Purpose ?? "—"
                     }).ToList()
                 };

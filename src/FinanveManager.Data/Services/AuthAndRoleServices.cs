@@ -4,6 +4,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.Data.Services;
 
+public enum ClientApp
+{
+    Any = 0,
+    Wpf = 1,
+    Web = 2
+}
+
 public enum AppSection
 {
     Dashboard,
@@ -35,6 +42,18 @@ public record AuthLoginResult(
 
 public static class RolePermissions
 {
+    private static readonly Dictionary<string, ClientApp> RoleClients = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["CEO"] = ClientApp.Wpf,
+        ["Accountant"] = ClientApp.Wpf,
+        ["ProcurementSpecialist"] = ClientApp.Wpf,
+        ["Admin"] = ClientApp.Wpf,
+        ["FinancialManager"] = ClientApp.Web,
+        ["ProjectManager"] = ClientApp.Web,
+        ["RiskSpecialist"] = ClientApp.Web,
+        ["SiteWorker"] = ClientApp.Web
+    };
+
     private static readonly Dictionary<string, AppSection[]> AllowedSections = new(StringComparer.OrdinalIgnoreCase)
     {
         ["CEO"] =
@@ -57,12 +76,14 @@ public static class RolePermissions
         ],
         ["Accountant"] =
         [
+            AppSection.Dashboard,
             AppSection.PaymentRequests,
             AppSection.PaymentCalendar,
             AppSection.ContractsAndStatements
         ],
         ["ProcurementSpecialist"] =
         [
+            AppSection.Dashboard,
             AppSection.ContractsAndStatements,
             AppSection.PaymentRequests
         ],
@@ -71,10 +92,12 @@ public static class RolePermissions
             AppSection.Dashboard,
             AppSection.ProjectsAndBudgets,
             AppSection.PaymentRequests,
+            AppSection.SiteActs,
             AppSection.RisksAndP80
         ],
         ["RiskSpecialist"] =
         [
+            AppSection.Dashboard,
             AppSection.RisksAndP80,
             AppSection.Reports
         ],
@@ -99,9 +122,18 @@ public static class RolePermissions
         [AppSection.RisksAndP80] = ("Риски и резерв P80", "Risks"),
         [AppSection.Reports] = ("Отчёты", "Reports"),
         [AppSection.SiteActs] = ("Акты С-2 (объект)", "Requests"),
-        [AppSection.Administration] = ("Пользователи и НСИ", "Admin"),
+        [AppSection.Administration] = ("Администрирование", "Admin"),
         [AppSection.AuditLog] = ("Журнал аудита", "Admin")
     };
+
+    public static ClientApp GetTargetClient(string roleCode) =>
+        RoleClients.TryGetValue(roleCode, out var client) ? client : ClientApp.Web;
+
+    public static bool IsClientAllowed(string roleCode, ClientApp currentClient)
+    {
+        if (currentClient == ClientApp.Any) return true;
+        return GetTargetClient(roleCode) == currentClient;
+    }
 
     public static IReadOnlyList<SectionDescriptor> GetSectionsForRole(string roleCode)
     {
@@ -119,9 +151,6 @@ public static class RolePermissions
     public static (string Controller, string Action) GetLandingRoute(string roleCode) => roleCode switch
     {
         "Admin" => ("Admin", "Index"),
-        "Accountant" => ("Requests", "Index"),
-        "ProcurementSpecialist" => ("Contracts", "Index"),
-        "RiskSpecialist" => ("Risks", "Index"),
         "SiteWorker" => ("Requests", "Acts"),
         _ => ("Dashboard", "Index")
     };
@@ -139,7 +168,20 @@ public class AuthService
     }
 
     public async Task<AuthLoginResult> LoginAsync(
-        string login, string password, string? twoFactorCode, string sourceClient, CancellationToken ct = default)
+        string login,
+        string password,
+        string? twoFactorCode,
+        string sourceClient,
+        CancellationToken ct = default)
+        => await LoginAsync(login, password, twoFactorCode, sourceClient, ClientApp.Any, ct);
+
+    public async Task<AuthLoginResult> LoginAsync(
+        string login,
+        string password,
+        string? twoFactorCode,
+        string sourceClient,
+        ClientApp requiredClient,
+        CancellationToken ct = default)
     {
         string normalized = (login ?? string.Empty).Trim();
         if (string.IsNullOrEmpty(normalized) || string.IsNullOrEmpty(password))
@@ -171,6 +213,16 @@ public class AuthService
             return new AuthLoginResult(false, null, err);
         }
 
+        string roleCode = user.Role?.Code ?? "SiteWorker";
+        if (!RolePermissions.IsClientAllowed(roleCode, requiredClient))
+        {
+            string targetClientName = RolePermissions.GetTargetClient(roleCode) == ClientApp.Wpf
+                ? "настольного WPF-клиента"
+                : "веб-клиента";
+            return new AuthLoginResult(false, null,
+                $"Роль «{user.Role?.Name ?? roleCode}» предназначена для {targetClientName} согласно НФТ-1 (табл. 1.8).");
+        }
+
         if (user.TwoFactorEnabled && (twoFactorCode?.Trim() ?? string.Empty) != (user.TwoFactorSecret ?? "246810"))
         {
             return new AuthLoginResult(false, null,
@@ -180,14 +232,14 @@ public class AuthService
         user.FailedLoginCount = 0;
         user.LockedUntil = null;
         await _audit.LogAsync(user.Id, user.Login, "Auth", user.Login, "LOGIN_SUCCESS", null,
-            user.Role?.Code, sourceClient, ct);
+            roleCode, sourceClient, ct);
         await _db.SaveChangesAsync(ct);
 
         var session = new AuthenticatedSession(
             user.Id,
             user.Login,
             user.FullName,
-            user.Role?.Code ?? "SiteWorker",
+            roleCode,
             user.Role?.Name ?? "Пользователь");
 
         return new AuthLoginResult(true, session, null);

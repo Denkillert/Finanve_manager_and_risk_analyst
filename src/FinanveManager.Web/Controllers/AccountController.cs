@@ -44,7 +44,7 @@ public class AccountController : Controller
         model.DemoUsers = await LoadDemoUsersAsync(ct);
         ViewBag.ReturnUrl = returnUrl;
 
-        var res = await _auth.LoginAsync(model.Login, model.Password, model.TwoFactorCode, "Web ASP.NET", ct);
+        var res = await _auth.LoginAsync(model.Login, model.Password, model.TwoFactorCode, "Web ASP.NET", ClientApp.Web, ct);
         if (!res.Success || res.Session == null)
         {
             model.ErrorMessage = res.ErrorMessage;
@@ -92,7 +92,7 @@ public class AccountController : Controller
 
     private async Task<List<DemoAccountOption>> LoadDemoUsersAsync(CancellationToken ct)
     {
-        return await _db.Users.Include(u => u.Role)
+        var all = await _db.Users.Include(u => u.Role)
             .Where(u => !u.IsDeleted && u.IsActive)
             .OrderBy(u => u.Login)
             .Select(u => new DemoAccountOption(
@@ -102,5 +102,7 @@ public class AccountController : Controller
                 u.Role != null ? u.Role.Name : "",
                 u.TwoFactorEnabled))
             .ToListAsync(ct);
+
+        return all.Where(u => RolePermissions.IsClientAllowed(u.RoleCode, ClientApp.Web)).ToList();
     }
 }

@@ -95,6 +95,7 @@ public class CalendarViewModel
 
 public class ContractsViewModel
 {
+    public List<Project> Projects { get; set; } = new();
     public List<Contract> Contracts { get; set; } = new();
     public List<Advance> Advances { get; set; } = new();
     public string? ImportReportSummary { get; set; }
@@ -106,6 +107,7 @@ public class RisksViewModel
     public Guid SelectedProjectId { get; set; }
     public List<Project> Projects { get; set; } = new();
     public List<Risk> Risks { get; set; } = new();
+    public List<RiskMatrixCell> Matrix { get; set; } = new();
     public RiskPortfolioSummary Summary { get; set; } = null!;
     public List<SensitivityFactorResult> Sensitivity { get; set; } = new();
 }

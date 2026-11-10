@@ -2,7 +2,7 @@
 @{
     ViewData["Title"] = "Платёжные заявки и акты С-2 / С-3";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
-    var statuses = Enum.GetNames<RequestStatus>();
+    var statuses = Enum.GetValues<RequestStatus>();
 }
 
 <div class="card">
@@ -12,7 +12,8 @@
             <a class="btn btn-sm @(string.IsNullOrEmpty(Model.StatusFilter) ? "" : "btn-outline")" asp-controller="Requests" asp-action="Index">Все (@Model.Requests.Count)</a>
             @foreach (var st in statuses)
             {
-                <a class="btn btn-sm @(Model.StatusFilter == st ? "" : "btn-outline")" asp-controller="Requests" asp-action="Index" asp-route-status="@st">@st</a>
+                var stName = st.ToString();
+                <a class="btn btn-sm @(Model.StatusFilter == stName ? "" : "btn-outline")" asp-controller="Requests" asp-action="Index" asp-route-status="@stName">@RussianLabels.RequestStatusName(st)</a>
             }
         </div>
     </div>
@@ -39,12 +40,12 @@
                         : "badge-warn";
                     <tr>
                         <td><strong>@r.Number</strong><div class="muted">@r.Purpose</div></td>
-                        <td>@r.Type<div class="muted">@r.Contract?.Number</div></td>
+                        <td>@RussianLabels.RequestTypeName(r.Type)<div class="muted">@r.Contract?.Number</div></td>
                         <td><code>@r.CostItem?.Code</code></td>
                         <td class="num"><strong>@r.PayableAmount.ToString("N2")</strong> @r.Currency</td>
                         <td>@r.PlannedPaymentDate.ToString("dd.MM.yyyy")</td>
                         <td>
-                            <span class="badge @badge">@r.Status</span>
+                            <span class="badge @badge">@RussianLabels.RequestStatusName(r.Status)</span>
                             @if (r.HasOverdueAdvanceWarning)
                             {
                                 <div class="badge badge-warn" style="margin-top:4px">Просрочен аванс!</div>

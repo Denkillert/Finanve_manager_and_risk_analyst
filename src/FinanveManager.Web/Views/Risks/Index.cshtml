@@ -6,7 +6,7 @@
 
 <div class="card">
     <div class="card-header">
-        <h3 class="card-title">Портфельная оценка рисков (формулы 1.15–1.18, квантиль P80 = ΣEMV + 0,8416·σ)</h3>
+        <h3 class="card-title">Портфельная оценка рисков (формулы 1.15–1.18, квантиль P80 = ΣEMV + 0,84·σ)</h3>
         <form method="get" asp-controller="Risks" asp-action="Index" class="inline-form">
             <select name="projectId" style="padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px">
                 @foreach (var p in Model.Projects)
@@ -38,6 +38,39 @@
             <div class="kpi-label">Остаточный EMV после мер</div>
             <div class="kpi-value" style="color:#065f46">@Model.Summary.TotalResidualEmv.ToString("N2") тыс. р.</div>
             <div class="kpi-sub">Снижение риска ΔEMV: −@Model.Summary.EmvReduction.ToString("N2")</div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Матрица вероятности и влияния 5×5 (табл. 1.16, R = p_б × I)</h3>
+        <span class="muted">1–4 Низкий · 5–9 Умеренный · 10–16 Высокий · 20–25 Критический</span>
+    </div>
+    <div class="table-wrap">
+        <div class="risk-matrix">
+            <div class="risk-matrix-head">p_б \ I</div>
+            <div class="risk-matrix-head">1 (≤150)</div>
+            <div class="risk-matrix-head">2 (150–249)</div>
+            <div class="risk-matrix-head">3 (250–399)</div>
+            <div class="risk-matrix-head">4 (400–599)</div>
+            <div class="risk-matrix-head">5 (≥600)</div>
+
+            @for (int pScore = 5; pScore >= 1; pScore--)
+            {
+                <div class="risk-matrix-head">@pScore</div>
+                @for (int impScore = 1; impScore <= 5; impScore++)
+                {
+                    var cell = Model.Matrix.First(m => m.ProbabilityScore == pScore && m.ImpactScore == impScore);
+                    var cls = cell.IntegralScore >= 17 ? "risk-zone-crit"
+                        : cell.IntegralScore >= 10 ? "risk-zone-high"
+                        : cell.IntegralScore >= 5 ? "risk-zone-mod" : "risk-zone-low";
+                    <div class="risk-cell @cls">
+                        <div><strong>R=@cell.IntegralScore</strong> (@cell.Zone)</div>
+                        <div style="margin-top:2px;font-weight:600">@cell.RiskCodes</div>
+                    </div>
+                }
+            }
         </div>
     </div>
 </div>
@@ -78,7 +111,7 @@
                         <td class="num">@r.MonetaryImpact.ToString("N0")</td>
                         <td><span class="badge @zBadge">R=@r.IntegralScore (@zone)</span></td>
                         <td class="num"><strong>@r.Emv.ToString("N2")</strong> / @((r.ResidualEmv ?? r.Emv).ToString("N2"))</td>
-                        <td><span class="badge badge-neutral">@r.Status (v@(r.CurrentAssessmentVersion))</span></td>
+                        <td><span class="badge badge-neutral">@RussianLabels.RiskStatusName(r.Status) (v@(r.CurrentAssessmentVersion))</span></td>
                         <td>
                             @if (roleCode is "RiskSpecialist" or "ProjectManager" or "CEO")
                             {

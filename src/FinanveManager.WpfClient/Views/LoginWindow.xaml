@@ -13,7 +13,7 @@
             <TextBlock Text="Управление финансами и рисками строительных проектов"
                        FontSize="12" Foreground="#64748B" Margin="0,2,0,16" TextWrapping="Wrap"/>
 
-            <TextBlock Text="Учётная запись (быстрое заполнение)" FontSize="11.5" Foreground="#475569" Margin="0,0,0,4"/>
+            <TextBlock Text="Учётная запись WPF-клиента (табл. 1.8, НФТ-1)" FontSize="11.5" Foreground="#475569" Margin="0,0,0,4"/>
             <ComboBox x:Name="DemoUsersCombo"
                       DisplayMemberPath="Display"
                       SelectionChanged="DemoUsersCombo_OnSelectionChanged"
@@ -48,8 +48,8 @@
                     Padding="14,10"
                     Click="LoginButton_OnClick"/>
 
-            <TextBlock Text="Пароль для демонстрационных ролей: StroyFin2026!"
-                       FontSize="11" Foreground="#64748B" Margin="0,12,0,0" HorizontalAlignment="Center"/>
+            <TextBlock Text="Пароль: StroyFin2026! · Веб-роли (finmanager, pm, risk, siteworker) работают в браузере"
+                       FontSize="11" Foreground="#64748B" Margin="0,12,0,0" HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
         </StackPanel>
     </Border>
 </Window>

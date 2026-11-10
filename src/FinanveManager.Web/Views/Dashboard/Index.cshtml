@@ -27,7 +27,7 @@
     <div class="kpi-card">
         <div class="kpi-label">Резерв рисков P80</div>
         <div class="kpi-value">@Model.TotalReserveP80.ToString("N2") тыс. р.</div>
-        <div class="kpi-sub">Квантиль z = 0,8416</div>
+        <div class="kpi-sub">Квантиль z = 0,84 (ф-ла 1.18)</div>
     </div>
     <div class="kpi-card">
         <div class="kpi-label">Кассовые разрывы (90 дн.)</div>
@@ -61,14 +61,16 @@
             <tbody>
                 @foreach (var f in Model.Forecasts)
                 {
+                    var cpiText = f.Forecast.Cpi.HasValue ? f.Forecast.Cpi.Value.ToString("N3") : "—";
+                    var spiText = f.Forecast.Spi.HasValue ? f.Forecast.Spi.Value.ToString("N3") : "—";
                     <tr>
                         <td><strong>@f.Project.Code</strong></td>
                         <td>@f.Project.Name</td>
                         <td class="num">@f.Forecast.ContractValue.ToString("N0")</td>
                         <td class="num">@f.Forecast.Bac.ToString("N0")</td>
                         <td class="num">@f.Forecast.Pv.ToString("N0") / @f.Forecast.Ev.ToString("N0") / @f.Forecast.Ac.ToString("N0")</td>
-                        <td class="num"><span class="badge @((f.Forecast.Cpi ?? 0m) >= 1m ? "badge-success" : "badge-warn")">@(f.Forecast.Cpi?.ToString("N3") ?? "—")</span></td>
-                        <td class="num"><span class="badge @((f.Forecast.Spi ?? 0m) >= 1m ? "badge-success" : "badge-warn")">@(f.Forecast.Spi?.ToString("N3") ?? "—")</span></td>
+                        <td class="num"><span class="badge @((f.Forecast.Cpi ?? 0m) >= 1m ? "badge-success" : "badge-warn")">@cpiText</span></td>
+                        <td class="num"><span class="badge @((f.Forecast.Spi ?? 0m) >= 1m ? "badge-success" : "badge-warn")">@spiText</span></td>
                         <td class="num">@f.Forecast.Eac.ToString("N2")</td>
                         <td class="num">@f.RiskSummary.ReserveP80.ToString("N2")</td>
                         <td class="num"><strong>@f.Forecast.FinancialResultWithReserve.ToString("N2")</strong></td>
@@ -102,7 +104,7 @@
                             : r.Status == RequestStatus.Approved ? "badge-success" : "badge-warn";
                         <tr>
                             <td><strong>@r.Number</strong></td>
-                            <td><span class="badge @cls">@r.Status</span></td>
+                            <td><span class="badge @cls">@RussianLabels.RequestStatusName(r.Status)</span></td>
                             <td class="num">@r.PayableAmount.ToString("N2") @r.Currency</td>
                             <td>@r.PlannedPaymentDate.ToString("dd.MM.yyyy")</td>
                             <td>@(r.BlockReason ?? r.Purpose ?? "—")</td>
@@ -134,7 +136,7 @@
                     <div style="padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;opacity:@(n.IsRead ? "0.6" : "1")">
                         <div style="display:flex;justify-content:space-between;gap:8px">
                             <strong>@n.Title</strong>
-                            <span class="badge @badge">@n.Severity</span>
+                            <span class="badge @badge">@RussianLabels.SeverityName(n.Severity)</span>
                         </div>
                         <div class="muted">@n.Message</div>
                     </div>

@@ -108,6 +108,10 @@ public class ControlExamplesAndWorkflowTests
         var summary = RiskCalculator.CalculatePortfolioSummary(risks);
         Assert.Equal(715m, summary.TotalResidualEmv);
         Assert.Equal(625m, summary.EmvReduction);
+
+        var matrix = RiskCalculator.BuildRiskMatrix(risks);
+        Assert.Equal(25, matrix.Count);
+        Assert.Contains(matrix, m => m.IntegralScore == 16 && m.RiskCodes.Contains("R-02"));
     }
 
     [Fact]
@@ -143,7 +147,7 @@ public class ControlExamplesAndWorkflowTests
     }
 
     [Fact]
-    public void RolePermissions_EnforcesStrictRoleIsolation()
+    public void RolePermissions_EnforcesStrictRoleAndClientIsolation_Nfr1AndTable25()
     {
         var adminSections = RolePermissions.GetSectionsForRole("Admin").Select(s => s.Section).ToList();
         Assert.Equal(new[] { AppSection.Administration, AppSection.AuditLog }, adminSections);
@@ -152,32 +156,44 @@ public class ControlExamplesAndWorkflowTests
         Assert.Equal(new[] { AppSection.SiteActs }, siteSections);
 
         var riskSections = RolePermissions.GetSectionsForRole("RiskSpecialist").Select(s => s.Section).ToList();
-        Assert.Equal(new[] { AppSection.RisksAndP80, AppSection.Reports }, riskSections);
+        Assert.Equal(new[] { AppSection.Dashboard, AppSection.RisksAndP80, AppSection.Reports }, riskSections);
 
-        Assert.False(RolePermissions.IsSectionAllowed("Accountant", AppSection.RisksAndP80));
-        Assert.False(RolePermissions.IsSectionAllowed("FinancialManager", AppSection.Administration));
+        Assert.False(RolePermissions.CanAccess("Accountant", AppSection.RisksAndP80));
+        Assert.False(RolePermissions.CanAccess("FinancialManager", AppSection.Administration));
+        Assert.False(RolePermissions.CanAccess("Admin", AppSection.Dashboard));
+
+        // Табл. 1.8 и НФТ-1: 4 роли в WPF, 4 роли в Веб
+        Assert.True(RolePermissions.IsClientAllowed("CEO", ClientApp.Wpf));
+        Assert.False(RolePermissions.IsClientAllowed("CEO", ClientApp.Web));
+        Assert.True(RolePermissions.IsClientAllowed("FinancialManager", ClientApp.Web));
+        Assert.False(RolePermissions.IsClientAllowed("FinancialManager", ClientApp.Wpf));
+
         Assert.Equal(("Admin", "Index"), RolePermissions.GetLandingRoute("Admin"));
         Assert.Equal(("Requests", "Acts"), RolePermissions.GetLandingRoute("SiteWorker"));
+        Assert.Equal("Заблокирована", RussianLabels.RequestStatusName(RequestStatus.Blocked));
     }
 
     [Fact]
-    public async Task AppDatabaseFactory_And_AuthService_Enforce2FaAndSeeding()
+    public async Task AppDatabaseFactory_And_AuthService_Enforce2FaClientSplitAndSeeding()
     {
         var factory = new AppDatabaseFactory(null, $"FactoryTestDb_{Guid.NewGuid():N}");
         await factory.InitializeAsync();
-        Assert.True(factory.IsInMemoryFallback);
+        Assert.False(factory.UsesSqlServer);
 
         using var scope = factory.CreateScope();
         Assert.Equal(8, await scope.Db.Roles.CountAsync());
         Assert.Equal(8, await scope.Db.Users.CountAsync());
         Assert.Equal(12, await scope.Db.Risks.CountAsync(r => r.ProjectId == SeedIds.Project1));
 
-        var no2Fa = await scope.Auth.LoginAsync("admin", "StroyFin2026!", null, "Tests");
+        var no2Fa = await scope.Auth.LoginAsync("admin", "StroyFin2026!", null, "Tests", ClientApp.Wpf);
         Assert.False(no2Fa.Success);
         Assert.True(no2Fa.RequiresTwoFactor);
 
-        var okAdmin = await scope.Auth.LoginAsync("admin", "StroyFin2026!", "246810", "Tests");
+        var okAdmin = await scope.Auth.LoginAsync("admin", "StroyFin2026!", "246810", "Tests", ClientApp.Wpf);
         Assert.True(okAdmin.Success);
         Assert.Equal("Admin", okAdmin.Session?.RoleCode);
+
+        var wrongClient = await scope.Auth.LoginAsync("finmanager", "StroyFin2026!", null, "Tests", ClientApp.Wpf);
+        Assert.False(wrongClient.Success);
     }
 }

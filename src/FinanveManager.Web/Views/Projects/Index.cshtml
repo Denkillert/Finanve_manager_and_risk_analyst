@@ -97,7 +97,7 @@
                         <tr>
                             <td><strong>@prj</strong></td>
                             <td>v@(v.VersionNumber)</td>
-                            <td><span class="badge @badge">@v.Status</span></td>
+                            <td><span class="badge @badge">@RussianLabels.BudgetVersionStatusName(v.Status)</span></td>
                             <td>@v.Comment</td>
                             <td>
                                 @if (v.Status == BudgetVersionStatus.Draft && roleCode == "CEO")
@@ -175,7 +175,7 @@
                     objDict.TryGetValue(l.ConstructionObjectId, out var obj);
                     itemDict.TryGetValue(l.CostItemId, out var ci);
                     <tr>
-                        <td>v@(bv?.VersionNumber) (@bv?.Status)</td>
+                        <td>v@(bv?.VersionNumber) (@(bv != null ? RussianLabels.BudgetVersionStatusName(bv.Status) : "—"))</td>
                         <td>@obj?.Name</td>
                         <td><code>@ci?.Code</code> @ci?.Name</td>
                         <td class="num"><strong>@l.Amount.ToString("N2")</strong></td>

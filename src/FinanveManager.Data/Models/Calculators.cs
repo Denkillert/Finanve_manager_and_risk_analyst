@@ -247,6 +247,13 @@ public record SensitivityFactorResult(
     decimal ImpactOnEac,
     string Comment);
 
+public record RiskMatrixCell(
+    int ProbabilityScore,
+    int ImpactScore,
+    int IntegralScore,
+    string Zone,
+    string RiskCodes);
+
 public static class RiskCalculator
 {
     public static int GetProbabilityScore(decimal probability)
@@ -344,5 +351,25 @@ public static class RiskCalculator
         };
 
         return factors.OrderByDescending(f => Math.Abs(f.ImpactOnEac)).ToList();
+    }
+
+    public static List<RiskMatrixCell> BuildRiskMatrix(IEnumerable<Risk> risks)
+    {
+        var active = risks.Where(r => !r.IsDeleted).ToList();
+        var cells = new List<RiskMatrixCell>(25);
+        for (int p = 5; p >= 1; p--)
+        {
+            for (int imp = 1; imp <= 5; imp++)
+            {
+                int score = p * imp;
+                string zone = GetRiskZone(score);
+                var codes = active
+                    .Where(r => r.ProbabilityScore == p && r.ImpactScore == imp)
+                    .Select(r => r.Code)
+                    .ToList();
+                cells.Add(new RiskMatrixCell(p, imp, score, zone, codes.Count == 0 ? "—" : string.Join(", ", codes)));
+            }
+        }
+        return cells;
     }
 }

@@ -26,37 +26,40 @@
                 <label for="Login">Логин</label>
                 <input id="Login" name="Login" value="@Model.Login" autocomplete="username" required />
             </div>
-            <div class="field" style="margin-bottom:10px">
+            <div class="field" style="margin-bottom:14px">
                 <label for="Password">Пароль</label>
                 <input id="Password" name="Password" type="password" value="@Model.Password" autocomplete="current-password" required />
             </div>
-            <div class="field" style="margin-bottom:14px">
-                <label for="TwoFactorCode">Код 2FA (для <code>admin</code>: <code>246810</code>)</label>
-                <input id="TwoFactorCode" name="TwoFactorCode" value="@Model.TwoFactorCode" placeholder="Только для администратора" />
-            </div>
+            @if (Model.RequiresTwoFactor)
+            {
+                <div class="field" style="margin-bottom:14px">
+                    <label for="TwoFactorCode">Код 2FA</label>
+                    <input id="TwoFactorCode" name="TwoFactorCode" value="@Model.TwoFactorCode" />
+                </div>
+            }
             <button type="submit" class="btn" style="width:100%">Войти</button>
         </form>
         <p class="muted" style="margin-top:12px">
-            Демонстрационный пароль для всех ролей: <code>StroyFin2026!</code>
+            Демонстрационный пароль: <code>StroyFin2026!</code>
+        </p>
+        <p class="muted" style="margin-bottom:0">
+            Согласно НФТ-1 (табл. 1.8), в Веб-клиенте работают Финансовый менеджер, Руководитель проекта, Специалист по рискам и Работник на объекте.
+            Руководитель организации, Бухгалтер, Специалист по снабжению и Администратор работают в WPF-клиенте.
         </p>
     </div>
 
     <div class="card">
-        <h3 style="margin-top:0">Учётные записи по ролям</h3>
-        <p class="muted">Нажмите на роль, чтобы подставить её логин в форму входа:</p>
+        <h3 style="margin-top:0">Роли Веб-клиента (табл. 1.8)</h3>
+        <p class="muted">Нажмите на роль, чтобы подставить логин и пароль в форму входа:</p>
         <div class="demo-grid">
             @foreach (var u in Model.DemoUsers)
             {
                 <button type="button" class="demo-btn"
-                        onclick="fillLogin('@u.Login', @(u.Requires2Fa ? "'246810'" : "''"))">
+                        onclick="fillLogin('@u.Login')">
                     <div style="font-weight:700">@u.RoleName</div>
                     <div class="muted">@u.FullName</div>
                     <div style="margin-top:4px;font-size:11.5px">
                         <code>@u.Login</code> · <span class="badge badge-info">@u.RoleCode</span>
-                        @if (u.Requires2Fa)
-                        {
-                            <span class="badge badge-warn">2FA</span>
-                        }
                     </div>
                 </button>
             }
@@ -64,10 +67,9 @@
     </div>
 </div>
 <script>
-function fillLogin(login, tfa) {
+function fillLogin(login) {
     document.getElementById('Login').value = login;
     document.getElementById('Password').value = 'StroyFin2026!';
-    document.getElementById('TwoFactorCode').value = tfa;
 }
 </script>
 </body>

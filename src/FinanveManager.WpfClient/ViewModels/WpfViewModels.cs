@@ -29,6 +29,8 @@ public sealed class NavItemViewModel : ViewModelBase
 
 public sealed record LookupItem(Guid Id, string Display);
 public sealed record ReportChoice(string Key, string Title);
+public sealed record StatusFilterChoice(string? Key, string Title);
+public sealed record RequestTypeChoice(RequestType Type, string Title);
 
 public sealed record ForecastGridRow(
     string Code,
@@ -43,6 +45,23 @@ public sealed record ForecastGridRow(
     decimal Eac,
     decimal ReserveP80,
     decimal FinancialResult);
+
+public sealed record NotificationGridRow(
+    string SeverityText,
+    string Title,
+    string Message);
+
+public sealed record CashDayGridRow(
+    DateTime Date,
+    int DayIndex,
+    decimal OpeningBalance,
+    decimal Inflows,
+    decimal Outflows,
+    decimal ClosingBalance,
+    decimal CashGap)
+{
+    public bool HasCashGap => CashGap > 0m;
+}
 
 public sealed record FreeLimitGridRow(
     string ProjectCode,
@@ -61,6 +80,7 @@ public sealed record BudgetVersionGridRow(
     string ProjectCode,
     int VersionNumber,
     BudgetVersionStatus Status,
+    string StatusText,
     string Comment,
     byte[] RowVersion);
 
@@ -68,6 +88,7 @@ public sealed record BudgetLimitGridRow(
     Guid Id,
     int VersionNumber,
     BudgetVersionStatus VersionStatus,
+    string VersionStatusText,
     string ObjectName,
     string CostItemCode,
     decimal Amount,
@@ -91,6 +112,7 @@ public sealed record PaymentRequestGridRow(
     string Currency,
     DateTime PlannedDate,
     RequestStatus Status,
+    string StatusText,
     string NoteText,
     byte[] RowVersion);
 
@@ -103,7 +125,8 @@ public sealed record ContractGridRow(
     string Currency,
     decimal RetentionPercent,
     decimal GrossObligations,
-    decimal PaidAmount);
+    decimal PaidAmount,
+    decimal RemainderAmount);
 
 public sealed record AdvanceGridRow(
     Guid Id,
@@ -127,11 +150,17 @@ public sealed record RiskGridRow(
     string Zone,
     decimal Emv,
     decimal ResidualEmv,
-    RiskStatus Status,
+    string StatusText,
     int Version,
     string EarlyIndicator,
     string Mitigation,
     byte[] RowVersion);
+
+public sealed record RiskMatrixCellView(
+    string HeaderText,
+    string CodesText,
+    string BackgroundHex,
+    string ForegroundHex);
 
 public sealed record ReportRowView(string Col1, string Col2, string Col3, string Col4, string Col5, string Col6);
 
@@ -192,6 +221,7 @@ public sealed class MainViewModel : ViewModelBase
         RescheduleScheduleItemCommand = new RelayCommand(async () => await RescheduleSelectedItemAsync());
 
         // Contracts & Integrations
+        CreateContractCommand = new RelayCommand(async () => await CreateContractAsync());
         OffsetAdvanceCommand = new RelayCommand(async () => await OffsetSelectedAdvanceAsync());
         ImportStatementCommand = new RelayCommand(async () => await ImportStatementAsync());
         ImportEstimateCommand = new RelayCommand(async () => await ImportEstimateAsync());
@@ -224,9 +254,10 @@ public sealed class MainViewModel : ViewModelBase
     public string UserLogin => _session.Login;
     public string RoleName => _session.RoleName;
     public string RoleCode => _session.RoleCode;
-    public string DatabaseModeLabel => _dbFactory.IsInMemoryFallback ? "Локальная БД (InMemory)" : "MS SQL Server 2022";
+    public string DatabaseModeLabel => _dbFactory.ProviderLabel;
 
     // Role Permissions (UI Control Visibility)
+    public bool IsCeoDashboard => RoleCode == "CEO";
     public bool CanManageBudgets => RoleCode is "FinancialManager" or "CEO";
     public bool CanApproveVersion => RoleCode == "CEO";
     public bool CanCreateRequest => RoleCode is "ProjectManager" or "ProcurementSpecialist" or "FinancialManager" or "CEO";
@@ -235,6 +266,7 @@ public sealed class MainViewModel : ViewModelBase
     public bool CanExecutePayment => RoleCode == "Accountant";
     public bool CanCreateAct => RoleCode is "SiteWorker" or "ProjectManager" or "Accountant" or "ProcurementSpecialist";
     public bool CanRescheduleCalendar => RoleCode is "FinancialManager" or "CEO";
+    public bool CanCreateContract => RoleCode is "ProcurementSpecialist" or "FinancialManager";
     public bool CanOffsetAdvance => RoleCode is "Accountant" or "FinancialManager";
     public bool CanImportStatement => RoleCode == "Accountant";
     public bool CanImportEstimate => RoleCode is "FinancialManager" or "ProjectManager" or "ProcurementSpecialist";
@@ -319,18 +351,21 @@ public sealed class MainViewModel : ViewModelBase
     public ObservableCollection<LookupItem> RoleLookups { get; } = new();
 
     public ObservableCollection<ForecastGridRow> Forecasts { get; } = new();
-    public ObservableCollection<Notification> Notifications { get; } = new();
+    public ObservableCollection<PaymentRequestGridRow> DashboardPendingRequests { get; } = new();
+    public ObservableCollection<CashDayGridRow> DashboardCashDays { get; } = new();
+    public ObservableCollection<NotificationGridRow> Notifications { get; } = new();
     public ObservableCollection<FreeLimitGridRow> FreeLimits { get; } = new();
     public ObservableCollection<BudgetVersionGridRow> BudgetVersions { get; } = new();
     public ObservableCollection<BudgetLimitGridRow> BudgetLimits { get; } = new();
     public ObservableCollection<StageGridRow> WorkStages { get; } = new();
     public ObservableCollection<PaymentRequestGridRow> PaymentRequests { get; } = new();
     public ObservableCollection<Document> Acts { get; } = new();
-    public ObservableCollection<CashDayForecast> CalendarDays { get; } = new();
+    public ObservableCollection<CashDayGridRow> CalendarDays { get; } = new();
     public ObservableCollection<ContractScheduleItem> ScheduleItems { get; } = new();
     public ObservableCollection<ContractGridRow> Contracts { get; } = new();
     public ObservableCollection<AdvanceGridRow> Advances { get; } = new();
     public ObservableCollection<RiskGridRow> Risks { get; } = new();
+    public ObservableCollection<RiskMatrixCellView> RiskMatrix { get; } = new();
     public ObservableCollection<SensitivityFactorResult> Sensitivity { get; } = new();
     public ObservableCollection<User> Users { get; } = new();
     public ObservableCollection<NormRule> NormRules { get; } = new();
@@ -359,9 +394,18 @@ public sealed class MainViewModel : ViewModelBase
     public string LimitAmountInput { get => _limitAmountInput; set => SetField(ref _limitAmountInput, value); }
 
     // Requests & Acts Form Inputs
-    public List<string> RequestStatusFilters { get; } = new() { "Все", "Blocked", "PendingApproval", "Approved", "Executed", "Rejected" };
-    private string _selectedRequestStatusFilter = "Все";
-    public string SelectedRequestStatusFilter
+    public List<StatusFilterChoice> RequestStatusFilters { get; } = new()
+    {
+        new(null, "Все заявки"),
+        new("Blocked", "Заблокирована"),
+        new("PendingApproval", "На согласовании"),
+        new("Approved", "Согласована"),
+        new("Executed", "Исполнена"),
+        new("Returned", "Возвращена"),
+        new("Rejected", "Отклонена")
+    };
+    private StatusFilterChoice _selectedRequestStatusFilter = new(null, "Все заявки");
+    public StatusFilterChoice SelectedRequestStatusFilter
     {
         get => _selectedRequestStatusFilter;
         set
@@ -372,15 +416,32 @@ public sealed class MainViewModel : ViewModelBase
     }
 
     private PaymentRequestGridRow? _selectedRequest;
-    public PaymentRequestGridRow? SelectedRequest { get => _selectedRequest; set => SetField(ref _selectedRequest, value); }
+    public PaymentRequestGridRow? SelectedRequest
+    {
+        get => _selectedRequest;
+        set
+        {
+            if (SetField(ref _selectedRequest, value))
+                _ = LoadSelectedRequestCardAsync(value);
+        }
+    }
+    private string _selectedRequestCardSummary = "Выберите заявку в таблице выше для просмотра расчёта Lдост, Oост, документов-оснований и истории переходов.";
+    public string SelectedRequestCardSummary { get => _selectedRequestCardSummary; set => SetField(ref _selectedRequestCardSummary, value); }
+    private string _selectedRequestHistoryText = string.Empty;
+    public string SelectedRequestHistoryText { get => _selectedRequestHistoryText; set => SetField(ref _selectedRequestHistoryText, value); }
+
     private string _actionReasonInput = "Согласовано";
     public string ActionReasonInput { get => _actionReasonInput; set => SetField(ref _actionReasonInput, value); }
     private string _paymentOrderInput = "ПП-205";
     public string PaymentOrderInput { get => _paymentOrderInput; set => SetField(ref _paymentOrderInput, value); }
 
-    public List<RequestType> RequestTypes { get; } = new() { RequestType.CurrentPayment, RequestType.Advance };
-    private RequestType _newReqType = RequestType.CurrentPayment;
-    public RequestType NewReqType { get => _newReqType; set => SetField(ref _newReqType, value); }
+    public List<RequestTypeChoice> RequestTypes { get; } = new()
+    {
+        new(RequestType.CurrentPayment, "Текущий платёж"),
+        new(RequestType.Advance, "Новый аванс")
+    };
+    private RequestTypeChoice _newReqType = new(RequestType.CurrentPayment, "Текущий платёж");
+    public RequestTypeChoice NewReqType { get => _newReqType; set => SetField(ref _newReqType, value); }
     private LookupItem? _newReqObject;
     public LookupItem? NewReqObject { get => _newReqObject; set => SetField(ref _newReqObject, value); }
     private LookupItem? _newReqContract;
@@ -437,6 +498,19 @@ public sealed class MainViewModel : ViewModelBase
     public string RescheduleDateInput { get => _rescheduleDateInput; set => SetField(ref _rescheduleDateInput, value); }
 
     // Contracts & Statements Inputs
+    private LookupItem? _newContractProject;
+    public LookupItem? NewContractProject { get => _newContractProject; set => SetField(ref _newContractProject, value); }
+    private string _newContractNumber = "ПД-2026/19";
+    public string NewContractNumber { get => _newContractNumber; set => SetField(ref _newContractNumber, value); }
+    private string _newContractCounterparty = "ООО БелСтройПоставка";
+    public string NewContractCounterparty { get => _newContractCounterparty; set => SetField(ref _newContractCounterparty, value); }
+    private string _newContractUnp = "192345678";
+    public string NewContractUnp { get => _newContractUnp; set => SetField(ref _newContractUnp, value); }
+    private string _newContractAmount = "1500.00";
+    public string NewContractAmount { get => _newContractAmount; set => SetField(ref _newContractAmount, value); }
+    private string _newContractSpec = "Поставка арматуры и ЖБИ по графику";
+    public string NewContractSpec { get => _newContractSpec; set => SetField(ref _newContractSpec, value); }
+
     private AdvanceGridRow? _selectedAdvance;
     public AdvanceGridRow? SelectedAdvance { get => _selectedAdvance; set => SetField(ref _selectedAdvance, value); }
     private string _advanceOffsetInput = "50.00";
@@ -544,6 +618,7 @@ public sealed class MainViewModel : ViewModelBase
     public RelayCommand CreateActCommand { get; }
     public RelayCommand RefreshCalendarCommand { get; }
     public RelayCommand RescheduleScheduleItemCommand { get; }
+    public RelayCommand CreateContractCommand { get; }
     public RelayCommand OffsetAdvanceCommand { get; }
     public RelayCommand ImportStatementCommand { get; }
     public RelayCommand ImportEstimateCommand { get; }
@@ -617,6 +692,7 @@ public sealed class MainViewModel : ViewModelBase
         BudgetProject = ProjectLookups.FirstOrDefault(x => x.Id == prevBudgetPrj) ?? ProjectLookups.FirstOrDefault();
         RiskProject = ProjectLookups.FirstOrDefault(x => x.Id == prevRiskPrj) ?? ProjectLookups.FirstOrDefault();
         CalendarProject = CalendarProjectLookups.FirstOrDefault(x => x.Id == prevCalPrj) ?? CalendarProjectLookups.FirstOrDefault();
+        NewContractProject ??= ProjectLookups.FirstOrDefault();
 
         ObjectLookups.Clear();
         foreach (var o in objects) ObjectLookups.Add(new LookupItem(o.Id, o.Name));
@@ -648,11 +724,40 @@ public sealed class MainViewModel : ViewModelBase
         var limits = await BuildFreeLimitRowsAsync(scope);
         var calDays = await ComputeCalendarAsync(scope, null, 90);
         var notes = await scope.Db.Notifications.OrderBy(n => n.IsRead).ThenByDescending(n => n.CreatedAt).Take(12).ToListAsync();
+        var pendingReqs = await scope.Db.PaymentRequests
+            .Include(r => r.Contract)
+            .Include(r => r.CostItem)
+            .Where(r => !r.IsDeleted && (r.Status == RequestStatus.Blocked
+                                         || r.Status == RequestStatus.PendingApproval
+                                         || r.Status == RequestStatus.ApprovedByManagement
+                                         || r.Status == RequestStatus.Approved))
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(8)
+            .ToListAsync();
 
         Forecasts.Clear();
         foreach (var f in forecasts) Forecasts.Add(f);
+
+        DashboardPendingRequests.Clear();
+        foreach (var r in pendingReqs)
+        {
+            DashboardPendingRequests.Add(new PaymentRequestGridRow(
+                r.Id, r.Number, RussianLabels.RequestTypeName(r.Type),
+                r.Contract?.Number ?? "—", r.CostItem?.Code ?? "—",
+                r.PayableAmount, r.Currency, r.PlannedPaymentDate, r.Status,
+                RussianLabels.RequestStatusName(r.Status),
+                r.BlockReason ?? r.Purpose ?? "—", r.RowVersion));
+        }
+
+        DashboardCashDays.Clear();
+        foreach (var d in calDays.Where(x => x.DayIndex <= 5 || x.Inflows > 0 || x.Outflows > 0 || x.CashGap > 0).Take(12))
+        {
+            DashboardCashDays.Add(new CashDayGridRow(d.Date, d.DayIndex, d.OpeningBalance, d.Inflows, d.Outflows, d.ClosingBalance, d.CashGap));
+        }
+
         Notifications.Clear();
-        foreach (var n in notes) Notifications.Add(n);
+        foreach (var n in notes)
+            Notifications.Add(new NotificationGridRow(RussianLabels.SeverityName(n.Severity), n.Title, n.Message));
 
         KpiContractTotal = $"{forecasts.Sum(f => f.ContractValue):N0} тыс. р.";
         KpiApprovedBudget = $"{limits.Sum(l => l.ApprovedBudget):N0} тыс. р.";
@@ -682,7 +787,9 @@ public sealed class MainViewModel : ViewModelBase
         {
             vMap[v.Id] = v;
             projects.TryGetValue(v.ProjectId, out var p);
-            BudgetVersions.Add(new BudgetVersionGridRow(v.Id, p?.Code ?? "—", v.VersionNumber, v.Status, v.Comment, v.RowVersion));
+            BudgetVersions.Add(new BudgetVersionGridRow(
+                v.Id, p?.Code ?? "—", v.VersionNumber, v.Status,
+                RussianLabels.BudgetVersionStatusName(v.Status), v.Comment ?? "—", v.RowVersion));
         }
 
         var bLimits = await scope.Db.BudgetLimits.Where(l => !l.IsDeleted).ToListAsync();
@@ -692,8 +799,9 @@ public sealed class MainViewModel : ViewModelBase
             vMap.TryGetValue(l.BudgetVersionId, out var bv);
             objects.TryGetValue(l.ConstructionObjectId, out var obj);
             items.TryGetValue(l.CostItemId, out var ci);
+            var vs = bv?.Status ?? BudgetVersionStatus.Draft;
             BudgetLimits.Add(new BudgetLimitGridRow(
-                l.Id, bv?.VersionNumber ?? 0, bv?.Status ?? BudgetVersionStatus.Draft,
+                l.Id, bv?.VersionNumber ?? 0, vs, RussianLabels.BudgetVersionStatusName(vs),
                 obj?.Name ?? "—", ci?.Code ?? "—", l.Amount, l.RowVersion));
         }
     }
@@ -702,7 +810,7 @@ public sealed class MainViewModel : ViewModelBase
     {
         using var scope = _dbFactory.CreateScope();
         var query = scope.Db.PaymentRequests.Include(r => r.Contract).Include(r => r.CostItem).Where(r => !r.IsDeleted);
-        if (SelectedRequestStatusFilter != "Все" && Enum.TryParse<RequestStatus>(SelectedRequestStatusFilter, out var st))
+        if (!string.IsNullOrEmpty(SelectedRequestStatusFilter.Key) && Enum.TryParse<RequestStatus>(SelectedRequestStatusFilter.Key, out var st))
             query = query.Where(r => r.Status == st);
 
         var reqs = await query.OrderByDescending(r => r.CreatedAt).ToListAsync();
@@ -710,10 +818,59 @@ public sealed class MainViewModel : ViewModelBase
         foreach (var r in reqs)
         {
             PaymentRequests.Add(new PaymentRequestGridRow(
-                r.Id, r.Number, r.Type.ToString(), r.Contract?.Number ?? "—", r.CostItem?.Code ?? "—",
-                r.PayableAmount, r.Currency, r.PlannedPaymentDate, r.Status,
+                r.Id, r.Number, RussianLabels.RequestTypeName(r.Type), r.Contract?.Number ?? "—", r.CostItem?.Code ?? "—",
+                r.PayableAmount, r.Currency, r.PlannedPaymentDate, r.Status, RussianLabels.RequestStatusName(r.Status),
                 r.BlockReason ?? r.ReturnOrRejectReason ?? r.EdsSignatureThumbprint ?? r.Purpose ?? "—",
                 r.RowVersion));
+        }
+
+        if (SelectedRequest == null && PaymentRequests.Count > 0)
+            SelectedRequest = PaymentRequests[0];
+    }
+
+    private async Task LoadSelectedRequestCardAsync(PaymentRequestGridRow? row)
+    {
+        if (row == null)
+        {
+            SelectedRequestCardSummary = "Выберите заявку в таблице выше для просмотра расчёта Lдост, Oост, документов-оснований и истории переходов.";
+            SelectedRequestHistoryText = string.Empty;
+            return;
+        }
+
+        try
+        {
+            using var scope = _dbFactory.CreateScope();
+            var req = await scope.Db.PaymentRequests
+                .Include(r => r.Contract)
+                .Include(r => r.CostItem)
+                .FirstOrDefaultAsync(r => r.Id == row.Id && !r.IsDeleted);
+            if (req == null) return;
+
+            var docs = await scope.Db.Documents.Where(d => !d.IsDeleted && d.PaymentRequestId == req.Id).ToListAsync();
+            var free = await scope.Budget.CalculateFreeLimitAsync(req.ConstructionObjectId, req.CostItemId);
+            string docDesc = docs.Count > 0
+                ? string.Join(", ", docs.Select(d => $"{d.Type} №{d.Number} от {d.Date:dd.MM.yyyy}"))
+                : "Нет прикреплённого документа";
+
+            SelectedRequestCardSummary =
+                $"Заявка {req.Number} ({RussianLabels.RequestStatusName(req.Status)}) · Договор: {req.Contract?.Number ?? "—"} ({req.Contract?.Counterparty ?? "—"})\n" +
+                $"Документ-основание: {docDesc} | Статья: {req.CostItem?.Code} — {req.CostItem?.Name}\n" +
+                $"К оплате: {req.PayableAmount:N2} {req.Currency} (в BYN: {req.AmountInByn:N2}, НДС: {req.VatAmount:N2}) | Акт: {req.ActAmount:N2}, зачёт аванса: {req.AdvanceOffset:N2}, удержание: {req.RetentionAmount:N2}\n" +
+                $"Бюджетный контроль по объекту и статье: B = {free.ApprovedBudget:N2}, O = {free.GrossObligations:N2}, F = {free.PaidFact:N2} → Lдост = {free.FreeLimit:N2} тыс. р., Oост = {free.ObligationRemainder:N2} тыс. р." +
+                (req.HasOverdueAdvanceWarning ? " | ВНИМАНИЕ: по договору имеется просроченный аванс!" : string.Empty);
+
+            var stages = new List<string> { $"Создана: {req.CreatedAt:dd.MM HH:mm}" };
+            if (req.SubmittedAt.HasValue) stages.Add($"На проверке/согласовании: {req.SubmittedAt.Value:dd.MM HH:mm}");
+            if (req.BlockedAt.HasValue) stages.Add($"Заблокирована: {req.BlockedAt.Value:dd.MM HH:mm}");
+            if (req.IsOverrunApproved) stages.Add($"Перерасход одобрен (UC04): {req.OverrunJustification}");
+            if (req.ApprovedAt.HasValue) stages.Add($"Согласована{(req.EdsSignatureThumbprint != null ? $" (ЭЦП {req.EdsSignatureThumbprint})" : "")}: {req.ApprovedAt.Value:dd.MM HH:mm}");
+            if (req.ExecutedAt.HasValue) stages.Add($"Исполнена: {req.ExecutedAt.Value:dd.MM HH:mm}");
+            if (req.ClosedAt.HasValue) stages.Add($"Закрыта по выписке: {req.ClosedAt.Value:dd.MM HH:mm}");
+            SelectedRequestHistoryText = "История переходов: " + string.Join("  →  ", stages);
+        }
+        catch
+        {
+            SelectedRequestCardSummary = $"Заявка {row.Number} ({row.StatusText})";
         }
     }
 
@@ -746,7 +903,7 @@ public sealed class MainViewModel : ViewModelBase
         var days = await ComputeCalendarAsync(scope, filterId, CalendarHorizonDays);
         CalendarDays.Clear();
         foreach (var d in days.Where(x => x.DayIndex <= 10 || x.Inflows > 0 || x.Outflows > 0 || x.CashGap > 0))
-            CalendarDays.Add(d);
+            CalendarDays.Add(new CashDayGridRow(d.Date, d.DayIndex, d.OpeningBalance, d.Inflows, d.Outflows, d.ClosingBalance, d.CashGap));
 
         var contracts = await scope.Db.Contracts
             .Where(c => !c.IsDeleted && (!filterId.HasValue || c.ProjectId == filterId.Value))
@@ -770,11 +927,12 @@ public sealed class MainViewModel : ViewModelBase
         Contracts.Clear();
         foreach (var c in contracts)
         {
+            decimal gross = c.Obligations.Where(o => !o.IsDeleted).Sum(o => o.GrossAmount);
+            decimal paid = c.Obligations.Where(o => !o.IsDeleted).Sum(o => o.PaidAmount);
             Contracts.Add(new ContractGridRow(
-                c.Number, c.Counterparty, c.CounterpartyUnp, c.Direction.ToString(),
+                c.Number, c.Counterparty, c.CounterpartyUnp, RussianLabels.ContractDirectionName(c.Direction),
                 c.EffectiveTotalAmount, c.Currency, c.RetentionPercent,
-                c.Obligations.Where(o => !o.IsDeleted).Sum(o => o.GrossAmount),
-                c.Obligations.Where(o => !o.IsDeleted).Sum(o => o.PaidAmount)));
+                gross, paid, c.EffectiveTotalAmount - gross));
         }
 
         var advs = await scope.Db.Advances.Include(a => a.Contract).Where(a => !a.IsDeleted).OrderBy(a => a.DueDate).ToListAsync();
@@ -784,7 +942,7 @@ public sealed class MainViewModel : ViewModelBase
         {
             Advances.Add(new AdvanceGridRow(
                 a.Id, a.Contract?.Number ?? "—", a.FundingSource, a.Amount, a.UsedAmount, a.Remainder,
-                a.UtilizationPercent ?? 0m, a.DueDate, a.IsOverdueAt(refDate) ? "Просрочен!" : a.Status.ToString()));
+                a.UtilizationPercent ?? 0m, a.DueDate, RussianLabels.AdvanceStatusName(a.Status, a.IsOverdueAt(refDate))));
         }
     }
 
@@ -801,7 +959,17 @@ public sealed class MainViewModel : ViewModelBase
             Risks.Add(new RiskGridRow(
                 r.Id, r.Code, r.Event, r.OwnerRole, r.Probability, r.MonetaryImpact,
                 r.IntegralScore, RiskCalculator.GetRiskZone(r.IntegralScore), r.Emv, r.ResidualEmv ?? r.Emv,
-                r.Status, r.CurrentAssessmentVersion, r.EarlyIndicator, r.Mitigation, r.RowVersion));
+                RussianLabels.RiskStatusName(r.Status), r.CurrentAssessmentVersion, r.EarlyIndicator, r.Mitigation, r.RowVersion));
+        }
+
+        RiskMatrix.Clear();
+        foreach (var cell in RiskCalculator.BuildRiskMatrix(risks))
+        {
+            var (bg, fg) = cell.IntegralScore >= 17 ? ("#FEE2E2", "#991B1B")
+                : cell.IntegralScore >= 10 ? ("#FFEDD5", "#9A3412")
+                : cell.IntegralScore >= 5 ? ("#FEF9C3", "#854D0E")
+                : ("#ECFDF5", "#065F46");
+            RiskMatrix.Add(new RiskMatrixCellView($"p={cell.ProbabilityScore}, I={cell.ImpactScore} (R={cell.IntegralScore})", cell.RiskCodes, bg, fg));
         }
 
         var summary = await scope.Risks.CalculateReserveP80Async(prjId);
@@ -836,7 +1004,7 @@ public sealed class MainViewModel : ViewModelBase
                 var summary = RiskCalculator.CalculatePortfolioSummary(risks);
                 ReportSubtitle = $"ΣEMV = {summary.TotalEmv:N2}, σ = {summary.Sigma:N2}, P80 = {summary.ReserveP80:N2} тыс. р.";
                 foreach (var r in risks)
-                    ReportRows.Add(new ReportRowView(r.Code, r.Event, $"{r.Probability:P0} / {r.MonetaryImpact:N0}", $"{r.IntegralScore} ({RiskCalculator.GetRiskZone(r.IntegralScore)})", $"{r.Emv:N2} / {(r.ResidualEmv ?? r.Emv):N2}", $"{r.OwnerRole} ({r.Status})"));
+                    ReportRows.Add(new ReportRowView(r.Code, r.Event, $"{r.Probability:P0} / {r.MonetaryImpact:N0}", $"{r.IntegralScore} ({RiskCalculator.GetRiskZone(r.IntegralScore)})", $"{r.Emv:N2} / {(r.ResidualEmv ?? r.Emv):N2}", $"{r.OwnerRole} ({RussianLabels.RiskStatusName(r.Status)})"));
                 break;
 
             case "contracts-advances":
@@ -847,7 +1015,7 @@ public sealed class MainViewModel : ViewModelBase
                 foreach (var a in advs)
                 {
                     contracts.TryGetValue(a.ContractId, out var c);
-                    ReportRows.Add(new ReportRowView(c?.Number ?? "—", c?.Counterparty ?? "—", a.Amount.ToString("N2"), a.UsedAmount.ToString("N2"), $"{a.Remainder:N2} ({(a.UtilizationPercent ?? 0m):N1}%)", $"{a.DueDate:dd.MM.yyyy} / {a.Status}"));
+                    ReportRows.Add(new ReportRowView(c?.Number ?? "—", c?.Counterparty ?? "—", a.Amount.ToString("N2"), a.UsedAmount.ToString("N2"), $"{a.Remainder:N2} ({(a.UtilizationPercent ?? 0m):N1}%)", $"{a.DueDate:dd.MM.yyyy} / {RussianLabels.AdvanceStatusName(a.Status)}"));
                 }
                 break;
 
@@ -856,7 +1024,7 @@ public sealed class MainViewModel : ViewModelBase
                 var reqs = await scope.Db.PaymentRequests.Where(r => !r.IsDeleted).OrderByDescending(r => r.CreatedAt).ToListAsync();
                 ReportSubtitle = "Реестр платёжных заявок и блокировок";
                 foreach (var r in reqs)
-                    ReportRows.Add(new ReportRowView(r.Number, r.Type.ToString(), $"{r.PayableAmount:N2} {r.Currency}", r.PlannedPaymentDate.ToString("dd.MM.yyyy"), r.Status.ToString(), r.BlockReason ?? r.EdsSignatureThumbprint ?? r.Purpose ?? "—"));
+                    ReportRows.Add(new ReportRowView(r.Number, RussianLabels.RequestTypeName(r.Type), $"{r.PayableAmount:N2} {r.Currency}", r.PlannedPaymentDate.ToString("dd.MM.yyyy"), RussianLabels.RequestStatusName(r.Status), r.BlockReason ?? r.EdsSignatureThumbprint ?? r.Purpose ?? "—"));
                 break;
 
             default:
@@ -950,12 +1118,12 @@ public sealed class MainViewModel : ViewModelBase
             var obj = await scope.Db.ConstructionObjects.FirstAsync(o => o.Id == NewReqObject.Id);
             var dto = new CreatePaymentRequestDto(
                 obj.ProjectId, obj.Id, NewReqContract.Id, NewReqCostItem.Id,
-                amt, amt, 0m, 0m, true, NewReqCurrency, NewReqType, dt,
-                NewReqPurpose, NewReqType == RequestType.Advance ? DocumentType.Contract : DocumentType.ActS2,
+                amt, amt, 0m, 0m, true, NewReqCurrency, NewReqType.Type, dt,
+                NewReqPurpose, NewReqType.Type == RequestType.Advance ? DocumentType.Contract : DocumentType.ActS2,
                 NewReqDocNo, new DateTime(2026, 11, 10), null, $"WPF-{Guid.NewGuid():N}", true);
             var (req, checks) = await scope.Requests.CreateAsync(dto, _session.UserId, _session.Login);
             await LoadRequestsAsync();
-            SetStatus($"Заявка {req.Number} ({req.Status}): " + string.Join(" | ", checks.Messages), req.Status == RequestStatus.Blocked);
+            SetStatus($"Заявка {req.Number} ({RussianLabels.RequestStatusName(req.Status)}): " + string.Join(" | ", checks.Messages), req.Status == RequestStatus.Blocked);
         });
     }
 
@@ -967,7 +1135,7 @@ public sealed class MainViewModel : ViewModelBase
             using var scope = _dbFactory.CreateScope();
             var req = await scope.Requests.ApproveOverrunAsync(SelectedRequest.Id, approve, ActionReasonInput, SelectedRequest.RowVersion, _session.UserId, _session.Login);
             await LoadRequestsAsync();
-            SetStatus($"По заявке {req.Number} установлено решение: {req.Status}.", false);
+            SetStatus($"По заявке {req.Number} установлено решение: {RussianLabels.RequestStatusName(req.Status)}.", false);
         });
     }
 
@@ -1057,6 +1225,40 @@ public sealed class MainViewModel : ViewModelBase
             await scope.Db.SaveChangesAsync();
             await RefreshCalendarAsync();
             SetStatus($"Платёж «{item.Description}» перенесён на {newDate:dd.MM.yyyy}.", false);
+        });
+    }
+
+    private async Task CreateContractAsync()
+    {
+        if (!CanCreateContract || NewContractProject == null) return;
+        await RunSafeAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(NewContractNumber) || string.IsNullOrWhiteSpace(NewContractCounterparty))
+                throw new DomainException("Укажите номер договора и контрагента.");
+            decimal amt = ParseDecimal(NewContractAmount, "сумма договора");
+            if (amt <= 0)
+                throw new DomainException("Сумма договора должна быть положительной.");
+
+            using var scope = _dbFactory.CreateScope();
+            var contract = new Contract
+            {
+                ProjectId = NewContractProject.Id,
+                Number = NewContractNumber.Trim(),
+                Counterparty = NewContractCounterparty.Trim(),
+                CounterpartyUnp = string.IsNullOrWhiteSpace(NewContractUnp) ? "190000001" : NewContractUnp.Trim(),
+                Direction = ContractDirection.SupplierSubcontractorOutgoing,
+                TotalAmount = amt,
+                Currency = "BYN",
+                StartDate = new DateTime(2026, 11, 10),
+                EndDate = new DateTime(2027, 11, 10),
+                SpecificationNotes = NewContractSpec.Trim()
+            };
+            await scope.Db.Contracts.AddAsync(contract);
+            await scope.Audit.LogAsync(_session.UserId, _session.Login, nameof(Contract), contract.Number, "CREATE_CONTRACT", null, $"{amt:N2} BYN", contract.Counterparty);
+            await scope.Db.SaveChangesAsync();
+            await LoadLookupsAsync();
+            await LoadContractsAsync();
+            SetStatus($"Договор {contract.Number} зарегистрирован.", false);
         });
     }
 

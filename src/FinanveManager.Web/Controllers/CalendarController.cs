@@ -1,6 +1,6 @@
 using System.Security.Claims;
-using FinanveManager.Application.Interfaces;
-using FinanveManager.Infrastructure.Persistence;
+using FinanveManager.Data.Persistence;
+using FinanveManager.Data.Services;
 using FinanveManager.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.Web.Controllers;
 
-[Authorize]
+[Authorize(Roles = "CEO,FinancialManager,Accountant")]
 public class CalendarController : Controller
 {
     private readonly AppDbContext _db;
@@ -50,7 +50,7 @@ public class CalendarController : Controller
             "RESCHEDULE_PAYMENT", oldDate, newDate.ToString("yyyy-MM-dd"), item.Description, ct);
         await _db.SaveChangesAsync(ct);
 
-        TempData["Success"] = $"Платёж «{item.Description}» перенесён с {oldDate} на {newDate:yyyy-MM-dd}.";
+        TempData["Success"] = $"Платёж «{item.Description}» перенесён на {newDate:dd.MM.yyyy}.";
         return RedirectToAction(nameof(Index), new { projectId, horizonDays });
     }
 }

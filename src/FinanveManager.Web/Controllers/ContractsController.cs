@@ -1,9 +1,8 @@
 using System.Security.Claims;
 using System.Text;
-using FinanveManager.Application.Interfaces;
-using FinanveManager.Application.Services;
-using FinanveManager.Domain.Common;
-using FinanveManager.Infrastructure.Persistence;
+using FinanveManager.Data.Models;
+using FinanveManager.Data.Persistence;
+using FinanveManager.Data.Services;
 using FinanveManager.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.Web.Controllers;
 
-[Authorize]
+[Authorize(Roles = "FinancialManager,Accountant,ProcurementSpecialist")]
 public class ContractsController : Controller
 {
     private readonly AppDbContext _db;
@@ -50,9 +49,6 @@ public class ContractsController : Controller
                 .Where(c => !c.IsDeleted)
                 .OrderBy(c => c.Number)
                 .ToListAsync(ct),
-            Projects = await _db.Projects.Where(p => !p.IsDeleted).ToListAsync(ct),
-            Objects = await _db.ConstructionObjects.Where(o => !o.IsDeleted).ToListAsync(ct),
-            CostItems = await _db.CostItems.Where(c => !c.IsDeleted).ToListAsync(ct),
             Advances = await _db.Advances.Include(a => a.Contract).Where(a => !a.IsDeleted).OrderBy(a => a.DueDate).ToListAsync(ct),
             ImportReportSummary = TempData["ImportReport"] as string,
             EstimateImportSummary = TempData["EstimateReport"] as string
@@ -61,7 +57,7 @@ public class ContractsController : Controller
     }
 
     [HttpPost]
-    [Authorize(Roles = "Accountant,Admin")]
+    [Authorize(Roles = "Accountant")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ImportStatement(string fileName, string content, CancellationToken ct)
     {
@@ -78,7 +74,7 @@ public class ContractsController : Controller
         TempData["ImportReport"] =
             $"Обработано: {report.TotalOperations}, сопоставлено: {report.MatchedCount}, дублей пропущено: {report.DuplicateSkippedCount}, несопоставлено: {report.UnmatchedCount}. "
             + string.Join(" ", report.Warnings);
-        TempData["Success"] = $"Банковская выписка импортирована ({report.MatchedCount} сопоставлено, {report.DuplicateSkippedCount} дублей отсечено).";
+        TempData["Success"] = $"Выписка обработана ({report.MatchedCount} сопоставлено, {report.DuplicateSkippedCount} дублей отсечено).";
         return RedirectToAction(nameof(Index));
     }
 
@@ -94,7 +90,7 @@ public class ContractsController : Controller
             decimal prev = adv.UsedAmount;
             adv.ApplyOffset(offsetAmount);
             var (uid, login) = CurrentUser();
-            await _audit.LogAsync(uid, login, nameof(adv), adv.Id.ToString(), "OFFSET_ADVANCE",
+            await _audit.LogAsync(uid, login, nameof(Advance), adv.Id.ToString(), "OFFSET_ADVANCE",
                 prev.ToString("N2"), adv.UsedAmount.ToString("N2"), null, ct);
             await _db.SaveChangesAsync(ct);
             TempData["Success"] = $"Зачёт аванса {offsetAmount:N2} выполнен. Остаток Aост = {adv.Remainder:N2} тыс. р.";
@@ -107,7 +103,7 @@ public class ContractsController : Controller
     }
 
     [HttpPost]
-    [Authorize(Roles = "FinancialManager,ProjectManager,ProcurementSpecialist")]
+    [Authorize(Roles = "FinancialManager,ProcurementSpecialist")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ImportEstimate(string fileName, string content, CancellationToken ct)
     {
@@ -120,17 +116,17 @@ public class ContractsController : Controller
         var catalog = await _db.CostItems.Where(c => !c.IsDeleted).ToListAsync(ct);
         var res = _estimateImporter.ImportFromExcelOrXml(content, string.IsNullOrWhiteSpace(fileName) ? "smeta.csv" : fileName, catalog);
         TempData["EstimateReport"] =
-            $"Строк в смете: {res.TotalLines}, сопоставлено со справочником статей: {res.MatchedLines} ({res.MatchPercent:N1} % >= 95 % целевого показателя).";
-        TempData["Success"] = "Импорт и маппинг сметы выполнен.";
+            $"Строк в смете: {res.TotalLines}, сопоставлено со справочником статей: {res.MatchedLines} ({res.MatchPercent:N1} %).";
+        TempData["Success"] = "Импорт сметы выполнен.";
         return RedirectToAction(nameof(Index));
     }
 
     [HttpGet]
+    [Authorize(Roles = "Accountant,FinancialManager")]
     public async Task<IActionResult> Export1C(CancellationToken ct)
     {
         var payments = await _db.Payments.Where(p => !p.IsDeleted).ToListAsync(ct);
-        var docs = await _db.Documents.Where(d => !d.IsDeleted).ToListAsync(ct);
-        var csv = _accountingAdapter.ExportEntriesCsv(payments, docs);
+        var csv = _accountingAdapter.ExportEntriesCsv(payments);
         var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray();
         return File(bytes, "text/csv; charset=utf-8", "1c-accounting-export.csv");
     }

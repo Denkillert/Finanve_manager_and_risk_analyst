@@ -1,8 +1,6 @@
-using FinanveManager.Application.Interfaces;
-using FinanveManager.Domain.Entities;
-using FinanveManager.Domain.Enums;
-using FinanveManager.Domain.Services;
-using FinanveManager.Infrastructure.Persistence;
+using FinanveManager.Data.Models;
+using FinanveManager.Data.Persistence;
+using FinanveManager.Data.Services;
 using FinanveManager.Web.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,8 +9,7 @@ namespace FinanveManager.Web.Services;
 public static class WebPortfolioHelper
 {
     public static async Task<List<ProjectForecastItem>> BuildForecastsAsync(
-        AppDbContext db,
-        CancellationToken ct = default)
+        AppDbContext db, CancellationToken ct = default)
     {
         var projects = await db.Projects.Where(p => !p.IsDeleted).OrderBy(p => p.Code).ToListAsync(ct);
         var objects = await db.ConstructionObjects.Where(o => !o.IsDeleted).ToListAsync(ct);
@@ -40,8 +37,7 @@ public static class WebPortfolioHelper
                 ? 0m
                 : limits.Where(l => l.BudgetVersionId == approvedBv.Id).Sum(l => l.Amount);
 
-            var prjRisks = risks.Where(r => r.ProjectId == project.Id).ToList();
-            var riskSummary = RiskCalculator.CalculatePortfolioSummary(prjRisks);
+            var riskSummary = RiskCalculator.CalculatePortfolioSummary(risks.Where(r => r.ProjectId == project.Id));
             var forecast = EarnedValueCalculator.Calculate(
                 bac, pv, ev, ac, project.ContractValue, Math.Round(riskSummary.ReserveP80, 0, MidpointRounding.AwayFromZero));
 
@@ -52,14 +48,11 @@ public static class WebPortfolioHelper
                 RiskSummary = riskSummary
             });
         }
-
         return result;
     }
 
     public static async Task<List<FreeLimitRowItem>> BuildFreeLimitsAsync(
-        AppDbContext db,
-        IBudgetService budgetService,
-        CancellationToken ct = default)
+        AppDbContext db, IBudgetService budgetService, CancellationToken ct = default)
     {
         var projects = await db.Projects.Where(p => !p.IsDeleted).ToDictionaryAsync(p => p.Id, ct);
         var objects = await db.ConstructionObjects.Where(o => !o.IsDeleted).ToListAsync(ct);
@@ -73,9 +66,9 @@ public static class WebPortfolioHelper
             if (!projects.TryGetValue(obj.ProjectId, out var proj)) continue;
             foreach (var item in costItems)
             {
-                bool hasLimit = limits.Any(l => l.ConstructionObjectId == obj.Id && l.CostItemId == item.Id);
-                bool hasObl = obligations.Any(o => o.ConstructionObjectId == obj.Id && o.CostItemId == item.Id);
-                if (!hasLimit && !hasObl) continue;
+                if (!limits.Any(l => l.ConstructionObjectId == obj.Id && l.CostItemId == item.Id)
+                    && !obligations.Any(o => o.ConstructionObjectId == obj.Id && o.CostItemId == item.Id))
+                    continue;
 
                 var res = await budgetService.CalculateFreeLimitAsync(obj.Id, item.Id, ct);
                 rows.Add(new FreeLimitRowItem
@@ -95,10 +88,7 @@ public static class WebPortfolioHelper
     }
 
     public static async Task<CalendarViewModel> BuildCalendarAsync(
-        AppDbContext db,
-        Guid? projectId,
-        int horizonDays = 90,
-        CancellationToken ct = default)
+        AppDbContext db, Guid? projectId, int horizonDays = 90, CancellationToken ct = default)
     {
         var startDate = new DateTime(2026, 11, 10);
         var projects = await db.Projects.Where(p => !p.IsDeleted).OrderBy(p => p.Code).ToListAsync(ct);
@@ -137,8 +127,6 @@ public static class WebPortfolioHelper
                 : (cur.Inflows, cur.Outflows + item.Amount);
         }
 
-        // Примечание: в базовой контрольной таблице 1.5 на 5 дней учитываются графики договоров;
-        // для новых заявок после 2026-11-15 также учитываем плановые оттоки.
         foreach (var req in pendingRequests.Where(r => r.PlannedPaymentDate.Date > startDate.AddDays(5)))
         {
             var d = req.PlannedPaymentDate.Date;
@@ -168,10 +156,7 @@ public static class WebPortfolioHelper
     }
 
     public static async Task<ReportGridModel> BuildReportAsync(
-        AppDbContext db,
-        IBudgetService budgetService,
-        string reportType,
-        CancellationToken ct = default)
+        AppDbContext db, IBudgetService budgetService, string reportType, CancellationToken ct = default)
     {
         switch (reportType)
         {
@@ -182,7 +167,7 @@ public static class WebPortfolioHelper
                 {
                     ReportType = reportType,
                     Title = "Прогноз стоимости проектов (метод освоенного объёма EVM)",
-                    Subtitle = "Формулы (1.5)–(1.7), (1.13)–(1.14): CPI, SPI, ETC, EAC и финансовый результат с учётом резерва P80",
+                    Subtitle = "Показатели CPI, SPI, ETC, EAC и финансовый результат с учётом резерва P80",
                     Headers = ["Код", "Проект", "Цена V / BAC", "PV / EV / AC", "CPI / SPI", "EAC / Фин. рез. (с P80)"],
                     Rows = forecasts.Select(f => new List<string>
                     {
@@ -190,7 +175,7 @@ public static class WebPortfolioHelper
                         f.Project.Name,
                         $"{f.Forecast.ContractValue:N0} / {f.Forecast.Bac:N0}",
                         $"{f.Forecast.Pv:N0} / {f.Forecast.Ev:N0} / {f.Forecast.Ac:N0}",
-                        $"{f.Forecast.Cpi:N3} / {f.Forecast.Spi:N3}",
+                        $"{f.Forecast.Cpi?.ToString("N3") ?? "—"} / {f.Forecast.Spi?.ToString("N3") ?? "—"}",
                         $"{f.Forecast.Eac:N2} / {f.Forecast.FinancialResultWithReserve:N2}"
                     }).ToList()
                 };
@@ -226,7 +211,7 @@ public static class WebPortfolioHelper
                 {
                     ReportType = reportType,
                     Title = "Договоры, обязательства и контроль выданных авансов",
-                    Subtitle = "Формулы (1.10)–(1.11): Aост = A - Aисп, Kисп = Aисп / A × 100 %",
+                    Subtitle = "Контроль остатков Aост = A − Aисп и доли использования Kисп",
                     Headers = ["Договор", "Контрагент", "Аванс A", "Зачтено Aисп", "Остаток Aост / Kисп %", "Срок / Статус"],
                     Rows = advances.Select(a =>
                     {
@@ -237,7 +222,7 @@ public static class WebPortfolioHelper
                             c?.Counterparty ?? "—",
                             a.Amount.ToString("N2"),
                             a.UsedAmount.ToString("N2"),
-                            $"{a.Remainder:N2} ({a.UtilizationPercent:N1} %)",
+                            $"{a.Remainder:N2} ({(a.UtilizationPercent?.ToString("N1") ?? "0.0")} %)",
                             $"{a.DueDate:dd.MM.yyyy} / {a.Status}"
                         };
                     }).ToList()
@@ -251,7 +236,7 @@ public static class WebPortfolioHelper
                 {
                     ReportType = reportType,
                     Title = "Реестр платёжных заявок и нарушений лимитов",
-                    Subtitle = "Жизненный цикл заявок (табл. 1.11), блокировки перерасхода (UC04) и ЭЦП",
+                    Subtitle = "Статусы заявок, блокировки перерасхода (UC04) и ЭЦП",
                     Headers = ["Номер", "Тип", "К оплате", "Дата", "Статус", "Причина блокировки / ЭЦП"],
                     Rows = reqs.Select(r => new List<string>
                     {
@@ -272,7 +257,7 @@ public static class WebPortfolioHelper
                 {
                     ReportType = "budget-plan-fact",
                     Title = "План-факт исполнения бюджета (vFreeLimit)",
-                    Subtitle = "Формулы (1.1)–(1.4): Lдост = B − O, Oост = O − F (поданные заявки Q не вычитаются повторно)",
+                    Subtitle = "Формулы Lдост = B − O, Oост = O − F",
                     Headers = ["Проект", "Объект / Статья", "Бюджет B", "Обязательства O", "Оплачено F / Заявки Q", "Lдост / Oост"],
                     Rows = limits.Select(l => new List<string>
                     {

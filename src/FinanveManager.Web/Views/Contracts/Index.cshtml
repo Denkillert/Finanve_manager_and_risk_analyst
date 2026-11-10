@@ -109,7 +109,7 @@
         {
             <div class="alert alert-info">@Model.ImportReportSummary</div>
         }
-        @if (roleCode is "Accountant" or "Admin")
+        @if (roleCode == "Accountant")
         {
             <form method="post" asp-controller="Contracts" asp-action="ImportStatement">
                 <div class="field" style="margin-bottom:8px">
@@ -126,7 +126,7 @@ OP-2026-9001;2026-11-10;850.00;BYN;ОАО Белорусский цементн�
         }
         else
         {
-            <p class="muted">Импорт банковских выписок доступен ролям <strong>Accountant</strong> и <strong>Admin</strong>.</p>
+            <p class="muted">Импорт банковских выписок доступен роли <strong>Бухгалтер (Accountant)</strong>.</p>
         }
     </div>
 

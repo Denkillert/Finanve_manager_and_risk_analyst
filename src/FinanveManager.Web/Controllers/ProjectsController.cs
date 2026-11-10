@@ -1,8 +1,7 @@
 using System.Security.Claims;
-using FinanveManager.Application.Interfaces;
-using FinanveManager.Domain.Common;
-using FinanveManager.Domain.Enums;
-using FinanveManager.Infrastructure.Persistence;
+using FinanveManager.Data.Models;
+using FinanveManager.Data.Persistence;
+using FinanveManager.Data.Services;
 using FinanveManager.Web.Models;
 using FinanveManager.Web.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -11,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.Web.Controllers;
 
-[Authorize]
+[Authorize(Roles = "CEO,FinancialManager,ProjectManager")]
 public class ProjectsController : Controller
 {
     private readonly AppDbContext _db;
@@ -104,7 +103,7 @@ public class ProjectsController : Controller
             var (uid, login) = CurrentUser();
             byte[] rv = string.IsNullOrEmpty(rowVersionBase64) ? Array.Empty<byte>() : Convert.FromBase64String(rowVersionBase64);
             var bv = await _budgetService.ApproveVersionAsync(versionId, rv, uid, login, ct);
-            TempData["Success"] = $"Версия бюджета v{bv.VersionNumber} утверждена (предыдущая архивирована).";
+            TempData["Success"] = $"Версия бюджета v{bv.VersionNumber} утверждена.";
         }
         catch (DomainException ex)
         {

@@ -1,50 +1,50 @@
 @model AdminViewModel
 @{
-    ViewData["Title"] = "Администрирование, НСИ, курсы валют и журнал аудита";
-    var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    ViewData["Title"] = "Пользователи, роли и НСИ";
 }
+
+<div class="alert alert-info">
+    Режим Администратора (НФТ-8): управление пользователями, ролями и нормативными правилами. Финансовые модули скрыты.
+</div>
 
 <div class="grid-2">
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title">Пользователи и роли (RBAC, 2FA, блокировка после 5 ошибок)</h3>
+            <h3 class="card-title">Пользователи и роли (RBAC, 2FA)</h3>
         </div>
-        @if (roleCode == "Admin")
-        {
-            <form method="post" asp-controller="Admin" asp-action="CreateUser" class="form-grid" style="margin-bottom:14px">
-                <div class="field">
-                    <label>Логин</label>
-                    <input name="login" placeholder="economist1" required />
-                </div>
-                <div class="field">
-                    <label>ФИО</label>
-                    <input name="fullName" placeholder="Новый сотрудник" required />
-                </div>
-                <div class="field">
-                    <label>Роль</label>
-                    <select name="roleId">
-                        @foreach (var r in Model.Roles)
-                        {
-                            <option value="@r.Id">@r.Name (@r.Code)</option>
-                        }
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Пароль (≥ 12 символов, НФТ-7)</label>
-                    <input name="password" type="password" value="StroyFin2026!" required />
-                </div>
-                <div>
-                    <button type="submit" class="btn">Создать пользователя</button>
-                </div>
-            </form>
-        }
+        <form method="post" asp-controller="Admin" asp-action="CreateUser" class="form-grid" style="margin-bottom:14px">
+            <div class="field">
+                <label>Логин</label>
+                <input name="login" placeholder="economist1" required />
+            </div>
+            <div class="field">
+                <label>ФИО</label>
+                <input name="fullName" placeholder="Иванов И.И." required />
+            </div>
+            <div class="field">
+                <label>Роль</label>
+                <select name="roleId">
+                    @foreach (var r in Model.Roles)
+                    {
+                        <option value="@r.Id">@r.Name (@r.Code)</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label>Пароль (≥ 12 символов)</label>
+                <input name="password" type="password" value="StroyFin2026!" required />
+            </div>
+            <div>
+                <button type="submit" class="btn">Создать пользователя</button>
+            </div>
+        </form>
         <div class="table-wrap">
             <table>
                 <thead>
                     <tr>
                         <th>Логин</th>
                         <th>ФИО</th>
-                        <th>Роль / Клиент</th>
+                        <th>Роль</th>
                         <th>Статус</th>
                         <th>Действие</th>
                     </tr>
@@ -55,7 +55,7 @@
                         <tr>
                             <td><code>@u.Login</code></td>
                             <td>@u.FullName</td>
-                            <td>@u.Role?.Name <div class="muted">@u.Role?.Code · @u.Role?.ClientType</div></td>
+                            <td>@u.Role?.Name</td>
                             <td>
                                 <span class="badge @(u.IsActive ? "badge-success" : "badge-danger")">@(u.IsActive ? "Активен" : "Отключён")</span>
                                 @if (u.TwoFactorEnabled)
@@ -64,7 +64,7 @@
                                 }
                             </td>
                             <td>
-                                @if (roleCode == "Admin" && u.Login != "admin")
+                                @if (u.Login != "admin")
                                 {
                                     <form method="post" asp-controller="Admin" asp-action="ToggleUserActive">
                                         <input type="hidden" name="userId" value="@u.Id" />
@@ -85,36 +85,33 @@
 
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title">Нормативно-справочная информация (НСИ) и курсы НБ РБ</h3>
+            <h3 class="card-title">Нормативные правила (НСИ) и курсы НБ РБ</h3>
         </div>
-        @if (roleCode is "Admin" or "FinancialManager")
-        {
-            <form method="post" asp-controller="Admin" asp-action="AddNormRule" class="form-grid" style="margin-bottom:14px">
-                <div class="field">
-                    <label>Код правила</label>
-                    <input name="code" value="NORM-05" required />
-                </div>
-                <div class="field">
-                    <label>Наименование</label>
-                    <input name="name" value="Макс. доля аванса субподрядчику" required />
-                </div>
-                <div class="field">
-                    <label>Источник</label>
-                    <input name="documentSource" value="Постановление № 1450" />
-                </div>
-                <div class="field">
-                    <label>Значение</label>
-                    <input name="valueText" value="До 50 % стоимости этапа" />
-                </div>
-                <div class="field">
-                    <label>Числовое знач.</label>
-                    <input type="number" step="0.01" name="numericValue" value="50" />
-                </div>
-                <div>
-                    <button type="submit" class="btn btn-outline">Добавить правило НСИ</button>
-                </div>
-            </form>
-        }
+        <form method="post" asp-controller="Admin" asp-action="AddNormRule" class="form-grid" style="margin-bottom:14px">
+            <div class="field">
+                <label>Код правила</label>
+                <input name="code" value="NORM-05" required />
+            </div>
+            <div class="field">
+                <label>Наименование</label>
+                <input name="name" value="Макс. доля аванса субподрядчику" required />
+            </div>
+            <div class="field">
+                <label>Источник</label>
+                <input name="documentSource" value="Постановление № 1450" />
+            </div>
+            <div class="field">
+                <label>Значение</label>
+                <input name="valueText" value="До 50 % стоимости этапа" />
+            </div>
+            <div class="field">
+                <label>Числовое знач.</label>
+                <input type="number" step="0.01" name="numericValue" value="50" />
+            </div>
+            <div>
+                <button type="submit" class="btn btn-outline">Добавить правило</button>
+            </div>
+        </form>
         <div class="table-wrap" style="margin-bottom:14px">
             <table>
                 <thead>
@@ -129,54 +126,18 @@
                     {
                         <tr>
                             <td><code>@n.Code</code></td>
-                            <td>@n.Name<div class="muted">@n.DocumentSource · @n.ResponsibleRole</div></td>
+                            <td>@n.Name<div class="muted">@n.DocumentSource</div></td>
                             <td>@n.ValueText</td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
-        <h4 style="margin:6px 0">Курсы валют НБ РБ на 10.11.2026</h4>
         <div class="inline-form">
             @foreach (var c in Model.CurrencyRates)
             {
                 <span class="badge badge-info">@c.Currency = @c.RateToByn.ToString("N4") BYN</span>
             }
         </div>
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-header">
-        <h3 class="card-title">Неизменяемый журнал аудита (AuditLog — последние @Model.AuditLogs.Count записей)</h3>
-    </div>
-    <div class="table-wrap" style="max-height:360px;overflow-y:auto">
-        <table>
-            <thead>
-                <tr>
-                    <th>Время UTC</th>
-                    <th>Пользователь</th>
-                    <th>Действие</th>
-                    <th>Объект</th>
-                    <th>Старое значение</th>
-                    <th>Новое значение</th>
-                    <th>Детали</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var a in Model.AuditLogs)
-                {
-                    <tr>
-                        <td style="white-space:nowrap">@a.Timestamp.ToString("dd.MM.yyyy HH:mm:ss")</td>
-                        <td><code>@a.UserLogin</code></td>
-                        <td><span class="badge badge-neutral">@a.Action</span></td>
-                        <td>@a.ObjectName (@a.ObjectId)</td>
-                        <td class="muted">@a.OldValue</td>
-                        <td>@a.NewValue</td>
-                        <td class="muted">@a.Details</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
     </div>
 </div>

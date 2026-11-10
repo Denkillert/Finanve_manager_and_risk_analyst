@@ -1,14 +1,21 @@
 @model ReportGridModel
 @{
     ViewData["Title"] = "Регламентные отчёты и экспорт";
-    var reports = new (string Key, string Name)[]
-    {
-        ("budget-plan-fact", "1. План-факт исполнения бюджета (vFreeLimit)"),
-        ("project-evm-forecast", "2. Прогноз стоимости проектов (EVM + P80)"),
-        ("risks-reserve-p80", "3. Реестр рисков и расчёт резерва P80"),
-        ("contracts-advances", "4. Договоры и контроль выданных авансов"),
-        ("payment-requests-violations", "5. Реестр заявок и нарушений лимитов")
-    };
+    var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var reports = roleCode == "RiskSpecialist"
+        ? new (string Key, string Name)[]
+        {
+            ("risks-reserve-p80", "1. Реестр рисков и расчёт резерва P80"),
+            ("project-evm-forecast", "2. Прогноз стоимости проектов (EVM + P80)")
+        }
+        : new (string Key, string Name)[]
+        {
+            ("budget-plan-fact", "1. План-факт исполнения бюджета (vFreeLimit)"),
+            ("project-evm-forecast", "2. Прогноз стоимости проектов (EVM + P80)"),
+            ("risks-reserve-p80", "3. Реестр рисков и расчёт резерва P80"),
+            ("contracts-advances", "4. Договоры и контроль выданных авансов"),
+            ("payment-requests-violations", "5. Реестр заявок и нарушений лимитов")
+        };
 }
 
 <div class="card">

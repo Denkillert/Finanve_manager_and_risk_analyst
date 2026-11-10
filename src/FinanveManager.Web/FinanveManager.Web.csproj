@@ -6,12 +6,6 @@
     <RootNamespace>FinanveManager.Web</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\FinanveManager.Domain\FinanveManager.Domain.csproj" />
-    <ProjectReference Include="..\FinanveManager.Application\FinanveManager.Application.csproj" />
-    <ProjectReference Include="..\FinanveManager.Infrastructure\FinanveManager.Infrastructure.csproj" />
+    <ProjectReference Include="..\FinanveManager.Data\FinanveManager.Data.csproj" />
   </ItemGroup>
 </Project>

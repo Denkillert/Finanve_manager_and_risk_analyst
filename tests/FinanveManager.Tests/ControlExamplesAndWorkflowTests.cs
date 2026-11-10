@@ -1,13 +1,6 @@
-using FinanveManager.Application.DTOs;
-using FinanveManager.Application.Interfaces;
-using FinanveManager.Application.Services;
-using FinanveManager.Application.Strategies;
-using FinanveManager.Domain.Common;
-using FinanveManager.Domain.Entities;
-using FinanveManager.Domain.Enums;
-using FinanveManager.Domain.Services;
-using FinanveManager.Infrastructure.Adapters;
-using FinanveManager.Infrastructure.Persistence;
+using FinanveManager.Data.Models;
+using FinanveManager.Data.Persistence;
+using FinanveManager.Data.Services;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -18,7 +11,6 @@ public class ControlExamplesAndWorkflowTests
     [Fact]
     public void FreeLimit_Example1_MatchesChapter1ExactValues()
     {
-        // Пример 1 (п. 1.3.1): B = 10 000, O = 6 000, F = 3 000, Q = 1 000
         var res = FinancialCalculator.CalculateFreeLimit(10000m, 6000m, 3000m, 1000m);
 
         Assert.Equal(4000m, res.FreeLimit);
@@ -31,7 +23,6 @@ public class ControlExamplesAndWorkflowTests
     [Fact]
     public void FreeLimit_Example2_ExhaustedArticle_MatchesChapter1ExactValues()
     {
-        // Пример 2 (п. 1.3.1): B = 10 000, O = 10 500, F = 7 000, Q = 1 500
         var res = FinancialCalculator.CalculateFreeLimit(10000m, 10500m, 7000m, 1500m);
 
         Assert.Equal(-500m, res.FreeLimit);
@@ -43,7 +34,6 @@ public class ControlExamplesAndWorkflowTests
     [Fact]
     public void EarnedValue_Example_MatchesCpiSpiEtcEacAndFinancialResult()
     {
-        // Пример (п. 1.3.2): EV=3000, AC=3300, PV=3400, BAC=11000, V=14500, ReserveP80=1948
         var res = EarnedValueCalculator.Calculate(11000m, 3400m, 3000m, 3300m, 14500m, 1948m);
 
         Assert.Equal(0.909m, res.Cpi);
@@ -86,7 +76,6 @@ public class ControlExamplesAndWorkflowTests
     [Fact]
     public void ActS2Payable_Formula112_MatchesControlExample()
     {
-        // Пример п. 1.3.4: Sакт = 1 200, Aзач = 300, Uуд = 50 -> Sопл = 850
         var res = FinancialCalculator.CalculateActPayable(1200m, 300m, 50m);
         Assert.Equal(850m, res.PayableAmount);
     }
@@ -144,33 +133,51 @@ public class ControlExamplesAndWorkflowTests
     [Fact]
     public void PasswordHasher_EnforcesMinLengthAndVerifiesHash()
     {
-        Assert.Throws<ArgumentException>(() => FinanveManager.Infrastructure.Security.PasswordHasher.HashPassword("short"));
-        string hash = FinanveManager.Infrastructure.Security.PasswordHasher.HashPassword("StroyFin2026!");
-        Assert.True(FinanveManager.Infrastructure.Security.PasswordHasher.VerifyPassword("StroyFin2026!", hash));
-        Assert.False(FinanveManager.Infrastructure.Security.PasswordHasher.VerifyPassword("WrongPassword123", hash));
-        Assert.True(FinanveManager.Infrastructure.Security.PasswordHasher.VerifyPassword(
+        Assert.Throws<ArgumentException>(() => PasswordHasher.HashPassword("short"));
+        string hash = PasswordHasher.HashPassword("StroyFin2026!");
+        Assert.True(PasswordHasher.VerifyPassword("StroyFin2026!", hash));
+        Assert.False(PasswordHasher.VerifyPassword("WrongPassword123", hash));
+        Assert.True(PasswordHasher.VerifyPassword(
             "StroyFin2026!",
             "U3Ryb3lGaW5TYWx0MjAyNg==.j9j+cxMYYr7AsTJ0SDooo1GJTTO4HPopAMoVN81VpFw="));
     }
 
     [Fact]
-    public async Task DbInitializer_SeedsInMemoryDatabase_WithAllRolesAndControlData()
+    public void RolePermissions_EnforcesStrictRoleIsolation()
     {
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase($"TestDb_{Guid.NewGuid():N}")
-            .Options;
+        var adminSections = RolePermissions.GetSectionsForRole("Admin").Select(s => s.Section).ToList();
+        Assert.Equal(new[] { AppSection.Administration, AppSection.AuditLog }, adminSections);
 
-        await using var db = new AppDbContext(options);
-        await DbInitializer.SeedIfEmptyAsync(db);
+        var siteSections = RolePermissions.GetSectionsForRole("SiteWorker").Select(s => s.Section).ToList();
+        Assert.Equal(new[] { AppSection.SiteActs }, siteSections);
 
-        Assert.Equal(8, await db.Roles.CountAsync());
-        Assert.Equal(8, await db.Users.CountAsync());
-        Assert.Equal(12, await db.Risks.CountAsync(r => r.ProjectId == SeedIds.Project1));
-        Assert.Equal(3, await db.PaymentRequests.CountAsync());
+        var riskSections = RolePermissions.GetSectionsForRole("RiskSpecialist").Select(s => s.Section).ToList();
+        Assert.Equal(new[] { AppSection.RisksAndP80, AppSection.Reports }, riskSections);
 
-        var riskSummary = RiskCalculator.CalculatePortfolioSummary(
-            await db.Risks.Where(r => r.ProjectId == SeedIds.Project1).ToListAsync(), 0.8416m);
-        Assert.Equal(1340m, riskSummary.TotalEmv);
-        Assert.InRange(riskSummary.ReserveP80, 1947m, 1949m);
+        Assert.False(RolePermissions.IsSectionAllowed("Accountant", AppSection.RisksAndP80));
+        Assert.False(RolePermissions.IsSectionAllowed("FinancialManager", AppSection.Administration));
+        Assert.Equal(("Admin", "Index"), RolePermissions.GetLandingRoute("Admin"));
+        Assert.Equal(("Requests", "Acts"), RolePermissions.GetLandingRoute("SiteWorker"));
+    }
+
+    [Fact]
+    public async Task AppDatabaseFactory_And_AuthService_Enforce2FaAndSeeding()
+    {
+        var factory = new AppDatabaseFactory(null, $"FactoryTestDb_{Guid.NewGuid():N}");
+        await factory.InitializeAsync();
+        Assert.True(factory.IsInMemoryFallback);
+
+        using var scope = factory.CreateScope();
+        Assert.Equal(8, await scope.Db.Roles.CountAsync());
+        Assert.Equal(8, await scope.Db.Users.CountAsync());
+        Assert.Equal(12, await scope.Db.Risks.CountAsync(r => r.ProjectId == SeedIds.Project1));
+
+        var no2Fa = await scope.Auth.LoginAsync("admin", "StroyFin2026!", null, "Tests");
+        Assert.False(no2Fa.Success);
+        Assert.True(no2Fa.RequiresTwoFactor);
+
+        var okAdmin = await scope.Auth.LoginAsync("admin", "StroyFin2026!", "246810", "Tests");
+        Assert.True(okAdmin.Success);
+        Assert.Equal("Admin", okAdmin.Session?.RoleCode);
     }
 }

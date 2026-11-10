@@ -1,6 +1,6 @@
-using FinanveManager.Application.Interfaces;
-using FinanveManager.Domain.Enums;
-using FinanveManager.Infrastructure.Persistence;
+using FinanveManager.Data.Models;
+using FinanveManager.Data.Persistence;
+using FinanveManager.Data.Services;
 using FinanveManager.Web.Models;
 using FinanveManager.Web.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.Web.Controllers;
 
-[Authorize]
+[Authorize(Roles = "CEO,FinancialManager,ProjectManager")]
 public class DashboardController : Controller
 {
     private readonly AppDbContext _db;
@@ -34,7 +34,7 @@ public class DashboardController : Controller
         var notifications = await _db.Notifications
             .OrderBy(n => n.IsRead)
             .ThenByDescending(n => n.CreatedAt)
-            .Take(15)
+            .Take(12)
             .ToListAsync(ct);
 
         var vm = new DashboardViewModel
@@ -47,7 +47,7 @@ public class DashboardController : Controller
             TotalReserveP80 = forecasts.Sum(f => f.RiskSummary.ReserveP80),
             GapDaysCount90d = calendar.GapDaysCount,
             MaxCashGap90d = calendar.MaxCashGap,
-            DatabaseProvider = _db.Database.ProviderName?.Contains("InMemory") == true ? "InMemory (Демо)" : "MS SQL Server 2022",
+            DatabaseProvider = _db.Database.ProviderName?.Contains("InMemory") == true ? "InMemory (Локальная БД)" : "MS SQL Server 2022",
             Forecasts = forecasts,
             PendingRequests = pending,
             Notifications = notifications
@@ -62,7 +62,7 @@ public class DashboardController : Controller
         var items = await _db.Notifications.Where(n => !n.IsRead).ToListAsync(ct);
         foreach (var n in items) n.IsRead = true;
         await _db.SaveChangesAsync(ct);
-        TempData["Success"] = "Все уведомления отмечены как прочитанные.";
+        TempData["Success"] = "Уведомления отмечены как прочитанные.";
         return RedirectToAction(nameof(Index));
     }
 }

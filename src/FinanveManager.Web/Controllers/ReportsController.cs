@@ -1,13 +1,14 @@
+using System.Security.Claims;
 using System.Text;
-using FinanveManager.Application.Interfaces;
-using FinanveManager.Infrastructure.Persistence;
+using FinanveManager.Data.Persistence;
+using FinanveManager.Data.Services;
 using FinanveManager.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FinanveManager.Web.Controllers;
 
-[Authorize]
+[Authorize(Roles = "CEO,FinancialManager,RiskSpecialist")]
 public class ReportsController : Controller
 {
     private readonly AppDbContext _db;
@@ -19,24 +20,32 @@ public class ReportsController : Controller
         _budgetService = budgetService;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Index(string reportType = "budget-plan-fact", CancellationToken ct = default)
+    private string NormalizeReportForRole(string? reportType)
     {
-        var model = await WebPortfolioHelper.BuildReportAsync(_db, _budgetService, reportType, ct);
+        var role = User.FindFirstValue(ClaimTypes.Role) ?? "";
+        if (role == "RiskSpecialist")
+            return reportType == "project-evm-forecast" ? "project-evm-forecast" : "risks-reserve-p80";
+        return string.IsNullOrWhiteSpace(reportType) ? "budget-plan-fact" : reportType;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Index(string? reportType = null, CancellationToken ct = default)
+    {
+        var model = await WebPortfolioHelper.BuildReportAsync(_db, _budgetService, NormalizeReportForRole(reportType), ct);
         return View(model);
     }
 
     [HttpGet]
-    public async Task<IActionResult> Print(string reportType = "budget-plan-fact", CancellationToken ct = default)
+    public async Task<IActionResult> Print(string? reportType = null, CancellationToken ct = default)
     {
-        var model = await WebPortfolioHelper.BuildReportAsync(_db, _budgetService, reportType, ct);
+        var model = await WebPortfolioHelper.BuildReportAsync(_db, _budgetService, NormalizeReportForRole(reportType), ct);
         return View(model);
     }
 
     [HttpGet]
-    public async Task<IActionResult> ExportCsv(string reportType = "budget-plan-fact", CancellationToken ct = default)
+    public async Task<IActionResult> ExportCsv(string? reportType = null, CancellationToken ct = default)
     {
-        var model = await WebPortfolioHelper.BuildReportAsync(_db, _budgetService, reportType, ct);
+        var model = await WebPortfolioHelper.BuildReportAsync(_db, _budgetService, NormalizeReportForRole(reportType), ct);
         var sb = new StringBuilder();
         sb.AppendLine(string.Join(';', model.Headers.Select(EscapeCsv)));
         foreach (var row in model.Rows)
@@ -46,9 +55,5 @@ public class ReportsController : Controller
         return File(bytes, "text/csv; charset=utf-8", $"{model.ReportType}-report.csv");
     }
 
-    private static string EscapeCsv(string? v)
-    {
-        var s = (v ?? string.Empty).Replace("\"", "\"\"");
-        return $"\"{s}\"";
-    }
+    private static string EscapeCsv(string? v) => $"\"{(v ?? string.Empty).Replace("\"", "\"\"")}\"";
 }

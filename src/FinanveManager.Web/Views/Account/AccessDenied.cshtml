@@ -2,10 +2,11 @@
     ViewData["Title"] = "Доступ ограничен";
 }
 <div class="card">
-    <h2 style="margin-top:0;color:#991b1b">Недостаточно прав (HTTP 403)</h2>
-    <p>Текущая роль не имеет доступа к запрошенному действию согласно матрице полномочий RBAC.</p>
+    <h2 style="margin-top:0;color:#991b1b">Доступ к разделу запрещён (HTTP 403)</h2>
+    <p>Данный раздел не входит в полномочия вашей роли. Используйте разделы, доступные в меню слева.</p>
     <p>
-        <a class="btn" asp-controller="Dashboard" asp-action="Index">На дашборд</a>
-        <a class="btn btn-outline" asp-controller="Account" asp-action="Login">Сменить роль</a>
+        <form method="post" asp-controller="Account" asp-action="Logout" style="display:inline">
+            <button type="submit" class="btn btn-outline">Выйти и войти под другой ролью</button>
+        </form>
     </p>
 </div>

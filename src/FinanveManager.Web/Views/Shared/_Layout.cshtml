@@ -1,15 +1,17 @@
 @{
     var currentController = ViewContext.RouteData.Values["controller"]?.ToString() ?? "Dashboard";
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString() ?? "Index";
     var fullName = User.FindFirst("FullName")?.Value ?? User.Identity?.Name ?? "Гость";
     var roleName = User.FindFirst("RoleName")?.Value ?? "";
-    var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "SiteWorker";
+    var sections = RolePermissions.GetSectionsForRole(roleCode);
 }
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] — СтройФинРиск (ASP.NET Core 9)</title>
+    <title>@ViewData["Title"] — СтройФинРиск</title>
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
@@ -17,24 +19,26 @@
     <aside class="sidebar">
         <div class="brand">
             <div class="brand-title">СтройФинРиск</div>
-            <div class="brand-sub">ASP.NET Core 9 MVC • Учёт финансов и рисков</div>
+            <div class="brand-sub">@roleName</div>
         </div>
         <nav class="nav-links">
-            <a class="nav-link @(currentController == "Dashboard" ? "active" : "")" asp-controller="Dashboard" asp-action="Index">Дашборд</a>
-            <a class="nav-link @(currentController == "Projects" ? "active" : "")" asp-controller="Projects" asp-action="Index">Проекты и бюджеты</a>
-            <a class="nav-link @(currentController == "Requests" ? "active" : "")" asp-controller="Requests" asp-action="Index">Заявки и акты С-2</a>
-            <a class="nav-link @(currentController == "Calendar" ? "active" : "")" asp-controller="Calendar" asp-action="Index">Платёжный календарь</a>
-            <a class="nav-link @(currentController == "Contracts" ? "active" : "")" asp-controller="Contracts" asp-action="Index">Договоры и авансы</a>
-            <a class="nav-link @(currentController == "Risks" ? "active" : "")" asp-controller="Risks" asp-action="Index">Риски и резерв P80</a>
-            <a class="nav-link @(currentController == "Reports" ? "active" : "")" asp-controller="Reports" asp-action="Index">Отчёты и экспорт</a>
-            @if (roleCode is "Admin" or "CEO" or "FinancialManager")
+            @foreach (var sec in sections)
             {
-                <a class="nav-link @(currentController == "Admin" ? "active" : "")" asp-controller="Admin" asp-action="Index">Администрирование</a>
+                string actionName = sec.Section == AppSection.AuditLog ? "Audit"
+                    : sec.Section == AppSection.SiteActs ? "Acts" : "Index";
+                bool isActive = string.Equals(currentController, sec.Controller, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(currentAction, actionName, StringComparison.OrdinalIgnoreCase);
+
+                <a class="nav-link @(isActive ? "active" : "")"
+                   asp-controller="@sec.Controller" asp-action="@actionName">@sec.Title</a>
             }
         </nav>
         <div class="sidebar-footer">
-            <div>API и OpenAPI активны на том же узле:</div>
-            <div><a href="/api/health" style="color:#93c5fd">/api/health</a></div>
+            <div style="color:#e2e8f0;font-weight:600">@fullName</div>
+            <div style="margin-bottom:10px">@User.Identity?.Name · @roleCode</div>
+            <form method="post" asp-controller="Account" asp-action="Logout">
+                <button type="submit" class="btn btn-outline btn-sm" style="width:100%">Выйти</button>
+            </form>
         </div>
     </aside>
 
@@ -42,11 +46,7 @@
         <header class="topbar">
             <div class="topbar-title">@ViewData["Title"]</div>
             <div class="topbar-user">
-                <span class="user-pill"><strong>@fullName</strong> · @roleName (@roleCode)</span>
-                <a class="btn btn-outline btn-sm" asp-controller="Account" asp-action="Login">Сменить роль</a>
-                <form method="post" asp-controller="Account" asp-action="Logout" style="display:inline">
-                    <button type="submit" class="btn btn-outline btn-sm">Выйти</button>
-                </form>
+                <span class="user-pill"><strong>@fullName</strong> · @roleName</span>
             </div>
         </header>
 

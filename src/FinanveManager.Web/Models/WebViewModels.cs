@@ -1,14 +1,13 @@
-using FinanveManager.Domain.Entities;
-using FinanveManager.Domain.Services;
+using FinanveManager.Data.Models;
 
 namespace FinanveManager.Web.Models;
 
-public record DemoAccountOption(string Login, string FullName, string RoleCode, string RoleName, string ClientType, bool Requires2Fa);
+public record DemoAccountOption(string Login, string FullName, string RoleCode, string RoleName, bool Requires2Fa);
 
 public class LoginViewModel
 {
-    public string Login { get; set; } = "finmanager";
-    public string Password { get; set; } = "StroyFin2026!";
+    public string Login { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
     public string? TwoFactorCode { get; set; }
     public string? ErrorMessage { get; set; }
     public bool RequiresTwoFactor { get; set; }
@@ -73,6 +72,14 @@ public class PaymentRequestsViewModel
     public List<Document> Acts { get; set; } = new();
 }
 
+public class SiteActsViewModel
+{
+    public List<ConstructionObject> Objects { get; set; } = new();
+    public List<WorkStage> Stages { get; set; } = new();
+    public List<Contract> Contracts { get; set; } = new();
+    public List<Document> Acts { get; set; } = new();
+}
+
 public class CalendarViewModel
 {
     public Guid? SelectedProjectId { get; set; }
@@ -89,9 +96,6 @@ public class CalendarViewModel
 public class ContractsViewModel
 {
     public List<Contract> Contracts { get; set; } = new();
-    public List<Project> Projects { get; set; } = new();
-    public List<ConstructionObject> Objects { get; set; } = new();
-    public List<CostItem> CostItems { get; set; } = new();
     public List<Advance> Advances { get; set; } = new();
     public string? ImportReportSummary { get; set; }
     public string? EstimateImportSummary { get; set; }
@@ -118,7 +122,7 @@ public class ReportGridModel
 public class AdminViewModel
 {
     public List<Role> Roles { get; set; } = new();
-    public List<FinanveManager.Domain.Entities.User> Users { get; set; } = new();
+    public List<User> Users { get; set; } = new();
     public List<NormRule> NormRules { get; set; } = new();
     public List<CurrencyRate> CurrencyRates { get; set; } = new();
     public List<AuditLog> AuditLogs { get; set; } = new();

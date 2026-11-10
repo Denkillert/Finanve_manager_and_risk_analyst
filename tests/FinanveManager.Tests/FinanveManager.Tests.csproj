@@ -12,8 +12,6 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\FinanveManager.Domain\FinanveManager.Domain.csproj" />
-    <ProjectReference Include="..\..\src\FinanveManager.Application\FinanveManager.Application.csproj" />
-    <ProjectReference Include="..\..\src\FinanveManager.Infrastructure\FinanveManager.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\FinanveManager.Data\FinanveManager.Data.csproj" />
   </ItemGroup>
 </Project>

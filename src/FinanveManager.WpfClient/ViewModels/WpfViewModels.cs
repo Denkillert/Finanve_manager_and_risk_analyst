@@ -1,101 +1,36 @@
 using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Globalization;
-using System.IO;
-using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Runtime.CompilerServices;
 using System.Text;
-using System.Text.Json;
-using System.Windows.Input;
-using FinanveManager.Domain.Entities;
-using FinanveManager.Domain.Services;
-using Microsoft.Win32;
+using FinanveManager.Data.Models;
+using FinanveManager.Data.Persistence;
+using FinanveManager.Data.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.WpfClient.ViewModels;
 
-public abstract class ViewModelBase : INotifyPropertyChanged
+public sealed class NavItemViewModel : ViewModelBase
 {
-    public event PropertyChangedEventHandler? PropertyChanged;
+    private bool _isSelected;
+    public AppSection Section { get; }
+    public string Title { get; }
 
-    protected void OnPropertyChanged([CallerMemberName] string? propName = null) =>
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propName));
-
-    protected bool SetField<T>(ref T field, T value, [CallerMemberName] string? propName = null)
+    public bool IsSelected
     {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
-        field = value;
-        OnPropertyChanged(propName);
-        return true;
+        get => _isSelected;
+        set => SetField(ref _isSelected, value);
+    }
+
+    public NavItemViewModel(AppSection section, string title)
+    {
+        Section = section;
+        Title = title;
     }
 }
 
-public class RelayCommand : ICommand
-{
-    private readonly Action<object?> _execute;
-    private readonly Func<object?, bool>? _canExecute;
+public sealed record LookupItem(Guid Id, string Display);
+public sealed record ReportChoice(string Key, string Title);
 
-    public RelayCommand(Action<object?> execute, Func<object?, bool>? canExecute = null)
-    {
-        _execute = execute;
-        _canExecute = canExecute;
-    }
-
-    public event EventHandler? CanExecuteChanged;
-    public bool CanExecute(object? parameter) => _canExecute?.Invoke(parameter) ?? true;
-    public void Execute(object? parameter) => _execute(parameter);
-    public void RaiseCanExecuteChanged() => CanExecuteChanged?.Invoke(this, EventArgs.Empty);
-}
-
-public record DemoAccountInfo(
-    string Login,
-    string FullName,
-    string RoleCode,
-    string RoleName,
-    string ClientType,
-    bool RequiresTwoFactor,
-    string PermissionsSummary)
-{
-    public string DisplayTitle => $"{RoleName} ({Login})";
-}
-
-public record AuthResult(bool Success, bool UsedOfflineFallback, string Message);
-
-public record RequestRowDto(
-    Guid Id,
-    string Number,
-    string ObjectName,
-    string CostItemCode,
-    decimal PayableAmount,
-    string Currency,
-    string Type,
-    string Status,
-    string PlannedPaymentDate,
-    string Purpose,
-    string? BlockReason,
-    object? RowVersionToken)
-{
-    public string TypeDisplay => Type == "Advance" ? "Новый аванс" : "Текущий платёж";
-
-    public string StatusDisplay => Status switch
-    {
-        "Draft" => "Черновик",
-        "UnderReview" => "На проверке",
-        "Returned" => "Возвращена",
-        "Blocked" => "Заблокирована",
-        "PendingApproval" => "На согласовании",
-        "ApprovedByManagement" => "Согласована рук.",
-        "Approved" => "Согласована к оплате",
-        "Executed" => "Исполнена",
-        "Closed" => "Закрыта",
-        "Rejected" => "Отклонена",
-        _ => Status
-    };
-}
-
-public record ProjectForecastRow(
+public sealed record ForecastGridRow(
     string Code,
     string Name,
     decimal ContractValue,
@@ -103,13 +38,13 @@ public record ProjectForecastRow(
     decimal Pv,
     decimal Ev,
     decimal Ac,
-    decimal? Cpi,
-    decimal? Spi,
-    decimal Etc,
+    string CpiText,
+    string SpiText,
     decimal Eac,
-    decimal FinancialResultWithReserve);
+    decimal ReserveP80,
+    decimal FinancialResult);
 
-public record FreeLimitRow(
+public sealed record FreeLimitGridRow(
     string ProjectCode,
     string ObjectName,
     string CostItemCode,
@@ -119,1363 +54,1319 @@ public record FreeLimitRow(
     decimal PaidFact,
     decimal SubmittedRequests,
     decimal FreeLimit,
-    decimal ObligationRemainder,
-    string LimitStatus);
+    decimal ObligationRemainder);
 
-public record BudgetVersionRow(
+public sealed record BudgetVersionGridRow(
+    Guid Id,
     string ProjectCode,
     int VersionNumber,
-    string Status,
-    string ApprovedAt,
-    string Comment);
+    BudgetVersionStatus Status,
+    string Comment,
+    byte[] RowVersion);
 
-public record CalendarDayRow(
-    string Date,
-    int DayIndex,
-    decimal OpeningBalance,
-    decimal Inflows,
-    decimal Outflows,
-    decimal ClosingBalance,
-    decimal CashGap,
-    string EventNote);
+public sealed record BudgetLimitGridRow(
+    Guid Id,
+    int VersionNumber,
+    BudgetVersionStatus VersionStatus,
+    string ObjectName,
+    string CostItemCode,
+    decimal Amount,
+    byte[] RowVersion);
 
-public record ContractRow(
+public sealed record StageGridRow(
+    string ObjectName,
+    string StageName,
+    string PeriodText,
+    decimal Pv,
+    decimal Ev,
+    decimal Ac);
+
+public sealed record PaymentRequestGridRow(
+    Guid Id,
+    string Number,
+    string TypeText,
+    string ContractNumber,
+    string CostItemCode,
+    decimal PayableAmount,
+    string Currency,
+    DateTime PlannedDate,
+    RequestStatus Status,
+    string NoteText,
+    byte[] RowVersion);
+
+public sealed record ContractGridRow(
     string Number,
     string Counterparty,
     string Unp,
-    string Direction,
-    decimal BaseAmount,
+    string DirectionText,
     decimal EffectiveAmount,
     string Currency,
-    decimal RetentionPercent);
+    decimal RetentionPercent,
+    decimal GrossObligations,
+    decimal PaidAmount);
 
-public record AdvanceRow(
+public sealed record AdvanceGridRow(
+    Guid Id,
     string ContractNumber,
-    string ObjectName,
+    string FundingSource,
     decimal Amount,
     decimal UsedAmount,
     decimal Remainder,
     decimal UtilizationPercent,
-    string DueDate,
-    string Status);
+    DateTime DueDate,
+    string StatusText);
 
-public record RiskRow(
+public sealed record RiskGridRow(
+    Guid Id,
     string Code,
     string Event,
+    string OwnerRole,
     decimal Probability,
     decimal MonetaryImpact,
     int IntegralScore,
     string Zone,
     decimal Emv,
     decimal ResidualEmv,
-    string OwnerRole,
-    bool TriggerFired,
-    string Status);
+    RiskStatus Status,
+    int Version,
+    string EarlyIndicator,
+    string Mitigation,
+    byte[] RowVersion);
 
-public record SensitivityRow(
-    string FactorName,
-    string RangeLabel,
-    decimal BaseAmount,
-    decimal ImpactOnEac,
-    string Comment);
+public sealed record ReportRowView(string Col1, string Col2, string Col3, string Col4, string Col5, string Col6);
 
-public record NormRuleRow(
-    string Code,
-    string Name,
-    string DocumentSource,
-    string ValueText,
-    int Revision,
-    string ResponsibleRole);
-
-public record AuditRow(
-    string Timestamp,
-    string UserLogin,
-    string ObjectName,
-    string Action,
-    string OldValue,
-    string NewValue,
-    string Details);
-
-public record NotificationRow(
-    string Severity,
-    string Category,
-    string Title,
-    string Message,
-    string CreatedAt);
-
-public record ReportTableRow(
-    string Col1,
-    string Col2,
-    string Col3,
-    string Col4,
-    string Col5,
-    string Col6);
-
-public static class DemoSeedCatalog
+public sealed class MainViewModel : ViewModelBase
 {
-    public static IReadOnlyList<DemoAccountInfo> Accounts { get; } =
-    [
-        new("director", "Ковалёв Андрей Сергеевич", "CEO", "Руководитель организации", "WPF / Веб", false,
-            "Доступно: утверждение бюджетов, согласование/отклонение перерасхода (UC04), утверждение заявок, просмотр портфеля, рисков и аудита."),
-        new("finmanager", "Петрова Елена Викторовна", "FinancialManager", "Финансовый менеджер", "Веб", false,
-            "Доступно: создание версий бюджета, проверка лимитов Lдост, согласование заявок с ЭЦП, возврат/отклонение, платёжный календарь, отчёты."),
-        new("accountant", "Сидорова Наталья Ивановна", "Accountant", "Бухгалтер", "WPF / Веб", false,
-            "Доступно: исполнение согласованных заявок (Approved → Executed), банковские выписки MT940/CSV, учёт авансов, выгрузка 1С."),
-        new("supply", "Новиков Дмитрий Олегович", "ProcurementSpecialist", "Специалист по снабжению", "WPF / Веб", false,
-            "Доступно: договоры, спецификации, создание заявок на закупку материалов, контроль поставок и авансов."),
-        new("pm", "Громов Алексей Николаевич", "ProjectManager", "Руководитель проекта", "Веб", false,
-            "Доступно: создание платёжных заявок, акты С-2/С-3, прогноз EAC, регистрация рисков проекта."),
-        new("risk", "Волкова Марина Петровна", "RiskSpecialist", "Специалист по рискам", "Веб", false,
-            "Доступно: реестр рисков 5×5, расчёт EMV, σ и резерва P80, анализ чувствительности EAC («торнадо»)."),
-        new("admin", "Титов Сергей Владимирович", "Admin", "Администратор системы", "WPF / Веб", true,
-            "Ограничение НФТ-8: управление пользователями, 8 ролями, нормативными правилами и журналом аудита (обязательна 2FA: 246810). Финансовые операции заблокированы."),
-        new("siteworker", "Орлов Максим Игоревич", "SiteWorker", "Работник на объекте", "Веб (360 px)", false,
-            "Доступно: просмотр этапов строительства, подготовка актов С-2 и фотофиксация выполненных работ.")
-    ];
+    private readonly AppDatabaseFactory _dbFactory;
+    private readonly AuthenticatedSession _session;
+    private readonly HashSet<AppSection> _allowedSections;
 
-    public static List<Risk> BuildChapter1Risks()
+    public MainViewModel(AppDatabaseFactory dbFactory, AuthenticatedSession session)
     {
-        var specs = new (string Code, string Event, decimal P, decimal C, decimal ResP, string Owner, bool Trigger, string Status)[]
-        {
-            ("R-01", "Задержка финансирования", 0.30m, 600m, 0.15m, "Финансовый менеджер", false, "Treating"),
-            ("R-02", "Рост цен на материалы", 0.46m, 450m, 0.21m, "Специалист по снабжению", false, "Treating"),
-            ("R-03", "Срыв поставки", 0.25m, 400m, 0.15m, "Специалист по снабжению", false, "Treating"),
-            ("R-04", "Просроченный аванс", 0.35m, 380m, 0.20m, "Финансовый менеджер", true, "Monitoring"),
-            ("R-05", "Отставание от графика", 0.30m, 400m, 0.20m, "Руководитель проекта", false, "Treating"),
-            ("R-06", "Ошибка проектного решения", 0.15m, 600m, 0.08m, "Руководитель проекта", false, "Treating"),
-            ("R-07", "Изменение требований заказчика", 0.25m, 320m, 0.15m, "Руководитель проекта", false, "Monitoring"),
-            ("R-08", "Неплатёж заказчика", 0.20m, 700m, 0.10m, "Финансовый менеджер", true, "Treating"),
-            ("R-09", "Авария, форс-мажор", 0.10m, 800m, 0.05m, "Руководитель организации", false, "Monitoring"),
-            ("R-10", "Ошибка классификации затрат", 0.30m, 150m, 0.15m, "Бухгалтер", false, "Monitoring"),
-            ("R-11", "Утечка данных, компрометация учётной записи", 0.15m, 700m, 0.08m, "Администратор системы", false, "Treating"),
-            ("R-12", "Отказ ИТ-инфраструктуры, потеря данных", 0.10m, 600m, 0.05m, "Администратор системы", false, "Monitoring")
-        };
+        _dbFactory = dbFactory;
+        _session = session;
 
-        return specs.Select(s =>
-        {
-            var r = new Risk
+        var definitions = RolePermissions.GetSectionsForRole(session.RoleCode);
+        _allowedSections = definitions.Select(d => d.Section).ToHashSet();
+        foreach (var def in definitions)
+            NavigationItems.Add(new NavItemViewModel(def.Section, def.Title));
+
+        ReportChoices = session.RoleCode == "RiskSpecialist"
+            ? new List<ReportChoice>
             {
-                Code = s.Code,
-                Event = s.Event,
-                Probability = s.P,
-                MonetaryImpact = s.C,
-                ResidualProbability = s.ResP,
-                OwnerRole = s.Owner,
-                TriggerFired = s.Trigger
+                new("risks-reserve-p80", "1. Реестр рисков и резерв P80"),
+                new("project-evm-forecast", "2. Прогноз стоимости проектов (EVM + P80)")
+            }
+            : new List<ReportChoice>
+            {
+                new("budget-plan-fact", "1. План-факт исполнения бюджета (vFreeLimit)"),
+                new("project-evm-forecast", "2. Прогноз стоимости проектов (EVM + P80)"),
+                new("risks-reserve-p80", "3. Реестр рисков и резерв P80"),
+                new("contracts-advances", "4. Договоры и контроль авансов"),
+                new("payment-requests-violations", "5. Реестр платёжных заявок и нарушений")
             };
-            RiskCalculator.RecalculateScores(r);
-            return r;
-        }).ToList();
-    }
-}
+        _selectedReportChoice = ReportChoices.FirstOrDefault();
 
-public class ApiClient
-{
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(5) };
-    private readonly Dictionary<string, int> _offlineFailedCounts = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, DateTime> _offlineLockouts = new(StringComparer.Ordinal);
-
-    public string? JwtToken { get; private set; }
-    public string CurrentLogin { get; private set; } = "director";
-    public string CurrentRole { get; private set; } = "CEO";
-    public string CurrentRoleName { get; private set; } = "Руководитель организации";
-    public string CurrentUserName { get; private set; } = "Ковалёв Андрей Сергеевич";
-    public bool IsOfflineMode { get; private set; } = true;
-    public string ActiveBaseUrl { get; private set; } = "http://localhost:5050";
-
-    private static Uri? BuildUri(string baseUrl, string relativePath)
-    {
-        if (!Uri.TryCreate(baseUrl.Trim().TrimEnd('/') + "/", UriKind.Absolute, out var root))
-            return null;
-        return new Uri(root, relativePath.TrimStart('/'));
-    }
-
-    public async Task<AuthResult> LoginAsync(string baseUrl, string login, string password, string? twoFactor = null)
-    {
-        var cleanLogin = login.Trim();
-        if (string.IsNullOrWhiteSpace(cleanLogin) || string.IsNullOrEmpty(password))
-            return new AuthResult(false, false, "Укажите логин и пароль.");
-
-        var endpoint = BuildUri(baseUrl, "api/auth/login");
-        if (endpoint == null)
-            return new AuthResult(false, false, "Некорректный URL сервера API (пример: http://localhost:5050).");
-
-        ActiveBaseUrl = baseUrl.Trim().TrimEnd('/');
-
-        try
+        SelectSectionCommand = new RelayCommand<NavItemViewModel>(async item =>
         {
-            using var resp = await _http.PostAsJsonAsync(endpoint, new
+            if (item != null) await SelectSectionAsync(item.Section);
+        });
+        RefreshCommand = new RelayCommand(async () => await LoadAllAsync());
+
+        // Budgets
+        CreateBudgetVersionCommand = new RelayCommand(async () => await CreateBudgetVersionAsync());
+        UpdateLimitCommand = new RelayCommand(async () => await UpdateSelectedLimitAsync());
+        ApproveVersionCommand = new RelayCommand(async () => await ApproveSelectedVersionAsync());
+
+        // Requests & Acts
+        CreateRequestCommand = new RelayCommand(async () => await CreatePaymentRequestAsync());
+        ApproveOverrunCommand = new RelayCommand(async () => await ApproveOverrunAsync(true));
+        RejectOverrunCommand = new RelayCommand(async () => await ApproveOverrunAsync(false));
+        ApproveRequestCommand = new RelayCommand(async () => await ApproveSelectedRequestAsync());
+        ReturnRequestCommand = new RelayCommand(async () => await ReturnSelectedRequestAsync());
+        ExecutePaymentCommand = new RelayCommand(async () => await ExecuteSelectedPaymentAsync());
+        CreateActCommand = new RelayCommand(async () => await CreateActAsync());
+
+        // Calendar
+        RefreshCalendarCommand = new RelayCommand(async () => await RefreshCalendarAsync());
+        RescheduleScheduleItemCommand = new RelayCommand(async () => await RescheduleSelectedItemAsync());
+
+        // Contracts & Integrations
+        OffsetAdvanceCommand = new RelayCommand(async () => await OffsetSelectedAdvanceAsync());
+        ImportStatementCommand = new RelayCommand(async () => await ImportStatementAsync());
+        ImportEstimateCommand = new RelayCommand(async () => await ImportEstimateAsync());
+
+        // Risks
+        RefreshRisksCommand = new RelayCommand(async () => await RefreshRisksAsync());
+        UpdateRiskCommand = new RelayCommand(async () => await UpdateSelectedRiskAsync());
+        CreateRiskCommand = new RelayCommand(async () => await CreateRiskAsync());
+
+        // Reports
+        LoadReportCommand = new RelayCommand(async () => await LoadReportAsync());
+
+        // Admin
+        CreateUserCommand = new RelayCommand(async () => await CreateUserAsync());
+        ToggleUserActiveCommand = new RelayCommand(async () => await ToggleSelectedUserAsync());
+        AddNormRuleCommand = new RelayCommand(async () => await AddNormRuleAsync());
+
+        // Default landing section for role
+        var first = NavigationItems.FirstOrDefault();
+        if (first != null)
+        {
+            _selectedSection = first.Section;
+            first.IsSelected = true;
+            _selectedSectionTitle = first.Title;
+        }
+    }
+
+    // Session & Role Info
+    public string UserFullName => _session.FullName;
+    public string UserLogin => _session.Login;
+    public string RoleName => _session.RoleName;
+    public string RoleCode => _session.RoleCode;
+    public string DatabaseModeLabel => _dbFactory.IsInMemoryFallback ? "Локальная БД (InMemory)" : "MS SQL Server 2022";
+
+    // Role Permissions (UI Control Visibility)
+    public bool CanManageBudgets => RoleCode is "FinancialManager" or "CEO";
+    public bool CanApproveVersion => RoleCode == "CEO";
+    public bool CanCreateRequest => RoleCode is "ProjectManager" or "ProcurementSpecialist" or "FinancialManager" or "CEO";
+    public bool CanApproveOverrun => RoleCode == "CEO";
+    public bool CanApproveRequest => RoleCode is "FinancialManager" or "CEO";
+    public bool CanExecutePayment => RoleCode == "Accountant";
+    public bool CanCreateAct => RoleCode is "SiteWorker" or "ProjectManager" or "Accountant" or "ProcurementSpecialist";
+    public bool CanRescheduleCalendar => RoleCode is "FinancialManager" or "CEO";
+    public bool CanOffsetAdvance => RoleCode is "Accountant" or "FinancialManager";
+    public bool CanImportStatement => RoleCode == "Accountant";
+    public bool CanImportEstimate => RoleCode is "FinancialManager" or "ProjectManager" or "ProcurementSpecialist";
+    public bool CanEditRisks => RoleCode is "RiskSpecialist" or "ProjectManager" or "CEO";
+    public bool IsAdminRole => RoleCode == "Admin";
+
+    // Navigation State
+    public ObservableCollection<NavItemViewModel> NavigationItems { get; } = new();
+
+    private AppSection _selectedSection;
+    public AppSection SelectedSection
+    {
+        get => _selectedSection;
+        private set
+        {
+            if (SetField(ref _selectedSection, value))
             {
-                login = cleanLogin,
-                password,
-                twoFactorCode = string.IsNullOrWhiteSpace(twoFactor) ? null : twoFactor.Trim()
-            });
-
-            var rawBody = await resp.Content.ReadAsStringAsync();
-            if (!resp.IsSuccessStatusCode)
-            {
-                var errMsg = ExtractError(rawBody) ?? $"Ошибка входа ({(int)resp.StatusCode}).";
-                return new AuthResult(false, false, errMsg);
-            }
-
-            using var doc = JsonDocument.Parse(rawBody);
-            var root = doc.RootElement;
-            var token = GetString(root, "token");
-            if (string.IsNullOrWhiteSpace(token))
-                return new AuthResult(false, false, "Сервер не вернул JWT-токен.");
-
-            var userEl = root.TryGetProperty("user", out var u) ? u : default;
-            var roleCode = GetString(userEl, "role", "roleCode") ?? "CEO";
-            var roleName = GetString(userEl, "roleName", "role_name") ?? roleCode;
-            var fullName = GetString(userEl, "fullName", "full_name") ?? cleanLogin;
-            var resolvedLogin = GetString(userEl, "login") ?? cleanLogin;
-
-            JwtToken = token;
-            CurrentLogin = resolvedLogin;
-            CurrentRole = roleCode;
-            CurrentRoleName = roleName;
-            CurrentUserName = fullName;
-            IsOfflineMode = false;
-            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", JwtToken);
-
-            return new AuthResult(true, false, $"Вход выполнен через API ({ActiveBaseUrl}): {CurrentUserName} [{CurrentRoleName}].");
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        {
-            return TryOfflineLogin(cleanLogin, password, twoFactor);
-        }
-    }
-
-    private AuthResult TryOfflineLogin(string login, string password, string? twoFactor)
-    {
-        if (_offlineLockouts.TryGetValue(login, out var until) && until > DateTime.UtcNow)
-        {
-            return new AuthResult(false, true,
-                $"Учётная запись «{login}» временно заблокирована до {until.ToLocalTime():HH:mm:ss} (НФТ-7).");
-        }
-
-        var account = DemoSeedCatalog.Accounts.FirstOrDefault(a => a.Login == login);
-        if (account == null)
-            return new AuthResult(false, true, $"Неизвестный логин «{login}». Выберите одну из 8 демонстрационных учётных записей.");
-
-        if (password != "StroyFin2026!")
-        {
-            var fails = _offlineFailedCounts.GetValueOrDefault(login) + 1;
-            _offlineFailedCounts[login] = fails;
-            if (fails >= 5)
-            {
-                _offlineLockouts[login] = DateTime.UtcNow.AddMinutes(15);
-                return new AuthResult(false, true, "Превышено 5 неудачных попыток входа — учётная запись заблокирована на 15 минут (НФТ-7).");
-            }
-            return new AuthResult(false, true, $"Неверный пароль (попытка {fails} из 5). Для демонстрации используйте StroyFin2026!.");
-        }
-
-        if (account.RequiresTwoFactor && (twoFactor?.Trim() ?? string.Empty) != "246810")
-        {
-            return new AuthResult(false, true,
-                "Для администратора требуется код 2FA (введите 246810).");
-        }
-
-        _offlineFailedCounts[login] = 0;
-        _offlineLockouts.Remove(login);
-
-        JwtToken = null;
-        _http.DefaultRequestHeaders.Authorization = null;
-        CurrentLogin = account.Login;
-        CurrentRole = account.RoleCode;
-        CurrentRoleName = account.RoleName;
-        CurrentUserName = account.FullName;
-        IsOfflineMode = true;
-
-        return new AuthResult(true, true,
-            $"Сервер {ActiveBaseUrl} недоступен — выполнен вход в локальном демо-режиме: {CurrentUserName} [{CurrentRoleName}].");
-    }
-
-    public async Task<(bool Ok, List<RequestRowDto> Items, string? Error)> LoadPaymentRequestsAsync()
-    {
-        if (IsOfflineMode)
-            return (false, [], null);
-
-        var uri = BuildUri(ActiveBaseUrl, "api/payment-requests");
-        if (uri == null) return (false, [], "Некорректный URL.");
-
-        try
-        {
-            using var resp = await _http.GetAsync(uri);
-            var body = await resp.Content.ReadAsStringAsync();
-            if (!resp.IsSuccessStatusCode)
-                return (false, [], ExtractError(body) ?? $"Ошибка загрузки заявок ({(int)resp.StatusCode}).");
-
-            using var doc = JsonDocument.Parse(body);
-            var list = new List<RequestRowDto>();
-            if (doc.RootElement.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var el in doc.RootElement.EnumerateArray())
-                {
-                    list.Add(ParseRequestRow(el));
-                }
-            }
-            return (true, list, null);
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        {
-            return (false, [], ex.Message);
-        }
-    }
-
-    public async Task<(bool Ok, string Message)> PostJsonAsync(string relativePath, object payload)
-    {
-        if (IsOfflineMode)
-            return (false, "Локальный режим");
-
-        var uri = BuildUri(ActiveBaseUrl, relativePath);
-        if (uri == null) return (false, "Некорректный URL.");
-
-        try
-        {
-            using var resp = await _http.PostAsJsonAsync(uri, payload);
-            var body = await resp.Content.ReadAsStringAsync();
-            if (resp.StatusCode == HttpStatusCode.Conflict)
-                return (false, ExtractError(body) ?? "Конфликт версий (RowVersion): данные обновлены другим пользователем.");
-            if (!resp.IsSuccessStatusCode)
-                return (false, ExtractError(body) ?? $"Ошибка операции ({(int)resp.StatusCode}).");
-            return (true, "Операция выполнена на сервере.");
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        {
-            return (false, $"Сервер недоступен: {ex.Message}");
-        }
-    }
-
-    private static RequestRowDto ParseRequestRow(JsonElement el)
-    {
-        var idStr = GetString(el, "id") ?? Guid.NewGuid().ToString();
-        _ = Guid.TryParse(idStr, out var id);
-
-        var number = GetString(el, "number") ?? "ЗП-000";
-        var objectName = GetString(el, "objectName", "object_name") ?? "Жилой дом № 4";
-        var costCode = GetString(el, "costItemCode", "cost_item_code") ?? "ST-01";
-        var payable = GetDecimal(el, "payableAmount", "payable_amount");
-        var currency = GetString(el, "currency") ?? "BYN";
-        var type = ParseRequestType(el);
-        var status = ParseRequestStatus(el);
-        var planDate = GetString(el, "plannedPaymentDate", "planned_payment_date") ?? "2026-11-20";
-        if (planDate.Length > 10) planDate = planDate[..10];
-        var purpose = GetString(el, "purpose") ?? string.Empty;
-        var blockReason = GetString(el, "blockReason", "block_reason", "returnOrRejectReason", "return_or_reject_reason");
-
-        object? rowVersion = null;
-        if (el.TryGetProperty("rowVersion", out var rvCamel) || el.TryGetProperty("row_version", out rvCamel))
-        {
-            rowVersion = rvCamel.ValueKind switch
-            {
-                JsonValueKind.Number => rvCamel.GetInt64(),
-                JsonValueKind.String => rvCamel.GetString(),
-                _ => null
-            };
-        }
-
-        return new RequestRowDto(id, number, objectName, costCode, payable, currency, type, status, planDate, purpose, blockReason, rowVersion);
-    }
-
-    private static string ParseRequestType(JsonElement el)
-    {
-        if (!el.TryGetProperty("type", out var prop)) return "CurrentPayment";
-        if (prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out int val))
-            return val == 1 ? "Advance" : "CurrentPayment";
-        return prop.GetString() ?? "CurrentPayment";
-    }
-
-    private static string ParseRequestStatus(JsonElement el)
-    {
-        if (!el.TryGetProperty("status", out var prop)) return "PendingApproval";
-        if (prop.ValueKind == JsonValueKind.Number && prop.TryGetInt32(out int val))
-        {
-            return val switch
-            {
-                0 => "Draft",
-                1 => "UnderReview",
-                2 => "Returned",
-                3 => "Blocked",
-                4 => "PendingApproval",
-                5 => "ApprovedByManagement",
-                6 => "Approved",
-                7 => "Executed",
-                8 => "Closed",
-                9 => "Rejected",
-                _ => "PendingApproval"
-            };
-        }
-        return prop.GetString() ?? "PendingApproval";
-    }
-
-    private static string? GetString(JsonElement el, params string[] names)
-    {
-        if (el.ValueKind != JsonValueKind.Object) return null;
-        foreach (var n in names)
-        {
-            if (el.TryGetProperty(n, out var prop) && prop.ValueKind == JsonValueKind.String)
-                return prop.GetString();
-        }
-        return null;
-    }
-
-    private static decimal GetDecimal(JsonElement el, params string[] names)
-    {
-        if (el.ValueKind != JsonValueKind.Object) return 0m;
-        foreach (var n in names)
-        {
-            if (el.TryGetProperty(n, out var prop))
-            {
-                if (prop.ValueKind == JsonValueKind.Number && prop.TryGetDecimal(out var d))
-                    return d;
-                if (prop.ValueKind == JsonValueKind.String && decimal.TryParse(prop.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
-                    return parsed;
+                OnPropertyChanged(nameof(IsDashboardSection));
+                OnPropertyChanged(nameof(IsProjectsSection));
+                OnPropertyChanged(nameof(IsRequestsSection));
+                OnPropertyChanged(nameof(IsSiteActsSection));
+                OnPropertyChanged(nameof(IsCalendarSection));
+                OnPropertyChanged(nameof(IsContractsSection));
+                OnPropertyChanged(nameof(IsRisksSection));
+                OnPropertyChanged(nameof(IsReportsSection));
+                OnPropertyChanged(nameof(IsAdminSection));
+                OnPropertyChanged(nameof(IsAuditSection));
             }
         }
-        return 0m;
     }
 
-    private static string? ExtractError(string body)
+    private string _selectedSectionTitle = string.Empty;
+    public string SelectedSectionTitle
     {
-        if (string.IsNullOrWhiteSpace(body)) return null;
-        try
-        {
-            using var doc = JsonDocument.Parse(body);
-            return GetString(doc.RootElement, "error", "message", "title");
-        }
-        catch
-        {
-            return null;
-        }
+        get => _selectedSectionTitle;
+        private set => SetField(ref _selectedSectionTitle, value);
     }
-}
 
-/// <summary>
-/// ViewModel реестра платёжных заявок (рис. 2.13: RequestViewModel).
-/// </summary>
-public class RequestViewModel : ViewModelBase
-{
-    private readonly ApiClient _api;
-    private readonly Action<string, string, string, string, string> _recordAudit;
-    private readonly Func<string, bool> _hasRole;
-    private string _statusMessage = "Готово к работе";
-    private string _selectedFilter = "Все";
-    private RequestRowDto? _selectedRequest;
+    public bool IsDashboardSection => SelectedSection == AppSection.Dashboard && _allowedSections.Contains(AppSection.Dashboard);
+    public bool IsProjectsSection => SelectedSection == AppSection.ProjectsAndBudgets && _allowedSections.Contains(AppSection.ProjectsAndBudgets);
+    public bool IsRequestsSection => SelectedSection == AppSection.PaymentRequests && _allowedSections.Contains(AppSection.PaymentRequests);
+    public bool IsSiteActsSection => SelectedSection == AppSection.SiteActs && _allowedSections.Contains(AppSection.SiteActs);
+    public bool IsCalendarSection => SelectedSection == AppSection.PaymentCalendar && _allowedSections.Contains(AppSection.PaymentCalendar);
+    public bool IsContractsSection => SelectedSection == AppSection.ContractsAndStatements && _allowedSections.Contains(AppSection.ContractsAndStatements);
+    public bool IsRisksSection => SelectedSection == AppSection.RisksAndP80 && _allowedSections.Contains(AppSection.RisksAndP80);
+    public bool IsReportsSection => SelectedSection == AppSection.Reports && _allowedSections.Contains(AppSection.Reports);
+    public bool IsAdminSection => SelectedSection == AppSection.Administration && _allowedSections.Contains(AppSection.Administration);
+    public bool IsAuditSection => SelectedSection == AppSection.AuditLog && _allowedSections.Contains(AppSection.AuditLog);
 
-    private string _newObjectName = "Жилой дом № 4 (Obj1)";
-    private string _newCostItemCode = "ST-01";
-    private string _newRequestType = "CurrentPayment";
-    private decimal _newAmount = 500m;
-    private string _newDocNumber = "С2-24/26";
-    private string _newPurpose = "Оплата строительных материалов по графику";
-
-    public ObservableCollection<RequestRowDto> AllRequests { get; } = [];
-    public ObservableCollection<RequestRowDto> Requests { get; } = [];
-
-    public IReadOnlyList<string> FilterOptions { get; } =
-    [
-        "Все", "Blocked", "PendingApproval", "Approved", "Executed", "Closed", "Returned", "Rejected"
-    ];
-
-    public IReadOnlyList<string> ObjectOptions { get; } =
-    [
-        "Жилой дом № 4 (Obj1)",
-        "Здание ДДУ (Obj3)"
-    ];
-
-    public IReadOnlyList<string> CostItemOptions { get; } =
-    [
-        "ST-01", "ST-02", "ST-03", "ST-04"
-    ];
-
-    public IReadOnlyList<string> TypeOptions { get; } =
-    [
-        "CurrentPayment", "Advance"
-    ];
-
-    public string StatusMessage { get => _statusMessage; set => SetField(ref _statusMessage, value); }
-
-    public string SelectedFilter
+    private string _statusMessage = "Готово";
+    public string StatusMessage
     {
-        get => _selectedFilter;
+        get => _statusMessage;
+        set => SetField(ref _statusMessage, value);
+    }
+
+    private bool _isStatusError;
+    public bool IsStatusError
+    {
+        get => _isStatusError;
+        set => SetField(ref _isStatusError, value);
+    }
+
+    // Dashboard KPIs
+    private string _kpiContractTotal = "0 тыс. р.";
+    public string KpiContractTotal { get => _kpiContractTotal; set => SetField(ref _kpiContractTotal, value); }
+    private string _kpiApprovedBudget = "0 тыс. р.";
+    public string KpiApprovedBudget { get => _kpiApprovedBudget; set => SetField(ref _kpiApprovedBudget, value); }
+    private string _kpiFreeLimit = "0 тыс. р.";
+    public string KpiFreeLimit { get => _kpiFreeLimit; set => SetField(ref _kpiFreeLimit, value); }
+    private string _kpiReserveP80 = "0 тыс. р.";
+    public string KpiReserveP80 { get => _kpiReserveP80; set => SetField(ref _kpiReserveP80, value); }
+    private string _kpiCashGap = "Нет";
+    public string KpiCashGap { get => _kpiCashGap; set => SetField(ref _kpiCashGap, value); }
+
+    // Lookups & Collections
+    public ObservableCollection<LookupItem> ProjectLookups { get; } = new();
+    public ObservableCollection<LookupItem> CalendarProjectLookups { get; } = new();
+    public ObservableCollection<LookupItem> ObjectLookups { get; } = new();
+    public ObservableCollection<LookupItem> OutgoingContractLookups { get; } = new();
+    public ObservableCollection<LookupItem> CostItemLookups { get; } = new();
+    public ObservableCollection<LookupItem> RoleLookups { get; } = new();
+
+    public ObservableCollection<ForecastGridRow> Forecasts { get; } = new();
+    public ObservableCollection<Notification> Notifications { get; } = new();
+    public ObservableCollection<FreeLimitGridRow> FreeLimits { get; } = new();
+    public ObservableCollection<BudgetVersionGridRow> BudgetVersions { get; } = new();
+    public ObservableCollection<BudgetLimitGridRow> BudgetLimits { get; } = new();
+    public ObservableCollection<StageGridRow> WorkStages { get; } = new();
+    public ObservableCollection<PaymentRequestGridRow> PaymentRequests { get; } = new();
+    public ObservableCollection<Document> Acts { get; } = new();
+    public ObservableCollection<CashDayForecast> CalendarDays { get; } = new();
+    public ObservableCollection<ContractScheduleItem> ScheduleItems { get; } = new();
+    public ObservableCollection<ContractGridRow> Contracts { get; } = new();
+    public ObservableCollection<AdvanceGridRow> Advances { get; } = new();
+    public ObservableCollection<RiskGridRow> Risks { get; } = new();
+    public ObservableCollection<SensitivityFactorResult> Sensitivity { get; } = new();
+    public ObservableCollection<User> Users { get; } = new();
+    public ObservableCollection<NormRule> NormRules { get; } = new();
+    public ObservableCollection<CurrencyRate> CurrencyRates { get; } = new();
+    public ObservableCollection<AuditLog> AuditLogs { get; } = new();
+    public ObservableCollection<ReportRowView> ReportRows { get; } = new();
+
+    // Budgets Form Inputs
+    private LookupItem? _budgetProject;
+    public LookupItem? BudgetProject { get => _budgetProject; set => SetField(ref _budgetProject, value); }
+    private string _budgetComment = "Плановая корректировка лимитов";
+    public string BudgetComment { get => _budgetComment; set => SetField(ref _budgetComment, value); }
+    private BudgetVersionGridRow? _selectedBudgetVersion;
+    public BudgetVersionGridRow? SelectedBudgetVersion { get => _selectedBudgetVersion; set => SetField(ref _selectedBudgetVersion, value); }
+    private BudgetLimitGridRow? _selectedBudgetLimit;
+    public BudgetLimitGridRow? SelectedBudgetLimit
+    {
+        get => _selectedBudgetLimit;
         set
         {
-            if (SetField(ref _selectedFilter, value))
-                ApplyFilter();
+            if (SetField(ref _selectedBudgetLimit, value) && value != null)
+                LimitAmountInput = value.Amount.ToString("0.00", CultureInfo.InvariantCulture);
         }
     }
+    private string _limitAmountInput = "0.00";
+    public string LimitAmountInput { get => _limitAmountInput; set => SetField(ref _limitAmountInput, value); }
 
-    public RequestRowDto? SelectedRequest
+    // Requests & Acts Form Inputs
+    public List<string> RequestStatusFilters { get; } = new() { "Все", "Blocked", "PendingApproval", "Approved", "Executed", "Rejected" };
+    private string _selectedRequestStatusFilter = "Все";
+    public string SelectedRequestStatusFilter
     {
-        get => _selectedRequest;
+        get => _selectedRequestStatusFilter;
         set
         {
-            if (SetField(ref _selectedRequest, value))
-                RaiseAllCanExecute();
+            if (SetField(ref _selectedRequestStatusFilter, value))
+                _ = LoadRequestsAsync();
         }
     }
 
-    public string NewObjectName { get => _newObjectName; set => SetField(ref _newObjectName, value); }
-    public string NewCostItemCode { get => _newCostItemCode; set => SetField(ref _newCostItemCode, value); }
-    public string NewRequestType { get => _newRequestType; set => SetField(ref _newRequestType, value); }
-    public decimal NewAmount { get => _newAmount; set => SetField(ref _newAmount, value); }
-    public string NewDocNumber { get => _newDocNumber; set => SetField(ref _newDocNumber, value); }
-    public string NewPurpose { get => _newPurpose; set => SetField(ref _newPurpose, value); }
+    private PaymentRequestGridRow? _selectedRequest;
+    public PaymentRequestGridRow? SelectedRequest { get => _selectedRequest; set => SetField(ref _selectedRequest, value); }
+    private string _actionReasonInput = "Согласовано";
+    public string ActionReasonInput { get => _actionReasonInput; set => SetField(ref _actionReasonInput, value); }
+    private string _paymentOrderInput = "ПП-205";
+    public string PaymentOrderInput { get => _paymentOrderInput; set => SetField(ref _paymentOrderInput, value); }
 
+    public List<RequestType> RequestTypes { get; } = new() { RequestType.CurrentPayment, RequestType.Advance };
+    private RequestType _newReqType = RequestType.CurrentPayment;
+    public RequestType NewReqType { get => _newReqType; set => SetField(ref _newReqType, value); }
+    private LookupItem? _newReqObject;
+    public LookupItem? NewReqObject { get => _newReqObject; set => SetField(ref _newReqObject, value); }
+    private LookupItem? _newReqContract;
+    public LookupItem? NewReqContract { get => _newReqContract; set => SetField(ref _newReqContract, value); }
+    private LookupItem? _newReqCostItem;
+    public LookupItem? NewReqCostItem { get => _newReqCostItem; set => SetField(ref _newReqCostItem, value); }
+    public List<string> Currencies { get; } = new() { "BYN", "USD", "EUR", "RUB" };
+    private string _newReqCurrency = "BYN";
+    public string NewReqCurrency { get => _newReqCurrency; set => SetField(ref _newReqCurrency, value); }
+    private string _newReqAmount = "320.00";
+    public string NewReqAmount { get => _newReqAmount; set => SetField(ref _newReqAmount, value); }
+    private string _newReqDate = "2026-11-15";
+    public string NewReqDate { get => _newReqDate; set => SetField(ref _newReqDate, value); }
+    private string _newReqDocNo = "С-2/341";
+    public string NewReqDocNo { get => _newReqDocNo; set => SetField(ref _newReqDocNo, value); }
+    private string _newReqPurpose = "Оплата монолитных работ";
+    public string NewReqPurpose { get => _newReqPurpose; set => SetField(ref _newReqPurpose, value); }
+
+    // Site Act Inputs
+    private LookupItem? _newActObject;
+    public LookupItem? NewActObject { get => _newActObject; set => SetField(ref _newActObject, value); }
+    private LookupItem? _newActContract;
+    public LookupItem? NewActContract { get => _newActContract; set => SetField(ref _newActContract, value); }
+    private string _newActNumber = "С-2/204";
+    public string NewActNumber { get => _newActNumber; set => SetField(ref _newActNumber, value); }
+    private string _newActGross = "350.00";
+    public string NewActGross { get => _newActGross; set => SetField(ref _newActGross, value); }
+    private string _newActOffset = "50.00";
+    public string NewActOffset { get => _newActOffset; set => SetField(ref _newActOffset, value); }
+    private string _newActRetention = "17.50";
+    public string NewActRetention { get => _newActRetention; set => SetField(ref _newActRetention, value); }
+    private string _newActDesc = "Монтаж ограждающих конструкций и устройство стяжки";
+    public string NewActDesc { get => _newActDesc; set => SetField(ref _newActDesc, value); }
+
+    // Calendar Inputs
+    private LookupItem? _calendarProject;
+    public LookupItem? CalendarProject { get => _calendarProject; set => SetField(ref _calendarProject, value); }
+    public List<int> HorizonOptions { get; } = new() { 5, 30, 90 };
+    private int _calendarHorizonDays = 90;
+    public int CalendarHorizonDays { get => _calendarHorizonDays; set => SetField(ref _calendarHorizonDays, value); }
+    private string _calendarSummaryText = string.Empty;
+    public string CalendarSummaryText { get => _calendarSummaryText; set => SetField(ref _calendarSummaryText, value); }
+    private ContractScheduleItem? _selectedScheduleItem;
+    public ContractScheduleItem? SelectedScheduleItem
+    {
+        get => _selectedScheduleItem;
+        set
+        {
+            if (SetField(ref _selectedScheduleItem, value) && value != null)
+                RescheduleDateInput = value.PlannedDate.ToString("yyyy-MM-dd");
+        }
+    }
+    private string _rescheduleDateInput = "2026-11-18";
+    public string RescheduleDateInput { get => _rescheduleDateInput; set => SetField(ref _rescheduleDateInput, value); }
+
+    // Contracts & Statements Inputs
+    private AdvanceGridRow? _selectedAdvance;
+    public AdvanceGridRow? SelectedAdvance { get => _selectedAdvance; set => SetField(ref _selectedAdvance, value); }
+    private string _advanceOffsetInput = "50.00";
+    public string AdvanceOffsetInput { get => _advanceOffsetInput; set => SetField(ref _advanceOffsetInput, value); }
+    private string _statementContent =
+        "BankOperationId;Date;Amount;Currency;Counterparty;RequestNumber;Purpose;OrderNo\n" +
+        "OP-2026-9001;2026-11-10;850.00;BYN;ОАО Белорусский цементный завод;ЗП-20261110-0003;Оплата по акту С-2 № 18;ПП-103";
+    public string StatementContent { get => _statementContent; set => SetField(ref _statementContent, value); }
+    private string _estimateContent =
+        "Code;Name;Amount\n" +
+        "ST-01;Строительные материалы, бетон и ЖБИ;6000.00\n" +
+        "ST-02;Субподрядные монтажные работы;3500.00\n" +
+        "ST-03;Инженерное оборудование;520.00";
+    public string EstimateContent { get => _estimateContent; set => SetField(ref _estimateContent, value); }
+
+    // Risks Inputs
+    private LookupItem? _riskProject;
+    public LookupItem? RiskProject { get => _riskProject; set => SetField(ref _riskProject, value); }
+    private string _riskSummaryEmv = "0.00";
+    public string RiskSummaryEmv { get => _riskSummaryEmv; set => SetField(ref _riskSummaryEmv, value); }
+    private string _riskSummarySigma = "0.00";
+    public string RiskSummarySigma { get => _riskSummarySigma; set => SetField(ref _riskSummarySigma, value); }
+    private string _riskSummaryP80 = "0.00";
+    public string RiskSummaryP80 { get => _riskSummaryP80; set => SetField(ref _riskSummaryP80, value); }
+    private string _riskSummaryResidual = "0.00";
+    public string RiskSummaryResidual { get => _riskSummaryResidual; set => SetField(ref _riskSummaryResidual, value); }
+
+    private RiskGridRow? _selectedRisk;
+    public RiskGridRow? SelectedRisk
+    {
+        get => _selectedRisk;
+        set
+        {
+            if (SetField(ref _selectedRisk, value) && value != null)
+            {
+                EditRiskProb = value.Probability.ToString("0.00", CultureInfo.InvariantCulture);
+                EditRiskImpact = value.MonetaryImpact.ToString("0", CultureInfo.InvariantCulture);
+            }
+        }
+    }
+    private string _editRiskProb = "0.35";
+    public string EditRiskProb { get => _editRiskProb; set => SetField(ref _editRiskProb, value); }
+    private string _editRiskImpact = "400";
+    public string EditRiskImpact { get => _editRiskImpact; set => SetField(ref _editRiskImpact, value); }
+    private string _newRiskCode = "R-13";
+    public string NewRiskCode { get => _newRiskCode; set => SetField(ref _newRiskCode, value); }
+    private string _newRiskEvent = "Задержка поставки электрощитового оборудования";
+    public string NewRiskEvent { get => _newRiskEvent; set => SetField(ref _newRiskEvent, value); }
+    private string _newRiskProb = "0.25";
+    public string NewRiskProb { get => _newRiskProb; set => SetField(ref _newRiskProb, value); }
+    private string _newRiskImpact = "280";
+    public string NewRiskImpact { get => _newRiskImpact; set => SetField(ref _newRiskImpact, value); }
+
+    // Reports
+    public List<ReportChoice> ReportChoices { get; }
+    private ReportChoice? _selectedReportChoice;
+    public ReportChoice? SelectedReportChoice
+    {
+        get => _selectedReportChoice;
+        set
+        {
+            if (SetField(ref _selectedReportChoice, value))
+                _ = LoadReportAsync();
+        }
+    }
+    private string _reportSubtitle = string.Empty;
+    public string ReportSubtitle { get => _reportSubtitle; set => SetField(ref _reportSubtitle, value); }
+    private string _rCol1 = "Колонка 1"; public string RCol1 { get => _rCol1; set => SetField(ref _rCol1, value); }
+    private string _rCol2 = "Колонка 2"; public string RCol2 { get => _rCol2; set => SetField(ref _rCol2, value); }
+    private string _rCol3 = "Колонка 3"; public string RCol3 { get => _rCol3; set => SetField(ref _rCol3, value); }
+    private string _rCol4 = "Колонка 4"; public string RCol4 { get => _rCol4; set => SetField(ref _rCol4, value); }
+    private string _rCol5 = "Колонка 5"; public string RCol5 { get => _rCol5; set => SetField(ref _rCol5, value); }
+    private string _rCol6 = "Колонка 6"; public string RCol6 { get => _rCol6; set => SetField(ref _rCol6, value); }
+
+    // Admin Inputs
+    private User? _selectedUser;
+    public User? SelectedUser { get => _selectedUser; set => SetField(ref _selectedUser, value); }
+    private string _newUserLogin = "economist1";
+    public string NewUserLogin { get => _newUserLogin; set => SetField(ref _newUserLogin, value); }
+    private string _newUserFullName = "Иванов И.И.";
+    public string NewUserFullName { get => _newUserFullName; set => SetField(ref _newUserFullName, value); }
+    private string _newUserPassword = "StroyFin2026!";
+    public string NewUserPassword { get => _newUserPassword; set => SetField(ref _newUserPassword, value); }
+    private LookupItem? _newUserRole;
+    public LookupItem? NewUserRole { get => _newUserRole; set => SetField(ref _newUserRole, value); }
+    private string _newRuleCode = "NORM-05";
+    public string NewRuleCode { get => _newRuleCode; set => SetField(ref _newRuleCode, value); }
+    private string _newRuleName = "Макс. аванс субподрядчику";
+    public string NewRuleName { get => _newRuleName; set => SetField(ref _newRuleName, value); }
+    private string _newRuleValue = "До 50 % стоимости этапа";
+    public string NewRuleValue { get => _newRuleValue; set => SetField(ref _newRuleValue, value); }
+
+    // Commands
+    public RelayCommand<NavItemViewModel> SelectSectionCommand { get; }
     public RelayCommand RefreshCommand { get; }
+    public RelayCommand CreateBudgetVersionCommand { get; }
+    public RelayCommand UpdateLimitCommand { get; }
+    public RelayCommand ApproveVersionCommand { get; }
     public RelayCommand CreateRequestCommand { get; }
     public RelayCommand ApproveOverrunCommand { get; }
-    public RelayCommand ApproveWithEdsCommand { get; }
+    public RelayCommand RejectOverrunCommand { get; }
+    public RelayCommand ApproveRequestCommand { get; }
     public RelayCommand ReturnRequestCommand { get; }
     public RelayCommand ExecutePaymentCommand { get; }
+    public RelayCommand CreateActCommand { get; }
+    public RelayCommand RefreshCalendarCommand { get; }
+    public RelayCommand RescheduleScheduleItemCommand { get; }
+    public RelayCommand OffsetAdvanceCommand { get; }
+    public RelayCommand ImportStatementCommand { get; }
+    public RelayCommand ImportEstimateCommand { get; }
+    public RelayCommand RefreshRisksCommand { get; }
+    public RelayCommand UpdateRiskCommand { get; }
+    public RelayCommand CreateRiskCommand { get; }
+    public RelayCommand LoadReportCommand { get; }
+    public RelayCommand CreateUserCommand { get; }
+    public RelayCommand ToggleUserActiveCommand { get; }
+    public RelayCommand AddNormRuleCommand { get; }
 
-    public RequestViewModel(
-        ApiClient api,
-        Func<string, bool> hasRole,
-        Action<string, string, string, string, string> recordAudit)
+    public async Task SelectSectionAsync(AppSection section)
     {
-        _api = api;
-        _hasRole = hasRole;
-        _recordAudit = recordAudit;
+        if (!_allowedSections.Contains(section)) return;
+        foreach (var item in NavigationItems)
+            item.IsSelected = item.Section == section;
 
-        RefreshCommand = new RelayCommand(async _ => await LoadAsync());
-
-        CreateRequestCommand = new RelayCommand(
-            async _ => await CreateRequestAsync(),
-            _ => _hasRole("ProjectManager") || _hasRole("ProcurementSpecialist") || _hasRole("FinancialManager") || _hasRole("CEO"));
-
-        ApproveOverrunCommand = new RelayCommand(
-            async param => await ApproveOverrunAsync(param as RequestRowDto ?? SelectedRequest),
-            _ => _hasRole("CEO"));
-
-        ApproveWithEdsCommand = new RelayCommand(
-            async param => await ApproveWithEdsAsync(param as RequestRowDto ?? SelectedRequest),
-            _ => _hasRole("FinancialManager") || _hasRole("CEO"));
-
-        ReturnRequestCommand = new RelayCommand(
-            async param => await ReturnAsync(param as RequestRowDto ?? SelectedRequest),
-            _ => _hasRole("FinancialManager") || _hasRole("CEO"));
-
-        ExecutePaymentCommand = new RelayCommand(
-            async param => await ExecuteAsync(param as RequestRowDto ?? SelectedRequest),
-            _ => _hasRole("Accountant"));
-
-        SeedDefaultRequests();
+        SelectedSectionTitle = NavigationItems.FirstOrDefault(i => i.Section == section)?.Title ?? string.Empty;
+        SelectedSection = section;
+        await LoadCurrentSectionAsync();
     }
 
-    public void RaiseAllCanExecute()
+    public async Task LoadAllAsync()
     {
-        CreateRequestCommand?.RaiseCanExecuteChanged();
-        ApproveOverrunCommand?.RaiseCanExecuteChanged();
-        ApproveWithEdsCommand?.RaiseCanExecuteChanged();
-        ReturnRequestCommand?.RaiseCanExecuteChanged();
-        ExecutePaymentCommand?.RaiseCanExecuteChanged();
-    }
-
-    private void SeedDefaultRequests()
-    {
-        AllRequests.Clear();
-        AllRequests.Add(new RequestRowDto(
-            Guid.Parse("95000000-0000-0000-0000-000000000001"),
-            "ЗП-20261110-0001", "Жилой дом № 4 (Obj1)", "ST-01",
-            1000m, "BYN", "CurrentPayment", "PendingApproval", "2026-11-18",
-            "Оплата поставки плит перекрытия по накладной № 412", null, 1L));
-        AllRequests.Add(new RequestRowDto(
-            Guid.Parse("95000000-0000-0000-0000-000000000002"),
-            "ЗП-20261110-0002", "Здание ДДУ (Obj3)", "ST-02",
-            1500m, "BYN", "CurrentPayment", "Blocked", "2026-11-19",
-            "Оплата монтажа кровли ДДУ (превышение лимита ST-02)",
-            "Недостаточно свободного лимита: Lдост = -500.00 тыс. р. (Δ = +500.00)", 1L));
-        AllRequests.Add(new RequestRowDto(
-            Guid.Parse("95000000-0000-0000-0000-000000000003"),
-            "ЗП-20261110-0003", "Жилой дом № 4 (Obj1)", "ST-04",
-            850m, "BYN", "CurrentPayment", "Approved", "2026-11-16",
-            "Оплата по акту С-2 № 18 за вычетом аванса 300 и удержания 50", null, 1L));
-        ApplyFilter();
-        SelectedRequest = Requests.FirstOrDefault();
-    }
-
-    private void ApplyFilter()
-    {
-        var selectedId = SelectedRequest?.Id;
-        Requests.Clear();
-        foreach (var item in AllRequests)
+        await RunSafeAsync(async () =>
         {
-            if (_selectedFilter == "Все" || string.Equals(item.Status, _selectedFilter, StringComparison.Ordinal))
-                Requests.Add(item);
-        }
-        SelectedRequest = Requests.FirstOrDefault(r => r.Id == selectedId) ?? Requests.FirstOrDefault();
-    }
-
-    private void ReplaceRow(RequestRowDto updated)
-    {
-        for (int i = 0; i < AllRequests.Count; i++)
-        {
-            if (AllRequests[i].Id == updated.Id)
-            {
-                AllRequests[i] = updated;
-                break;
-            }
-        }
-        ApplyFilter();
-        SelectedRequest = Requests.FirstOrDefault(r => r.Id == updated.Id);
-    }
-
-    private async Task CreateRequestAsync()
-    {
-        if (NewAmount <= 0 || string.IsNullOrWhiteSpace(NewDocNumber))
-        {
-            StatusMessage = "Укажите положительную сумму и номер документа-основания.";
-            return;
-        }
-
-        if (!_api.IsOfflineMode)
-        {
-            bool isDdu = NewObjectName.Contains("Obj3", StringComparison.Ordinal);
-            string projectId = isDdu ? "30000000-0000-0000-0000-000000000002" : "30000000-0000-0000-0000-000000000001";
-            string objectId = isDdu ? "40000000-0000-0000-0000-000000000003" : "40000000-0000-0000-0000-000000000001";
-            string contractId = isDdu ? "90000000-0000-0000-0000-000000000004" : "90000000-0000-0000-0000-000000000002";
-            string costItemId = NewCostItemCode switch
-            {
-                "ST-02" => "50000000-0000-0000-0000-000000000002",
-                "ST-03" => "50000000-0000-0000-0000-000000000003",
-                "ST-04" => "50000000-0000-0000-0000-000000000004",
-                _ => "50000000-0000-0000-0000-000000000001"
-            };
-
-            var (ok, msg) = await _api.PostJsonAsync("api/payment-requests", new
-            {
-                projectId,
-                constructionObjectId = objectId,
-                contractId,
-                costItemId,
-                amount = NewAmount,
-                actAmount = NewAmount,
-                advanceOffset = 0m,
-                retentionAmount = 0m,
-                vatIncluded = true,
-                currency = "BYN",
-                type = NewRequestType,
-                plannedPaymentDate = "2026-11-20",
-                purpose = string.IsNullOrWhiteSpace(NewPurpose) ? $"Оплата по {NewDocNumber}" : NewPurpose,
-                documentType = "ActS2",
-                documentNumber = NewDocNumber.Trim(),
-                documentDate = "2026-11-10",
-                submitImmediately = true
-            });
-
-            if (!ok)
-            {
-                StatusMessage = msg;
-                return;
-            }
-
-            await LoadAsync();
-            _recordAudit("PaymentRequest", "CREATE_REQUEST", "-", $"{NewDocNumber}:{NewAmount:N2}", NewPurpose);
-            StatusMessage = $"Заявка по документу {NewDocNumber} создана на сервере и прошла автоматические проверки.";
-            return;
-        }
-
-        // Локальный демо-режим: контроль по формуле (1.1) — Obj1 + ST-01 имеет Lдост = 4000; Obj3 + ST-02 имеет Lдост = -500
-        bool overLimit = NewObjectName.Contains("Obj3", StringComparison.Ordinal) || NewAmount > 4000m;
-        bool overdueAdvBlock = NewRequestType == "Advance" && NewObjectName.Contains("Obj3", StringComparison.Ordinal);
-
-        string status = (overLimit || overdueAdvBlock) ? "Blocked" : "PendingApproval";
-        string? blockReason = overdueAdvBlock
-            ? "Блокировка: по договору имеется просроченный аванс (правило 10)."
-            : overLimit
-                ? "Недостаточно свободного лимита Lдост — заявка заблокирована до решения руководителя (UC04)."
-                : null;
-
-        var number = $"ЗП-20261110-{AllRequests.Count + 1:D4}";
-        var created = new RequestRowDto(
-            Guid.NewGuid(), number, NewObjectName, NewCostItemCode,
-            NewAmount, "BYN", NewRequestType, status,
-            DateTime.Today.AddDays(7).ToString("yyyy-MM-dd"),
-            string.IsNullOrWhiteSpace(NewPurpose) ? $"Оплата по документу {NewDocNumber}" : NewPurpose,
-            blockReason, 1L);
-
-        AllRequests.Insert(0, created);
-        ApplyFilter();
-        SelectedRequest = created;
-        _recordAudit("PaymentRequest", "CREATE_REQUEST", "-", $"{number}:{status}:{NewAmount:N2}", NewDocNumber);
-        StatusMessage = status == "Blocked"
-            ? $"Заявка {number} создана и ЗАБЛОКИРОВАНА: {blockReason}"
-            : $"Заявка {number} создана ({NewAmount:N2} BYN) и направлена на согласование.";
-    }
-
-    private async Task ApproveOverrunAsync(RequestRowDto? row)
-    {
-        if (row == null)
-        {
-            StatusMessage = "Выберите заявку в таблице.";
-            return;
-        }
-        if (row.Status != "Blocked")
-        {
-            StatusMessage = $"Согласование перерасхода (UC04) выполняется только для заблокированной заявки (текущий статус: {row.StatusDisplay}).";
-            return;
-        }
-
-        if (!_api.IsOfflineMode)
-        {
-            var (ok, msg) = await _api.PostJsonAsync($"api/payment-requests/{row.Id}/approve-overrun",
-                new { approve = true, reason = "Согласовано руководителем в WPF-клиенте", rowVersion = row.RowVersionToken });
-            if (!ok)
-            {
-                StatusMessage = msg;
-                return;
-            }
-            await LoadAsync();
-        }
-        else
-        {
-            ReplaceRow(row with { Status = "PendingApproval", BlockReason = null });
-        }
-
-        _recordAudit("PaymentRequest", "APPROVE_OVERRUN", "Blocked", "PendingApproval", $"Заявка {row.Number}");
-        StatusMessage = $"Перерасход по заявке {row.Number} согласован руководителем (UC04) → На согласовании.";
-    }
-
-    private async Task ApproveWithEdsAsync(RequestRowDto? row)
-    {
-        if (row == null)
-        {
-            StatusMessage = "Выберите заявку в таблице.";
-            return;
-        }
-        if (row.Status is not ("PendingApproval" or "ApprovedByManagement"))
-        {
-            StatusMessage = $"Нельзя согласовать к оплате заявку в статусе «{row.StatusDisplay}».";
-            return;
-        }
-
-        var thumb = $"BY-UCA-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}";
-        if (!_api.IsOfflineMode)
-        {
-            var (ok, msg) = await _api.PostJsonAsync($"api/payment-requests/{row.Id}/approve",
-                new { edsCertificateThumbprint = thumb, rowVersion = row.RowVersionToken });
-            if (!ok)
-            {
-                StatusMessage = msg;
-                return;
-            }
-            await LoadAsync();
-        }
-        else
-        {
-            ReplaceRow(row with { Status = "Approved" });
-        }
-
-        _recordAudit("PaymentRequest", "APPROVE_REQUEST", row.Status, "Approved", $"Заявка {row.Number}, ЭЦП {thumb}");
-        StatusMessage = $"Заявка {row.Number} согласована к оплате с ЭЦП ({thumb}).";
-    }
-
-    private async Task ReturnAsync(RequestRowDto? row)
-    {
-        if (row == null)
-        {
-            StatusMessage = "Выберите заявку в таблице.";
-            return;
-        }
-        if (row.Status is "Executed" or "Closed" or "Rejected")
-        {
-            StatusMessage = $"Нельзя вернуть заявку в статусе «{row.StatusDisplay}».";
-            return;
-        }
-
-        if (!_api.IsOfflineMode)
-        {
-            var (ok, msg) = await _api.PostJsonAsync($"api/payment-requests/{row.Id}/return-or-reject",
-                new { rejectPermanently = false, reason = "Возвращено на доработку из WPF-клиента", rowVersion = row.RowVersionToken });
-            if (!ok)
-            {
-                StatusMessage = msg;
-                return;
-            }
-            await LoadAsync();
-        }
-        else
-        {
-            ReplaceRow(row with { Status = "Returned", BlockReason = "Требуется уточнение документов" });
-        }
-
-        _recordAudit("PaymentRequest", "RETURN_REQUEST", row.Status, "Returned", $"Заявка {row.Number}");
-        StatusMessage = $"Заявка {row.Number} возвращена на доработку.";
-    }
-
-    private async Task ExecuteAsync(RequestRowDto? row)
-    {
-        if (row == null)
-        {
-            StatusMessage = "Выберите заявку в таблице.";
-            return;
-        }
-        if (row.Status != "Approved")
-        {
-            StatusMessage = $"Инвариант 3: исполнение платежа возможно только из статуса «Согласована к оплате» (сейчас: {row.StatusDisplay}).";
-            return;
-        }
-
-        var orderNo = $"ПП-{DateTime.Now:HHmmss}";
-        if (!_api.IsOfflineMode)
-        {
-            var (ok, msg) = await _api.PostJsonAsync($"api/payment-requests/{row.Id}/execute",
-                new { paymentOrderNumber = orderNo, rowVersion = row.RowVersionToken });
-            if (!ok)
-            {
-                StatusMessage = msg;
-                return;
-            }
-            await LoadAsync();
-        }
-        else
-        {
-            ReplaceRow(row with { Status = "Executed" });
-        }
-
-        _recordAudit("PaymentRequest", "EXECUTE_PAYMENT", "Approved", "Executed", $"Заявка {row.Number}, {orderNo}");
-        StatusMessage = $"Платёж по заявке {row.Number} исполнен бухгалтером ({orderNo}).";
-    }
-
-    public async Task LoadAsync()
-    {
-        if (_api.IsOfflineMode)
-        {
-            StatusMessage = $"Загружены локальные контрольные заявки: {AllRequests.Count}";
-            return;
-        }
-
-        var (ok, items, error) = await _api.LoadPaymentRequestsAsync();
-        if (ok)
-        {
-            AllRequests.Clear();
-            foreach (var item in items) AllRequests.Add(item);
-            ApplyFilter();
-            StatusMessage = $"Загружено с сервера ({_api.ActiveBaseUrl}): {AllRequests.Count} заявок.";
-        }
-        else
-        {
-            StatusMessage = error ?? "Не удалось загрузить заявки с сервера; отображаются локальные контрольные данные.";
-        }
-    }
-}
-
-/// <summary>
-/// ViewModel бюджета и лимитов (рис. 2.13: BudgetViewModel).
-/// </summary>
-public class BudgetViewModel : ViewModelBase
-{
-    public decimal ApprovedBudget { get; set; } = 10000m;
-    public decimal GrossObligations { get; set; } = 6000m;
-    public decimal PaidFact { get; set; } = 3000m;
-    public decimal FreeLimit => ApprovedBudget - GrossObligations;
-    public decimal ObligationRemainder => GrossObligations - PaidFact;
-}
-
-/// <summary>
-/// ViewModel управления рисками и резервом P80 (рис. 2.13: RiskViewModel).
-/// </summary>
-public class RiskViewModel : ViewModelBase
-{
-    public decimal TotalEmv { get; set; } = 1340m;
-    public decimal Sigma { get; set; } = 723.22m;
-    public decimal ReserveP80 { get; set; } = 1948m;
-    public decimal ResidualEmv { get; set; } = 715m;
-    public decimal EmvReduction => TotalEmv - ResidualEmv;
-}
-
-public class MainViewModel : ViewModelBase
-{
-    private static readonly string[] SectionNames =
-    [
-        "Главная панель",
-        "Проекты и бюджеты",
-        "Платёжные заявки",
-        "Платёжный календарь",
-        "Договоры и закупки",
-        "Риски (P80)",
-        "Отчёты",
-        "Администрирование",
-        "Журнал аудита"
-    ];
-
-    private readonly ApiClient _api = new();
-    private string _activeSection = "Главная панель";
-    private int _selectedSectionIndex;
-    private string _login = "director";
-    private string _password = "StroyFin2026!";
-    private string _twoFactorCode = string.Empty;
-    private string _apiBaseUrl = "http://localhost:5050";
-    private bool _isLoginPanelOpen = true;
-    private string _authMessage = "Текущая учётная запись: Ковалёв Андрей Сергеевич (CEO). Выберите роль или смените учётную запись выше.";
-    private bool _isAuthError;
-    private DemoAccountInfo _selectedDemoAccount;
-    private string _selectedReportType = "budget-plan-fact";
-
-    public ObservableCollection<DemoAccountInfo> DemoAccounts { get; } = [];
-    public IReadOnlyList<string> ServerOptions { get; } =
-    [
-        "http://localhost:5050",
-        "https://localhost:5051",
-        "https://localhost:5001",
-        "http://localhost:5000"
-    ];
-
-    public IReadOnlyList<string> ReportTypes { get; } =
-    [
-        "budget-plan-fact",
-        "project-evm-forecast",
-        "risks-reserve-p80",
-        "contracts-advances",
-        "payment-requests-violations"
-    ];
-
-    public ObservableCollection<ProjectForecastRow> ProjectForecasts { get; } = [];
-    public ObservableCollection<FreeLimitRow> FreeLimits { get; } = [];
-    public ObservableCollection<BudgetVersionRow> BudgetVersions { get; } = [];
-    public ObservableCollection<CalendarDayRow> CalendarDays { get; } = [];
-    public ObservableCollection<ContractRow> Contracts { get; } = [];
-    public ObservableCollection<AdvanceRow> Advances { get; } = [];
-    public ObservableCollection<RiskRow> Risks { get; } = [];
-    public ObservableCollection<SensitivityRow> SensitivityFactors { get; } = [];
-    public ObservableCollection<NormRuleRow> NormRules { get; } = [];
-    public ObservableCollection<AuditRow> AuditLogs { get; } = [];
-    public ObservableCollection<NotificationRow> Notifications { get; } = [];
-    public ObservableCollection<ReportTableRow> ReportRows { get; } = [];
-
-    private string _reportCol1Header = "Код";
-    private string _reportCol2Header = "Наименование";
-    private string _reportCol3Header = "План / Бюджет";
-    private string _reportCol4Header = "Обязательства / Факт";
-    private string _reportCol5Header = "Отклонение / Резерв";
-    private string _reportCol6Header = "Статус";
-    private string _reportStatusMessage = "Выберите тип отчёта и нажмите «Сформировать предпросмотр».";
-
-    public string ReportCol1Header { get => _reportCol1Header; set => SetField(ref _reportCol1Header, value); }
-    public string ReportCol2Header { get => _reportCol2Header; set => SetField(ref _reportCol2Header, value); }
-    public string ReportCol3Header { get => _reportCol3Header; set => SetField(ref _reportCol3Header, value); }
-    public string ReportCol4Header { get => _reportCol4Header; set => SetField(ref _reportCol4Header, value); }
-    public string ReportCol5Header { get => _reportCol5Header; set => SetField(ref _reportCol5Header, value); }
-    public string ReportCol6Header { get => _reportCol6Header; set => SetField(ref _reportCol6Header, value); }
-    public string ReportStatusMessage { get => _reportStatusMessage; set => SetField(ref _reportStatusMessage, value); }
-
-    public string SelectedReportType
-    {
-        get => _selectedReportType;
-        set
-        {
-            if (SetField(ref _selectedReportType, value))
-                BuildReportPreview();
-        }
-    }
-
-    public int SelectedSectionIndex
-    {
-        get => _selectedSectionIndex;
-        set
-        {
-            var normalized = value is >= 0 and < 9 ? value : 0;
-            if (SetField(ref _selectedSectionIndex, normalized))
-            {
-                var name = SectionNames[normalized];
-                if (_activeSection != name)
-                {
-                    _activeSection = name;
-                    OnPropertyChanged(nameof(ActiveSection));
-                }
-            }
-        }
-    }
-
-    public string ActiveSection
-    {
-        get => _activeSection;
-        set
-        {
-            var target = string.IsNullOrWhiteSpace(value) ? SectionNames[0] : value;
-            if (SetField(ref _activeSection, target))
-            {
-                var idx = Array.IndexOf(SectionNames, target);
-                if (idx >= 0 && _selectedSectionIndex != idx)
-                {
-                    _selectedSectionIndex = idx;
-                    OnPropertyChanged(nameof(SelectedSectionIndex));
-                }
-            }
-        }
-    }
-
-    public string Login { get => _login; set => SetField(ref _login, value); }
-    public string Password { get => _password; set => SetField(ref _password, value); }
-    public string TwoFactorCode { get => _twoFactorCode; set => SetField(ref _twoFactorCode, value); }
-    public string ApiBaseUrl { get => _apiBaseUrl; set => SetField(ref _apiBaseUrl, value); }
-
-    public bool IsLoginPanelOpen { get => _isLoginPanelOpen; set => SetField(ref _isLoginPanelOpen, value); }
-    public string AuthMessage { get => _authMessage; set => SetField(ref _authMessage, value); }
-    public bool IsAuthError { get => _isAuthError; set => SetField(ref _isAuthError, value); }
-
-    public DemoAccountInfo SelectedDemoAccount
-    {
-        get => _selectedDemoAccount;
-        set
-        {
-            if (SetField(ref _selectedDemoAccount, value) && value != null)
-            {
-                Login = value.Login;
-                TwoFactorCode = value.RequiresTwoFactor ? "246810" : string.Empty;
-            }
-        }
-    }
-
-    public string CurrentRole => _api.CurrentRole;
-    public string CurrentRoleName => _api.CurrentRoleName;
-    public string CurrentUserName => _api.CurrentUserName;
-    public string CurrentLogin => _api.CurrentLogin;
-    public string CurrentUserDisplay => $"{CurrentUserName} — {CurrentRoleName} ({CurrentRole})";
-    public string ConnectionModeText => _api.IsOfflineMode
-        ? $"Локальные контрольные данные (API {_api.ActiveBaseUrl} не подключён)"
-        : $"Подключено к API: {_api.ActiveBaseUrl}";
-
-    public string RoleCapabilitiesText =>
-        DemoAccounts.FirstOrDefault(a => a.RoleCode == CurrentRole)?.PermissionsSummary
-        ?? "Просмотр данных в пределах назначенной роли RBAC.";
-
-    public bool CanCreateRequest => CurrentRole is "ProjectManager" or "ProcurementSpecialist" or "FinancialManager" or "CEO";
-    public bool CanApproveOverrun => CurrentRole == "CEO";
-    public bool CanApproveRequest => CurrentRole is "FinancialManager" or "CEO";
-    public bool CanExecutePayment => CurrentRole == "Accountant";
-    public bool CanManageBudgets => CurrentRole is "FinancialManager" or "CEO";
-    public bool CanAdminister => CurrentRole == "Admin";
-    public bool CanViewAudit => CurrentRole is "Admin" or "CEO" or "FinancialManager";
-    public bool IsAdminRestrictedFromFinance => CurrentRole == "Admin";
-
-    public int CalendarGapDaysCount => CalendarDays.Count(d => d.CashGap > 0m);
-    public decimal CalendarMaxCashGap => CalendarDays.Count == 0 ? 0m : CalendarDays.Max(d => d.CashGap);
-
-    public RequestViewModel RequestVm { get; }
-    public BudgetViewModel BudgetVm { get; } = new();
-    public RiskViewModel RiskVm { get; } = new();
-
-    public ICommand NavigateCommand { get; }
-    public ICommand LoginCommand { get; }
-    public ICommand SwitchSelectedAccountCommand { get; }
-    public ICommand ToggleLoginPanelCommand { get; }
-    public ICommand RefreshAllCommand { get; }
-    public RelayCommand CreateDraftBudgetVersionCommand { get; }
-    public ICommand GenerateReportCommand { get; }
-    public ICommand ExportReportCsvCommand { get; }
-
-    public MainViewModel()
-    {
-        foreach (var acc in DemoSeedCatalog.Accounts)
-            DemoAccounts.Add(acc);
-
-        _selectedDemoAccount = DemoAccounts[0];
-
-        RequestVm = new RequestViewModel(
-            _api,
-            role => string.Equals(CurrentRole, role, StringComparison.Ordinal),
-            RecordAudit);
-
-        NavigateCommand = new RelayCommand(p => ActiveSection = p?.ToString() ?? SectionNames[0]);
-        ToggleLoginPanelCommand = new RelayCommand(_ => IsLoginPanelOpen = !IsLoginPanelOpen);
-        LoginCommand = new RelayCommand(async _ => await PerformLoginAsync(Login, Password, TwoFactorCode));
-        SwitchSelectedAccountCommand = new RelayCommand(async _ =>
-        {
-            if (SelectedDemoAccount != null)
-            {
-                var twoFa = SelectedDemoAccount.RequiresTwoFactor ? "246810" : null;
-                Login = SelectedDemoAccount.Login;
-                TwoFactorCode = twoFa ?? string.Empty;
-                await PerformLoginAsync(SelectedDemoAccount.Login, Password, twoFa);
-            }
+            await LoadLookupsAsync();
+            await LoadCurrentSectionAsync();
+            SetStatus($"Данные обновлены ({DatabaseModeLabel}).", false);
         });
-        RefreshAllCommand = new RelayCommand(async _ => await RequestVm.LoadAsync());
-        CreateDraftBudgetVersionCommand = new RelayCommand(
-            _ => CreateDraftBudgetVersion(),
-            _ => CanManageBudgets);
-        GenerateReportCommand = new RelayCommand(_ => BuildReportPreview());
-        ExportReportCsvCommand = new RelayCommand(_ => ExportCurrentReportCsv());
-
-        SeedWorkspaceCollections();
-        BuildReportPreview();
     }
 
-    private async Task PerformLoginAsync(string login, string password, string? twoFactor)
+    private async Task LoadCurrentSectionAsync()
     {
-        var previousRole = CurrentRole;
-        var res = await _api.LoginAsync(ApiBaseUrl, login, password, twoFactor);
-        IsAuthError = !res.Success;
-        AuthMessage = res.Message;
-
-        if (!res.Success)
+        switch (SelectedSection)
         {
-            RecordAudit("Auth", "LOGIN_FAILED", previousRole, login, res.Message);
-            return;
+            case AppSection.Dashboard: await LoadDashboardAsync(); break;
+            case AppSection.ProjectsAndBudgets: await LoadBudgetsAsync(); break;
+            case AppSection.PaymentRequests: await LoadRequestsAsync(); break;
+            case AppSection.SiteActs: await LoadSiteActsAsync(); break;
+            case AppSection.PaymentCalendar: await RefreshCalendarAsync(); break;
+            case AppSection.ContractsAndStatements: await LoadContractsAsync(); break;
+            case AppSection.RisksAndP80: await RefreshRisksAsync(); break;
+            case AppSection.Reports: await LoadReportAsync(); break;
+            case AppSection.Administration: await LoadAdminAsync(); break;
+            case AppSection.AuditLog: await LoadAuditLogsAsync(); break;
+        }
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        using var scope = _dbFactory.CreateScope();
+        var projects = await scope.Db.Projects.Where(p => !p.IsDeleted).OrderBy(p => p.Code).ToListAsync();
+        var objects = await scope.Db.ConstructionObjects.Where(o => !o.IsDeleted).OrderBy(o => o.Name).ToListAsync();
+        var contracts = await scope.Db.Contracts.Where(c => !c.IsDeleted && c.Direction == ContractDirection.SupplierSubcontractorOutgoing).OrderBy(c => c.Number).ToListAsync();
+        var costItems = await scope.Db.CostItems.Where(c => !c.IsDeleted).OrderBy(c => c.Code).ToListAsync();
+
+        var prevBudgetPrj = BudgetProject?.Id;
+        var prevRiskPrj = RiskProject?.Id;
+        var prevCalPrj = CalendarProject?.Id;
+
+        ProjectLookups.Clear();
+        CalendarProjectLookups.Clear();
+        CalendarProjectLookups.Add(new LookupItem(Guid.Empty, "Все проекты (портфель)"));
+        foreach (var p in projects)
+        {
+            var item = new LookupItem(p.Id, $"{p.Code} — {p.Name}");
+            ProjectLookups.Add(item);
+            CalendarProjectLookups.Add(item);
+        }
+        BudgetProject = ProjectLookups.FirstOrDefault(x => x.Id == prevBudgetPrj) ?? ProjectLookups.FirstOrDefault();
+        RiskProject = ProjectLookups.FirstOrDefault(x => x.Id == prevRiskPrj) ?? ProjectLookups.FirstOrDefault();
+        CalendarProject = CalendarProjectLookups.FirstOrDefault(x => x.Id == prevCalPrj) ?? CalendarProjectLookups.FirstOrDefault();
+
+        ObjectLookups.Clear();
+        foreach (var o in objects) ObjectLookups.Add(new LookupItem(o.Id, o.Name));
+        NewReqObject ??= ObjectLookups.FirstOrDefault();
+        NewActObject ??= ObjectLookups.FirstOrDefault();
+
+        OutgoingContractLookups.Clear();
+        foreach (var c in contracts) OutgoingContractLookups.Add(new LookupItem(c.Id, $"{c.Number} — {c.Counterparty}"));
+        NewReqContract ??= OutgoingContractLookups.FirstOrDefault();
+        NewActContract ??= OutgoingContractLookups.FirstOrDefault();
+
+        CostItemLookups.Clear();
+        foreach (var ci in costItems) CostItemLookups.Add(new LookupItem(ci.Id, $"{ci.Code} — {ci.Name}"));
+        NewReqCostItem ??= CostItemLookups.FirstOrDefault();
+
+        if (IsAdminRole)
+        {
+            var roles = await scope.Db.Roles.Where(r => !r.IsDeleted).OrderBy(r => r.Code).ToListAsync();
+            RoleLookups.Clear();
+            foreach (var r in roles) RoleLookups.Add(new LookupItem(r.Id, $"{r.Name} ({r.Code})"));
+            NewUserRole ??= RoleLookups.FirstOrDefault();
+        }
+    }
+
+    private async Task LoadDashboardAsync()
+    {
+        using var scope = _dbFactory.CreateScope();
+        var forecasts = await BuildForecastRowsAsync(scope);
+        var limits = await BuildFreeLimitRowsAsync(scope);
+        var calDays = await ComputeCalendarAsync(scope, null, 90);
+        var notes = await scope.Db.Notifications.OrderBy(n => n.IsRead).ThenByDescending(n => n.CreatedAt).Take(12).ToListAsync();
+
+        Forecasts.Clear();
+        foreach (var f in forecasts) Forecasts.Add(f);
+        Notifications.Clear();
+        foreach (var n in notes) Notifications.Add(n);
+
+        KpiContractTotal = $"{forecasts.Sum(f => f.ContractValue):N0} тыс. р.";
+        KpiApprovedBudget = $"{limits.Sum(l => l.ApprovedBudget):N0} тыс. р.";
+        KpiFreeLimit = $"{limits.Sum(l => l.FreeLimit):N2} тыс. р.";
+        KpiReserveP80 = $"{forecasts.Sum(f => f.ReserveP80):N2} тыс. р.";
+        int gaps = calDays.Count(d => d.CashGap > 0);
+        decimal maxGap = calDays.Count == 0 ? 0m : calDays.Max(d => d.CashGap);
+        KpiCashGap = gaps > 0 ? $"{maxGap:N0} тыс. р. ({gaps} дн.)" : "Нет";
+    }
+
+    private async Task LoadBudgetsAsync()
+    {
+        using var scope = _dbFactory.CreateScope();
+        var limits = await BuildFreeLimitRowsAsync(scope);
+        FreeLimits.Clear();
+        foreach (var l in limits) FreeLimits.Add(l);
+
+        var projects = await scope.Db.Projects.Where(p => !p.IsDeleted).ToDictionaryAsync(p => p.Id);
+        var objects = await scope.Db.ConstructionObjects.Where(o => !o.IsDeleted).ToDictionaryAsync(o => o.Id);
+        var items = await scope.Db.CostItems.Where(c => !c.IsDeleted).ToDictionaryAsync(c => c.Id);
+
+        var versions = await scope.Db.BudgetVersions.Where(v => !v.IsDeleted)
+            .OrderBy(v => v.ProjectId).ThenByDescending(v => v.VersionNumber).ToListAsync();
+        BudgetVersions.Clear();
+        var vMap = new Dictionary<Guid, BudgetVersion>();
+        foreach (var v in versions)
+        {
+            vMap[v.Id] = v;
+            projects.TryGetValue(v.ProjectId, out var p);
+            BudgetVersions.Add(new BudgetVersionGridRow(v.Id, p?.Code ?? "—", v.VersionNumber, v.Status, v.Comment, v.RowVersion));
         }
 
-        var matched = DemoAccounts.FirstOrDefault(a => a.Login == _api.CurrentLogin);
-        if (matched != null && _selectedDemoAccount != matched)
+        var bLimits = await scope.Db.BudgetLimits.Where(l => !l.IsDeleted).ToListAsync();
+        BudgetLimits.Clear();
+        foreach (var l in bLimits)
         {
-            _selectedDemoAccount = matched;
-            OnPropertyChanged(nameof(SelectedDemoAccount));
+            vMap.TryGetValue(l.BudgetVersionId, out var bv);
+            objects.TryGetValue(l.ConstructionObjectId, out var obj);
+            items.TryGetValue(l.CostItemId, out var ci);
+            BudgetLimits.Add(new BudgetLimitGridRow(
+                l.Id, bv?.VersionNumber ?? 0, bv?.Status ?? BudgetVersionStatus.Draft,
+                obj?.Name ?? "—", ci?.Code ?? "—", l.Amount, l.RowVersion));
+        }
+    }
+
+    private async Task LoadRequestsAsync()
+    {
+        using var scope = _dbFactory.CreateScope();
+        var query = scope.Db.PaymentRequests.Include(r => r.Contract).Include(r => r.CostItem).Where(r => !r.IsDeleted);
+        if (SelectedRequestStatusFilter != "Все" && Enum.TryParse<RequestStatus>(SelectedRequestStatusFilter, out var st))
+            query = query.Where(r => r.Status == st);
+
+        var reqs = await query.OrderByDescending(r => r.CreatedAt).ToListAsync();
+        PaymentRequests.Clear();
+        foreach (var r in reqs)
+        {
+            PaymentRequests.Add(new PaymentRequestGridRow(
+                r.Id, r.Number, r.Type.ToString(), r.Contract?.Number ?? "—", r.CostItem?.Code ?? "—",
+                r.PayableAmount, r.Currency, r.PlannedPaymentDate, r.Status,
+                r.BlockReason ?? r.ReturnOrRejectReason ?? r.EdsSignatureThumbprint ?? r.Purpose ?? "—",
+                r.RowVersion));
+        }
+    }
+
+    private async Task LoadSiteActsAsync()
+    {
+        using var scope = _dbFactory.CreateScope();
+        var objects = await scope.Db.ConstructionObjects.Where(o => !o.IsDeleted).ToDictionaryAsync(o => o.Id);
+        var stages = await scope.Db.WorkStages.Where(s => !s.IsDeleted).OrderBy(s => s.PlannedStartDate).ToListAsync();
+        WorkStages.Clear();
+        foreach (var s in stages)
+        {
+            objects.TryGetValue(s.ConstructionObjectId, out var o);
+            WorkStages.Add(new StageGridRow(
+                o?.Name ?? "—", s.Name, $"{s.PlannedStartDate:dd.MM.yyyy} — {s.PlannedEndDate:dd.MM.yyyy}",
+                s.PlannedValuePV, s.EarnedValueEV, s.ActualCostAC));
         }
 
-        RecordAudit("Auth", "SWITCH_ACCOUNT", previousRole, _api.CurrentRole, $"{_api.CurrentLogin} ({_api.CurrentUserName})");
-        NotifyRoleAndUserChanged();
-        await RequestVm.LoadAsync();
+        var acts = await scope.Db.Documents
+            .Where(d => !d.IsDeleted && (d.Type == DocumentType.ActS2 || d.Type == DocumentType.CertificateS3))
+            .OrderByDescending(d => d.Date)
+            .ToListAsync();
+        Acts.Clear();
+        foreach (var a in acts) Acts.Add(a);
     }
 
-    private void NotifyRoleAndUserChanged()
+    private async Task RefreshCalendarAsync()
     {
-        OnPropertyChanged(nameof(CurrentRole));
-        OnPropertyChanged(nameof(CurrentRoleName));
-        OnPropertyChanged(nameof(CurrentUserName));
-        OnPropertyChanged(nameof(CurrentLogin));
-        OnPropertyChanged(nameof(CurrentUserDisplay));
-        OnPropertyChanged(nameof(ConnectionModeText));
-        OnPropertyChanged(nameof(RoleCapabilitiesText));
-        OnPropertyChanged(nameof(CanCreateRequest));
-        OnPropertyChanged(nameof(CanApproveOverrun));
-        OnPropertyChanged(nameof(CanApproveRequest));
-        OnPropertyChanged(nameof(CanExecutePayment));
-        OnPropertyChanged(nameof(CanManageBudgets));
-        OnPropertyChanged(nameof(CanAdminister));
-        OnPropertyChanged(nameof(CanViewAudit));
-        OnPropertyChanged(nameof(IsAdminRestrictedFromFinance));
-        RequestVm.RaiseAllCanExecute();
-        CreateDraftBudgetVersionCommand.RaiseCanExecuteChanged();
+        using var scope = _dbFactory.CreateScope();
+        Guid? filterId = CalendarProject.HasValueFilter() ? CalendarProject!.Id : null;
+        var days = await ComputeCalendarAsync(scope, filterId, CalendarHorizonDays);
+        CalendarDays.Clear();
+        foreach (var d in days.Where(x => x.DayIndex <= 10 || x.Inflows > 0 || x.Outflows > 0 || x.CashGap > 0))
+            CalendarDays.Add(d);
+
+        var contracts = await scope.Db.Contracts
+            .Where(c => !c.IsDeleted && (!filterId.HasValue || c.ProjectId == filterId.Value))
+            .Select(c => c.Id).ToHashSetAsync();
+
+        var items = await scope.Db.ContractScheduleItems
+            .Where(s => !s.IsDeleted && !s.IsPaid && contracts.Contains(s.ContractId))
+            .OrderBy(s => s.PlannedDate).ToListAsync();
+        ScheduleItems.Clear();
+        foreach (var s in items) ScheduleItems.Add(s);
+
+        int gapDays = days.Count(d => d.CashGap > 0);
+        decimal maxGap = days.Count == 0 ? 0m : days.Max(d => d.CashGap);
+        CalendarSummaryText = $"Горизонт: {CalendarHorizonDays} дн. | Дней с дефицитом: {gapDays} | Макс. кассовый разрыв: {maxGap:N2} тыс. р.";
     }
 
-    private void RecordAudit(string objectName, string action, string oldVal, string newVal, string details)
+    private async Task LoadContractsAsync()
     {
-        AuditLogs.Insert(0, new AuditRow(
-            DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
-            CurrentLogin,
-            objectName,
-            action,
-            oldVal,
-            newVal,
-            details));
-    }
-
-    private void CreateDraftBudgetVersion()
-    {
-        int nextVer = BudgetVersions.Where(v => v.ProjectCode == "PRJ-2026-01").Max(v => v.VersionNumber) + 1;
-        BudgetVersions.Insert(0, new BudgetVersionRow(
-            "PRJ-2026-01",
-            nextVer,
-            "Draft",
-            "—",
-            $"Черновик корректировки бюджета v{nextVer} (создал {CurrentUserName})"));
-        RecordAudit("BudgetVersion", "CREATE_BUDGET_VERSION", "v1", $"v{nextVer}", "Корректировка бюджета PRJ-2026-01");
-        RequestVm.StatusMessage = $"Создана новая черновая версия бюджета v{nextVer} (утверждённая v1 неизменяема по правилу 12).";
-    }
-
-    private void SeedWorkspaceCollections()
-    {
-        var domainRisks = DemoSeedCatalog.BuildChapter1Risks();
-        var riskSummary = RiskCalculator.CalculatePortfolioSummary(domainRisks);
-        RiskVm.TotalEmv = riskSummary.TotalEmv;
-        RiskVm.Sigma = riskSummary.Sigma;
-        RiskVm.ReserveP80 = riskSummary.ReserveP80;
-        RiskVm.ResidualEmv = riskSummary.TotalResidualEmv;
-
-        foreach (var r in domainRisks)
+        using var scope = _dbFactory.CreateScope();
+        var contracts = await scope.Db.Contracts.Include(c => c.Obligations).Where(c => !c.IsDeleted).OrderBy(c => c.Number).ToListAsync();
+        Contracts.Clear();
+        foreach (var c in contracts)
         {
-            Risks.Add(new RiskRow(
-                r.Code, r.Event, r.Probability, r.MonetaryImpact, r.IntegralScore,
-                RiskCalculator.GetRiskZone(r.IntegralScore),
-                Math.Round(r.Emv, 2),
-                Math.Round(r.ResidualEmv ?? r.Emv, 2),
-                r.OwnerRole, r.TriggerFired, r.IntegralScore >= 10 ? "Treating" : "Monitoring"));
+            Contracts.Add(new ContractGridRow(
+                c.Number, c.Counterparty, c.CounterpartyUnp, c.Direction.ToString(),
+                c.EffectiveTotalAmount, c.Currency, c.RetentionPercent,
+                c.Obligations.Where(o => !o.IsDeleted).Sum(o => o.GrossAmount),
+                c.Obligations.Where(o => !o.IsDeleted).Sum(o => o.PaidAmount)));
         }
 
-        foreach (var s in RiskCalculator.CalculateEacSensitivity())
+        var advs = await scope.Db.Advances.Include(a => a.Contract).Where(a => !a.IsDeleted).OrderBy(a => a.DueDate).ToListAsync();
+        var refDate = new DateTime(2026, 11, 10);
+        Advances.Clear();
+        foreach (var a in advs)
         {
-            SensitivityFactors.Add(new SensitivityRow(s.FactorName, s.RangeLabel, s.BaseAmount, s.ImpactOnEac, s.Comment));
+            Advances.Add(new AdvanceGridRow(
+                a.Id, a.Contract?.Number ?? "—", a.FundingSource, a.Amount, a.UsedAmount, a.Remainder,
+                a.UtilizationPercent ?? 0m, a.DueDate, a.IsOverdueAt(refDate) ? "Просрочен!" : a.Status.ToString()));
         }
-
-        var evm1 = EarnedValueCalculator.Calculate(11000m, 3400m, 3000m, 3300m, 14500m, Math.Round(riskSummary.ReserveP80, 0));
-        var evm2 = EarnedValueCalculator.Calculate(10000m, 2100m, 2000m, 1950m, 8900m, 0m);
-        ProjectForecasts.Add(new ProjectForecastRow(
-            "PRJ-2026-01", "ЖК «Лошицкий квартал», дома № 4 и № 5",
-            evm1.ContractValue, evm1.Bac, evm1.Pv, evm1.Ev, evm1.Ac, evm1.Cpi, evm1.Spi, evm1.Etc, evm1.Eac, evm1.FinancialResultWithReserve));
-        ProjectForecasts.Add(new ProjectForecastRow(
-            "PRJ-2026-02", "Детский сад на 230 мест в м-не Каменная Горка",
-            evm2.ContractValue, evm2.Bac, evm2.Pv, evm2.Ev, evm2.Ac, evm2.Cpi, evm2.Spi, evm2.Etc, evm2.Eac, evm2.FinancialResultWithReserve));
-
-        var lim1 = FinancialCalculator.CalculateFreeLimit(10000m, 6000m, 3000m, 1000m);
-        var lim2 = FinancialCalculator.CalculateFreeLimit(1000m, 0m, 0m, 850m);
-        var lim3 = FinancialCalculator.CalculateFreeLimit(10000m, 10500m, 7000m, 1500m);
-        FreeLimits.Add(new FreeLimitRow("PRJ-2026-01", "Жилой дом № 4 (Obj1)", "ST-01", "Строительные материалы", lim1.ApprovedBudget, lim1.GrossObligations, lim1.PaidFact, lim1.SubmittedRequests, lim1.FreeLimit, lim1.ObligationRemainder, "В пределах лимита"));
-        FreeLimits.Add(new FreeLimitRow("PRJ-2026-01", "Жилой дом № 4 (Obj1)", "ST-04", "Накладные расходы", lim2.ApprovedBudget, lim2.GrossObligations, lim2.PaidFact, lim2.SubmittedRequests, lim2.FreeLimit, lim2.ObligationRemainder, "В пределах лимита"));
-        FreeLimits.Add(new FreeLimitRow("PRJ-2026-02", "Здание ДДУ (Obj3)", "ST-02", "Субподрядные работы", lim3.ApprovedBudget, lim3.GrossObligations, lim3.PaidFact, lim3.SubmittedRequests, lim3.FreeLimit, lim3.ObligationRemainder, "ПЕРЕРАСХОД (-500)"));
-
-        BudgetVersions.Add(new BudgetVersionRow("PRJ-2026-01", 1, "Approved", "2026-01-10", "Утверждённый бюджет проекта (BAC = 11 000 тыс. р.)"));
-        BudgetVersions.Add(new BudgetVersionRow("PRJ-2026-02", 1, "Approved", "2026-03-01", "Утверждённый бюджет ДДУ (ST-02 = 10 000 тыс. р.)"));
-
-        var startDate = new DateTime(2026, 11, 10);
-        var flows = new Dictionary<DateTime, (decimal, decimal)>
-        {
-            [startDate.AddDays(1)] = (0m, 300m),
-            [startDate.AddDays(2)] = (1000m, 400m),
-            [startDate.AddDays(3)] = (0m, 1800m),
-            [startDate.AddDays(4)] = (600m, 200m),
-            [startDate.AddDays(5)] = (0m, 100m),
-            [startDate.AddDays(10)] = (2200m, 0m)
-        };
-        var notes = new Dictionary<int, string>
-        {
-            [0] = "Начальный остаток Cash₀ = 2 000 тыс. р.",
-            [1] = "Поставка цемента (-300)",
-            [2] = "Поступление от заказчика (+1 000) / арматура (-400)",
-            [3] = "Субподряд монтажа (-1 800) → КАССОВЫЙ РАЗРЫВ!",
-            [4] = "Аванс заказчика (+600) / бетон (-200) → РАЗРЫВ",
-            [5] = "Прочие материалы (-100) → РАЗРЫВ",
-            [10] = "Оплата заказчиком по акту С-2 № 11 (+2 200)"
-        };
-
-        foreach (var day in FinancialCalculator.CalculateCashCalendar(2000m, 1000m, startDate, 90, flows))
-        {
-            if (day.DayIndex <= 14 || day.CashGap > 0m || day.Inflows > 0m || day.Outflows > 0m)
-            {
-                CalendarDays.Add(new CalendarDayRow(
-                    day.Date.ToString("yyyy-MM-dd"),
-                    day.DayIndex,
-                    day.OpeningBalance,
-                    day.Inflows,
-                    day.Outflows,
-                    day.ClosingBalance,
-                    day.CashGap,
-                    notes.GetValueOrDefault(day.DayIndex, "Плановый день без движений")));
-            }
-        }
-
-        Contracts.Add(new ContractRow("ГП-2026/01", "УКС Мингорисполкома", "100234567", "Доходный (Заказчик)", 14500m, 14500m, "BYN", 5m));
-        Contracts.Add(new ContractRow("П-2026/14", "ОАО «Белорусский цементный завод»", "700012345", "Расходный (Поставщик)", 9500m, 10000m, "BYN", 0m));
-        Contracts.Add(new ContractRow("СП-2026/09", "ООО «СпецМонтажСтрой»", "191234567", "Расходный (Субподряд)", 3500m, 3500m, "BYN", 5m));
-        Contracts.Add(new ContractRow("СП-2026/22", "ОАО «СтройТрест № 7»", "100998877", "Расходный (Субподряд)", 12000m, 12000m, "BYN", 5m));
-
-        Advances.Add(new AdvanceRow("П-2026/14", "Жилой дом № 4", 1200m, 900m, 300m, 75m, "2026-12-20", "Active"));
-        Advances.Add(new AdvanceRow("СП-2026/09", "Жилой дом № 5", 1500m, 1000m, 500m, 66.7m, "2026-10-15", "Overdue"));
-
-        NormRules.Add(new NormRuleRow("VAT_RATE", "Базовая ставка НДС", "Налоговый кодекс РБ", "20 %", 1, "Бухгалтер"));
-        NormRules.Add(new NormRuleRow("RETENTION_DEFAULT", "Гарантийное удержание по акту", "Кодекс № 289-З", "5 % суммы акта", 1, "Финансовый менеджер"));
-        NormRules.Add(new NormRuleRow("PENALTY_DAILY", "Пеня за просрочку обязательства", "Условия договора", "0,1 %/день, макс. 10 %", 1, "Финансовый менеджер"));
-        NormRules.Add(new NormRuleRow("RESERVE_Z_P80", "Обеспеченность резерва P80", "СТБ ISO 31000-2020", "z = 0,84 (80 %)", 1, "Специалист по рискам"));
-        NormRules.Add(new NormRuleRow("RISK_THRESHOLD", "Порог приемлемого риска", "Политика рисков", "R ≤ 9 (свыше — обработка)", 1, "Специалист по рискам"));
-        NormRules.Add(new NormRuleRow("ADVANCE_EXPIRY", "Автоотклонение Blocked заявок", "Регламент UC04", "30 календарных дней", 1, "Администратор системы"));
-
-        Notifications.Add(new NotificationRow("Critical", "ApprovalDue", "Перерасход по заявке ЗП-20261110-0002", "Свободный лимит по статье ST-02 исчерпан (Lдост = -500 тыс. р.). Требуется решение руководителя.", "2026-11-10 09:00"));
-        Notifications.Add(new NotificationRow("Critical", "CashGap", "Прогноз кассового разрыва (день 3–5)", "На 13.11.2026 прогнозируется кассовый разрыв 500 тыс. р. по проекту ЖК «Лошицкий квартал».", "2026-11-10 09:00"));
-        Notifications.Add(new NotificationRow("Warning", "RiskTrigger", "Сработали триггеры рисков R-04 и R-08", "Просрочен аванс по договору СП-2026/09 и оплата заказчика свыше 10 дней.", "2026-11-10 09:00"));
-
-        AuditLogs.Add(new AuditRow("2026-11-10 09:00:00", "admin", "System", "SEED_DATABASE", "-", "Completed", "Загружены контрольные примеры главы 1 и реестр 12 рисков"));
     }
 
-    private void BuildReportPreview()
+    private async Task RefreshRisksAsync()
     {
+        using var scope = _dbFactory.CreateScope();
+        var prjId = RiskProject?.Id ?? SeedIds.Project1;
+        var risks = await scope.Db.Risks.Where(r => !r.IsDeleted && r.ProjectId == prjId)
+            .OrderByDescending(r => r.Emv).ThenByDescending(r => r.IntegralScore).ToListAsync();
+
+        Risks.Clear();
+        foreach (var r in risks)
+        {
+            Risks.Add(new RiskGridRow(
+                r.Id, r.Code, r.Event, r.OwnerRole, r.Probability, r.MonetaryImpact,
+                r.IntegralScore, RiskCalculator.GetRiskZone(r.IntegralScore), r.Emv, r.ResidualEmv ?? r.Emv,
+                r.Status, r.CurrentAssessmentVersion, r.EarlyIndicator, r.Mitigation, r.RowVersion));
+        }
+
+        var summary = await scope.Risks.CalculateReserveP80Async(prjId);
+        RiskSummaryEmv = $"{summary.TotalEmv:N2} тыс. р.";
+        RiskSummarySigma = $"{summary.Sigma:N2} тыс. р.";
+        RiskSummaryP80 = $"{summary.ReserveP80:N2} тыс. р.";
+        RiskSummaryResidual = $"{summary.TotalResidualEmv:N2} тыс. р. (−{summary.EmvReduction:N2})";
+
+        Sensitivity.Clear();
+        foreach (var s in RiskCalculator.CalculateEacSensitivity()) Sensitivity.Add(s);
+    }
+
+    private async Task LoadReportAsync()
+    {
+        if (SelectedReportChoice == null) return;
+        using var scope = _dbFactory.CreateScope();
         ReportRows.Clear();
-        switch (_selectedReportType)
-        {
-            case "budget-plan-fact":
-                ReportCol1Header = "Проект";
-                ReportCol2Header = "Объект / Статья";
-                ReportCol3Header = "Бюджет B";
-                ReportCol4Header = "Обязательства O";
-                ReportCol5Header = "Свободный лимит Lдост";
-                ReportCol6Header = "Статус";
-                foreach (var fl in FreeLimits)
-                {
-                    ReportRows.Add(new ReportTableRow(
-                        fl.ProjectCode, $"{fl.ObjectName} / {fl.CostItemCode}",
-                        fl.ApprovedBudget.ToString("N2"), fl.GrossObligations.ToString("N2"),
-                        fl.FreeLimit.ToString("N2"), fl.LimitStatus));
-                }
-                break;
 
+        switch (SelectedReportChoice.Key)
+        {
             case "project-evm-forecast":
-                ReportCol1Header = "Код";
-                ReportCol2Header = "Проект";
-                ReportCol3Header = "BAC / Цена V";
-                ReportCol4Header = "CPI / SPI";
-                ReportCol5Header = "Прогноз EAC";
-                ReportCol6Header = "Фин. результат (с P80)";
-                foreach (var p in ProjectForecasts)
-                {
-                    ReportRows.Add(new ReportTableRow(
-                        p.Code, p.Name, $"{p.Bac:N0} / {p.ContractValue:N0}",
-                        $"{p.Cpi:N3} / {p.Spi:N3}", p.Eac.ToString("N2"), p.FinancialResultWithReserve.ToString("N2")));
-                }
+                RCol1 = "Код"; RCol2 = "Проект"; RCol3 = "V / BAC"; RCol4 = "PV / EV / AC"; RCol5 = "CPI / SPI"; RCol6 = "EAC / Фин. рез.";
+                var forecasts = await BuildForecastRowsAsync(scope);
+                ReportSubtitle = "Прогноз стоимости по EVM и резерву P80";
+                foreach (var f in forecasts)
+                    ReportRows.Add(new ReportRowView(f.Code, f.Name, $"{f.ContractValue:N0} / {f.Bac:N0}", $"{f.Pv:N0} / {f.Ev:N0} / {f.Ac:N0}", $"{f.CpiText} / {f.SpiText}", $"{f.Eac:N2} / {f.FinancialResult:N2}"));
                 break;
 
             case "risks-reserve-p80":
-                ReportCol1Header = "Код";
-                ReportCol2Header = "Риск";
-                ReportCol3Header = "p / Ущерб C";
-                ReportCol4Header = "Интеграл R";
-                ReportCol5Header = "EMV / Остат. EMV";
-                ReportCol6Header = "Владелец";
-                foreach (var r in Risks)
-                {
-                    ReportRows.Add(new ReportTableRow(
-                        r.Code, r.Event, $"{r.Probability:P0} / {r.MonetaryImpact:N0}",
-                        $"{r.IntegralScore} ({r.Zone})", $"{r.Emv:N2} / {r.ResidualEmv:N2}", r.OwnerRole));
-                }
+                RCol1 = "Код"; RCol2 = "Событие"; RCol3 = "p / Ущерб C"; RCol4 = "Интеграл R"; RCol5 = "EMV / Остат."; RCol6 = "Владелец / Статус";
+                var risks = await scope.Db.Risks.Where(r => !r.IsDeleted).OrderByDescending(r => r.Emv).ToListAsync();
+                var summary = RiskCalculator.CalculatePortfolioSummary(risks);
+                ReportSubtitle = $"ΣEMV = {summary.TotalEmv:N2}, σ = {summary.Sigma:N2}, P80 = {summary.ReserveP80:N2} тыс. р.";
+                foreach (var r in risks)
+                    ReportRows.Add(new ReportRowView(r.Code, r.Event, $"{r.Probability:P0} / {r.MonetaryImpact:N0}", $"{r.IntegralScore} ({RiskCalculator.GetRiskZone(r.IntegralScore)})", $"{r.Emv:N2} / {(r.ResidualEmv ?? r.Emv):N2}", $"{r.OwnerRole} ({r.Status})"));
                 break;
 
             case "contracts-advances":
-                ReportCol1Header = "Договор";
-                ReportCol2Header = "Контрагент / Объект";
-                ReportCol3Header = "Сумма";
-                ReportCol4Header = "Освоено / Эффект.";
-                ReportCol5Header = "Остаток / Удерж.";
-                ReportCol6Header = "Статус";
-                foreach (var a in Advances)
+                RCol1 = "Договор"; RCol2 = "Контрагент"; RCol3 = "Аванс A"; RCol4 = "Зачтено Aисп"; RCol5 = "Aост (Kисп %)"; RCol6 = "Срок / Статус";
+                var contracts = await scope.Db.Contracts.Where(c => !c.IsDeleted).ToDictionaryAsync(c => c.Id);
+                var advs = await scope.Db.Advances.Where(a => !a.IsDeleted).OrderBy(a => a.DueDate).ToListAsync();
+                ReportSubtitle = "Контроль авансов Aост = A − Aисп";
+                foreach (var a in advs)
                 {
-                    ReportRows.Add(new ReportTableRow(
-                        a.ContractNumber, a.ObjectName, a.Amount.ToString("N2"),
-                        $"{a.UsedAmount:N2} ({a.UtilizationPercent:N1}%)", a.Remainder.ToString("N2"), a.Status));
+                    contracts.TryGetValue(a.ContractId, out var c);
+                    ReportRows.Add(new ReportRowView(c?.Number ?? "—", c?.Counterparty ?? "—", a.Amount.ToString("N2"), a.UsedAmount.ToString("N2"), $"{a.Remainder:N2} ({(a.UtilizationPercent ?? 0m):N1}%)", $"{a.DueDate:dd.MM.yyyy} / {a.Status}"));
                 }
+                break;
+
+            case "payment-requests-violations":
+                RCol1 = "Номер"; RCol2 = "Тип"; RCol3 = "К оплате"; RCol4 = "Дата"; RCol5 = "Статус"; RCol6 = "Контроль / ЭЦП";
+                var reqs = await scope.Db.PaymentRequests.Where(r => !r.IsDeleted).OrderByDescending(r => r.CreatedAt).ToListAsync();
+                ReportSubtitle = "Реестр платёжных заявок и блокировок";
+                foreach (var r in reqs)
+                    ReportRows.Add(new ReportRowView(r.Number, r.Type.ToString(), $"{r.PayableAmount:N2} {r.Currency}", r.PlannedPaymentDate.ToString("dd.MM.yyyy"), r.Status.ToString(), r.BlockReason ?? r.EdsSignatureThumbprint ?? r.Purpose ?? "—"));
                 break;
 
             default:
-                ReportCol1Header = "Номер";
-                ReportCol2Header = "Объект / Статья";
-                ReportCol3Header = "Тип";
-                ReportCol4Header = "К оплате";
-                ReportCol5Header = "План. дата";
-                ReportCol6Header = "Статус";
-                foreach (var r in RequestVm.AllRequests)
-                {
-                    ReportRows.Add(new ReportTableRow(
-                        r.Number, $"{r.ObjectName} ({r.CostItemCode})", r.TypeDisplay,
-                        $"{r.PayableAmount:N2} {r.Currency}", r.PlannedPaymentDate, r.StatusDisplay));
-                }
+                RCol1 = "Проект"; RCol2 = "Объект / Статья"; RCol3 = "Бюджет B"; RCol4 = "Обязат. O"; RCol5 = "Оплач. F / Q"; RCol6 = "Lдост / Oост";
+                var limits = await BuildFreeLimitRowsAsync(scope);
+                ReportSubtitle = "План-факт исполнения бюджета (vFreeLimit)";
+                foreach (var l in limits)
+                    ReportRows.Add(new ReportRowView(l.ProjectCode, $"{l.ObjectName} ({l.CostItemCode})", l.ApprovedBudget.ToString("N2"), l.GrossObligations.ToString("N2"), $"{l.PaidFact:N2} / {l.SubmittedRequests:N2}", $"{l.FreeLimit:N2} / {l.ObligationRemainder:N2}"));
                 break;
         }
-        ReportStatusMessage = $"Отчёт «{_selectedReportType}» сформирован: {ReportRows.Count} строк.";
     }
 
-    private void ExportCurrentReportCsv()
+    private async Task LoadAdminAsync()
     {
-        var dlg = new SaveFileDialog
-        {
-            Filter = "CSV (разделитель — точка с запятой)|*.csv",
-            FileName = $"report_{SelectedReportType}_{DateTime.Now:yyyyMMdd}.csv"
-        };
-        if (dlg.ShowDialog() != true) return;
+        using var scope = _dbFactory.CreateScope();
+        var users = await scope.Db.Users.Include(u => u.Role).Where(u => !u.IsDeleted).OrderBy(u => u.Login).ToListAsync();
+        Users.Clear();
+        foreach (var u in users) Users.Add(u);
 
-        var sb = new StringBuilder();
-        sb.AppendLine(string.Join(';', ReportCol1Header, ReportCol2Header, ReportCol3Header, ReportCol4Header, ReportCol5Header, ReportCol6Header));
-        foreach (var row in ReportRows)
-            sb.AppendLine(string.Join(';', row.Col1, row.Col2, row.Col3, row.Col4, row.Col5, row.Col6));
+        var rules = await scope.Db.NormRules.Where(n => !n.IsDeleted).OrderBy(n => n.Code).ToListAsync();
+        NormRules.Clear();
+        foreach (var n in rules) NormRules.Add(n);
 
-        File.WriteAllText(dlg.FileName, sb.ToString(), new UTF8Encoding(true));
-        RecordAudit("Report", "EXPORT_CSV", SelectedReportType, dlg.FileName, $"{ReportRows.Count} строк");
-        ReportStatusMessage = $"Отчёт сохранён: {dlg.FileName}";
+        var rates = await scope.Db.CurrencyRates.Where(c => !c.IsDeleted).OrderBy(c => c.Currency).ToListAsync();
+        CurrencyRates.Clear();
+        foreach (var c in rates) CurrencyRates.Add(c);
     }
+
+    private async Task LoadAuditLogsAsync()
+    {
+        using var scope = _dbFactory.CreateScope();
+        var logs = await scope.Db.AuditLogs.OrderByDescending(a => a.Timestamp).Take(200).ToListAsync();
+        AuditLogs.Clear();
+        foreach (var a in logs) AuditLogs.Add(a);
+    }
+
+    // Write Operations (Role-Gated)
+    private async Task CreateBudgetVersionAsync()
+    {
+        if (!CanManageBudgets || BudgetProject == null) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            var bv = await scope.Budget.CreateNewVersionAsync(BudgetProject.Id, BudgetComment, _session.UserId, _session.Login);
+            await LoadBudgetsAsync();
+            SetStatus($"Создана черновая версия v{bv.VersionNumber}.", false);
+        });
+    }
+
+    private async Task UpdateSelectedLimitAsync()
+    {
+        if (!CanManageBudgets || SelectedBudgetLimit == null) return;
+        await RunSafeAsync(async () =>
+        {
+            decimal amount = ParseDecimal(LimitAmountInput, "лимит бюджета");
+            using var scope = _dbFactory.CreateScope();
+            var limit = await scope.Db.BudgetLimits.FirstOrDefaultAsync(l => l.Id == SelectedBudgetLimit.Id && !l.IsDeleted)
+                ?? throw new DomainException("Лимит не найден.");
+            var bv = await scope.Db.BudgetVersions.FirstOrDefaultAsync(v => v.Id == limit.BudgetVersionId)
+                ?? throw new DomainException("Версия не найдена.");
+
+            decimal old = limit.Amount;
+            limit.UpdateAmount(amount, bv.Status);
+            await scope.Audit.LogAsync(_session.UserId, _session.Login, "BudgetLimit", limit.Id.ToString(), "UPDATE_LIMIT", old.ToString("N2"), amount.ToString("N2"));
+            await scope.Db.SaveChangesAsync();
+            await LoadBudgetsAsync();
+            SetStatus($"Лимит обновлён: {amount:N2} тыс. р.", false);
+        });
+    }
+
+    private async Task ApproveSelectedVersionAsync()
+    {
+        if (!CanApproveVersion || SelectedBudgetVersion == null) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            var bv = await scope.Budget.ApproveVersionAsync(SelectedBudgetVersion.Id, SelectedBudgetVersion.RowVersion, _session.UserId, _session.Login);
+            await LoadBudgetsAsync();
+            SetStatus($"Версия v{bv.VersionNumber} утверждена.", false);
+        });
+    }
+
+    private async Task CreatePaymentRequestAsync()
+    {
+        if (!CanCreateRequest || NewReqObject == null || NewReqContract == null || NewReqCostItem == null) return;
+        await RunSafeAsync(async () =>
+        {
+            decimal amt = ParseDecimal(NewReqAmount, "сумма заявки");
+            var dt = ParseDate(NewReqDate, new DateTime(2026, 11, 15));
+            using var scope = _dbFactory.CreateScope();
+            var obj = await scope.Db.ConstructionObjects.FirstAsync(o => o.Id == NewReqObject.Id);
+            var dto = new CreatePaymentRequestDto(
+                obj.ProjectId, obj.Id, NewReqContract.Id, NewReqCostItem.Id,
+                amt, amt, 0m, 0m, true, NewReqCurrency, NewReqType, dt,
+                NewReqPurpose, NewReqType == RequestType.Advance ? DocumentType.Contract : DocumentType.ActS2,
+                NewReqDocNo, new DateTime(2026, 11, 10), null, $"WPF-{Guid.NewGuid():N}", true);
+            var (req, checks) = await scope.Requests.CreateAsync(dto, _session.UserId, _session.Login);
+            await LoadRequestsAsync();
+            SetStatus($"Заявка {req.Number} ({req.Status}): " + string.Join(" | ", checks.Messages), req.Status == RequestStatus.Blocked);
+        });
+    }
+
+    private async Task ApproveOverrunAsync(bool approve)
+    {
+        if (!CanApproveOverrun || SelectedRequest == null) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            var req = await scope.Requests.ApproveOverrunAsync(SelectedRequest.Id, approve, ActionReasonInput, SelectedRequest.RowVersion, _session.UserId, _session.Login);
+            await LoadRequestsAsync();
+            SetStatus($"По заявке {req.Number} установлено решение: {req.Status}.", false);
+        });
+    }
+
+    private async Task ApproveSelectedRequestAsync()
+    {
+        if (!CanApproveRequest || SelectedRequest == null) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            var req = await scope.Requests.ApproveAsync(SelectedRequest.Id, "EDS-2026-WPF", SelectedRequest.RowVersion, _session.UserId, _session.Login);
+            await LoadRequestsAsync();
+            SetStatus($"Заявка {req.Number} согласована (ЭЦП: {req.EdsSignatureThumbprint}).", false);
+        });
+    }
+
+    private async Task ReturnSelectedRequestAsync()
+    {
+        if (!CanApproveRequest || SelectedRequest == null) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            var req = await scope.Requests.ReturnOrRejectAsync(SelectedRequest.Id, false, ActionReasonInput, SelectedRequest.RowVersion, _session.UserId, _session.Login);
+            await LoadRequestsAsync();
+            SetStatus($"Заявка {req.Number} возвращена на доработку.", false);
+        });
+    }
+
+    private async Task ExecuteSelectedPaymentAsync()
+    {
+        if (!CanExecutePayment || SelectedRequest == null) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            var pay = await scope.Requests.ExecuteAsync(SelectedRequest.Id, PaymentOrderInput, SelectedRequest.RowVersion, _session.UserId, _session.Login);
+            await LoadRequestsAsync();
+            SetStatus($"Платёж проведён: №{pay.PaymentOrderNumber}, {pay.Amount:N2} {pay.Currency}.", false);
+        });
+    }
+
+    private async Task CreateActAsync()
+    {
+        if (!CanCreateAct || NewActContract == null || NewActObject == null) return;
+        await RunSafeAsync(async () =>
+        {
+            decimal gross = ParseDecimal(NewActGross, "сумма акта");
+            decimal offset = ParseDecimal(NewActOffset, "зачёт аванса");
+            decimal retention = ParseDecimal(NewActRetention, "удержание");
+            decimal payable = FinancialCalculator.CalculateActPayable(gross, offset, retention).PayableAmount;
+
+            using var scope = _dbFactory.CreateScope();
+            var doc = new Document
+            {
+                ContractId = NewActContract.Id,
+                ConstructionObjectId = NewActObject.Id,
+                Type = DocumentType.ActS2,
+                Number = string.IsNullOrWhiteSpace(NewActNumber) ? $"С-2/{DateTime.UtcNow:HHmm}" : NewActNumber.Trim(),
+                Date = new DateTime(2026, 11, 10),
+                GrossAmount = gross,
+                AdvanceOffset = offset,
+                RetentionAmount = retention,
+                NetAmount = payable,
+                VatIncluded = true,
+                Currency = "BYN",
+                ActWorkDescription = NewActDesc,
+                IsVerifiedByInstruction53 = true
+            };
+            await scope.Db.Documents.AddAsync(doc);
+            await scope.Audit.LogAsync(_session.UserId, _session.Login, nameof(Document), doc.Number, "CREATE_ACT_S2", null, $"Payable={payable:N2}", NewActDesc);
+            await scope.Db.SaveChangesAsync();
+            await LoadSiteActsAsync();
+            SetStatus($"Акт {doc.Number} оформлен: к оплате = {payable:N2} тыс. р.", false);
+        });
+    }
+
+    private async Task RescheduleSelectedItemAsync()
+    {
+        if (!CanRescheduleCalendar || SelectedScheduleItem == null) return;
+        await RunSafeAsync(async () =>
+        {
+            var newDate = ParseDate(RescheduleDateInput, SelectedScheduleItem.PlannedDate);
+            using var scope = _dbFactory.CreateScope();
+            var item = await scope.Db.ContractScheduleItems.FirstOrDefaultAsync(s => s.Id == SelectedScheduleItem.Id && !s.IsDeleted)
+                ?? throw new DomainException("Позиция графика не найдена.");
+            string oldDate = item.PlannedDate.ToString("yyyy-MM-dd");
+            item.PlannedDate = newDate.Date;
+            await scope.Audit.LogAsync(_session.UserId, _session.Login, nameof(ContractScheduleItem), item.Id.ToString(), "RESCHEDULE_PAYMENT", oldDate, newDate.ToString("yyyy-MM-dd"));
+            await scope.Db.SaveChangesAsync();
+            await RefreshCalendarAsync();
+            SetStatus($"Платёж «{item.Description}» перенесён на {newDate:dd.MM.yyyy}.", false);
+        });
+    }
+
+    private async Task OffsetSelectedAdvanceAsync()
+    {
+        if (!CanOffsetAdvance || SelectedAdvance == null) return;
+        await RunSafeAsync(async () =>
+        {
+            decimal offset = ParseDecimal(AdvanceOffsetInput, "сумма зачёта");
+            using var scope = _dbFactory.CreateScope();
+            var adv = await scope.Db.Advances.FirstOrDefaultAsync(a => a.Id == SelectedAdvance.Id && !a.IsDeleted)
+                ?? throw new DomainException("Аванс не найден.");
+            decimal prev = adv.UsedAmount;
+            adv.ApplyOffset(offset);
+            await scope.Audit.LogAsync(_session.UserId, _session.Login, nameof(Advance), adv.Id.ToString(), "OFFSET_ADVANCE", prev.ToString("N2"), adv.UsedAmount.ToString("N2"));
+            await scope.Db.SaveChangesAsync();
+            await LoadContractsAsync();
+            SetStatus($"Аванс зачтён. Остаток Aост = {adv.Remainder:N2} тыс. р.", false);
+        });
+    }
+
+    private async Task ImportStatementAsync()
+    {
+        if (!CanImportStatement) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            var report = await scope.StatementImport.ImportAsync(StatementContent, "statement.csv", _session.UserId, _session.Login);
+            SetStatus($"Выписка: обработано {report.TotalOperations}, сопоставлено {report.MatchedCount}, дублей {report.DuplicateSkippedCount}.", false);
+        });
+    }
+
+    private async Task ImportEstimateAsync()
+    {
+        if (!CanImportEstimate) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            var catalog = await scope.Db.CostItems.Where(c => !c.IsDeleted).ToListAsync();
+            var res = scope.EstimateImporter.ImportFromExcelOrXml(EstimateContent, "smeta.csv", catalog);
+            SetStatus($"Смета: сопоставлено {res.MatchedLines}/{res.TotalLines} строк ({res.MatchPercent:N1} %).", false);
+        });
+    }
+
+    private async Task UpdateSelectedRiskAsync()
+    {
+        if (!CanEditRisks || SelectedRisk == null) return;
+        await RunSafeAsync(async () =>
+        {
+            decimal prob = ParseDecimal(EditRiskProb, "вероятность");
+            decimal impact = ParseDecimal(EditRiskImpact, "ущерб");
+            using var scope = _dbFactory.CreateScope();
+            var risk = await scope.Risks.UpdateAssessmentAsync(
+                SelectedRisk.Id, prob, impact, null, "Переоценка в WPF", SelectedRisk.RowVersion, _session.UserId, _session.Login);
+            await RefreshRisksAsync();
+            SetStatus($"Риск {risk.Code} переоценён: R={risk.IntegralScore}, EMV={risk.Emv:N2} тыс. р.", false);
+        });
+    }
+
+    private async Task CreateRiskAsync()
+    {
+        if (!CanEditRisks || RiskProject == null) return;
+        await RunSafeAsync(async () =>
+        {
+            decimal prob = Math.Clamp(ParseDecimal(NewRiskProb, "вероятность"), 0.01m, 0.99m);
+            decimal impact = Math.Max(0m, ParseDecimal(NewRiskImpact, "ущерб"));
+            using var scope = _dbFactory.CreateScope();
+            var risk = new Risk
+            {
+                ProjectId = RiskProject.Id,
+                Code = string.IsNullOrWhiteSpace(NewRiskCode) ? $"R-{DateTime.UtcNow:HHmm}" : NewRiskCode.Trim().ToUpperInvariant(),
+                Event = NewRiskEvent.Trim(),
+                Cause = "Мониторинг проекта",
+                Consequence = "Отклонение стоимости",
+                Probability = prob,
+                MonetaryImpact = impact,
+                ResidualProbability = Math.Round(prob * 0.45m, 2),
+                OwnerRole = "PM",
+                Status = RiskStatus.Analyzed
+            };
+            RiskCalculator.RecalculateScores(risk);
+            await scope.Db.Risks.AddAsync(risk);
+            await scope.Audit.LogAsync(_session.UserId, _session.Login, nameof(Risk), risk.Code, "CREATE_RISK", null, $"EMV={risk.Emv:N2}");
+            await scope.Db.SaveChangesAsync();
+            await RefreshRisksAsync();
+            SetStatus($"Добавлен риск {risk.Code} (EMV={risk.Emv:N2} тыс. р.).", false);
+        });
+    }
+
+    private async Task CreateUserAsync()
+    {
+        if (!IsAdminRole || NewUserRole == null) return;
+        await RunSafeAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(NewUserLogin) || NewUserPassword.Length < 12)
+                throw new DomainException("Логин обязателен, пароль — минимум 12 символов (НФТ-7).");
+
+            string login = NewUserLogin.Trim().ToLowerInvariant();
+            using var scope = _dbFactory.CreateScope();
+            if (await scope.Db.Users.AnyAsync(u => u.Login == login))
+                throw new DomainException($"Пользователь «{login}» уже существует.");
+
+            var user = new User
+            {
+                RoleId = NewUserRole.Id,
+                Login = login,
+                FullName = string.IsNullOrWhiteSpace(NewUserFullName) ? login : NewUserFullName.Trim(),
+                Email = $"{login}@stroyfinrisk.by",
+                PasswordHash = PasswordHasher.HashPassword(NewUserPassword),
+                IsActive = true,
+                PersonalDataConsentGiven = true,
+                ConsentDate = DateTime.UtcNow
+            };
+            await scope.Db.Users.AddAsync(user);
+            await scope.Audit.LogAsync(_session.UserId, _session.Login, nameof(User), login, "CREATE_USER", null, user.FullName);
+            await scope.Db.SaveChangesAsync();
+            await LoadAdminAsync();
+            SetStatus($"Создан пользователь {login}.", false);
+        });
+    }
+
+    private async Task ToggleSelectedUserAsync()
+    {
+        if (!IsAdminRole || SelectedUser == null) return;
+        await RunSafeAsync(async () =>
+        {
+            if (SelectedUser.Login == "admin")
+                throw new DomainException("Учётную запись admin нельзя отключить.");
+            using var scope = _dbFactory.CreateScope();
+            var u = await scope.Db.Users.FirstAsync(x => x.Id == SelectedUser.Id);
+            u.IsActive = !u.IsActive;
+            u.LockedUntil = null;
+            u.FailedLoginCount = 0;
+            await scope.Audit.LogAsync(_session.UserId, _session.Login, nameof(User), u.Login, "TOGGLE_USER_ACTIVE", null, u.IsActive.ToString());
+            await scope.Db.SaveChangesAsync();
+            await LoadAdminAsync();
+            SetStatus($"Пользователь {u.Login}: IsActive = {u.IsActive}.", false);
+        });
+    }
+
+    private async Task AddNormRuleAsync()
+    {
+        if (!IsAdminRole) return;
+        await RunSafeAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(NewRuleCode) || string.IsNullOrWhiteSpace(NewRuleName))
+                throw new DomainException("Укажите код и наименование правила.");
+            using var scope = _dbFactory.CreateScope();
+            var rule = new NormRule
+            {
+                Code = NewRuleCode.Trim().ToUpperInvariant(),
+                Name = NewRuleName.Trim(),
+                DocumentSource = "Внутренний стандарт",
+                ValueText = NewRuleValue.Trim(),
+                ValidFrom = new DateTime(2026, 11, 10),
+                ResponsibleRole = "Финансовый менеджер",
+                Revision = 1
+            };
+            await scope.Db.NormRules.AddAsync(rule);
+            await scope.Audit.LogAsync(_session.UserId, _session.Login, nameof(NormRule), rule.Code, "ADD_NORM_RULE", null, rule.ValueText);
+            await scope.Db.SaveChangesAsync();
+            await LoadAdminAsync();
+            SetStatus($"Правило {rule.Code} добавлено.", false);
+        });
+    }
+
+    public byte[] BuildCurrentReportCsvBytes()
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(string.Join(';', new[] { RCol1, RCol2, RCol3, RCol4, RCol5, RCol6 }.Select(Esc)));
+        foreach (var r in ReportRows)
+            sb.AppendLine(string.Join(';', new[] { r.Col1, r.Col2, r.Col3, r.Col4, r.Col5, r.Col6 }.Select(Esc)));
+        return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+
+        static string Esc(string? s) => $"\"{(s ?? string.Empty).Replace("\"", "\"\"")}\"";
+    }
+
+    public async Task<byte[]> Build1CExportCsvBytesAsync()
+    {
+        using var scope = _dbFactory.CreateScope();
+        var payments = await scope.Db.Payments.Where(p => !p.IsDeleted).ToListAsync();
+        var csv = scope.Accounting.ExportEntriesCsv(payments);
+        return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray();
+    }
+
+    // Internal Builders
+    private static async Task<List<ForecastGridRow>> BuildForecastRowsAsync(DataScope scope)
+    {
+        var projects = await scope.Db.Projects.Where(p => !p.IsDeleted).OrderBy(p => p.Code).ToListAsync();
+        var objects = await scope.Db.ConstructionObjects.Where(o => !o.IsDeleted).ToListAsync();
+        var stages = await scope.Db.WorkStages.Where(s => !s.IsDeleted).ToListAsync();
+        var versions = await scope.Db.BudgetVersions.Where(v => !v.IsDeleted && v.Status == BudgetVersionStatus.Approved).ToListAsync();
+        var limits = await scope.Db.BudgetLimits.Where(l => !l.IsDeleted).ToListAsync();
+        var risks = await scope.Db.Risks.Where(r => !r.IsDeleted).ToListAsync();
+
+        var list = new List<ForecastGridRow>();
+        foreach (var p in projects)
+        {
+            var objIds = objects.Where(o => o.ProjectId == p.Id).Select(o => o.Id).ToHashSet();
+            var prjStages = stages.Where(s => objIds.Contains(s.ConstructionObjectId)).ToList();
+            decimal pv = prjStages.Sum(s => s.PlannedValuePV);
+            decimal ev = prjStages.Sum(s => s.EarnedValueEV);
+            decimal ac = prjStages.Sum(s => s.ActualCostAC);
+
+            var bv = versions.Where(v => v.ProjectId == p.Id).OrderByDescending(v => v.VersionNumber).FirstOrDefault();
+            decimal bac = bv == null ? 0m : limits.Where(l => l.BudgetVersionId == bv.Id).Sum(l => l.Amount);
+            var riskSummary = RiskCalculator.CalculatePortfolioSummary(risks.Where(r => r.ProjectId == p.Id));
+            var fc = EarnedValueCalculator.Calculate(bac, pv, ev, ac, p.ContractValue, Math.Round(riskSummary.ReserveP80, 0, MidpointRounding.AwayFromZero));
+
+            list.Add(new ForecastGridRow(
+                p.Code, p.Name, fc.ContractValue, fc.Bac, fc.Pv, fc.Ev, fc.Ac,
+                fc.Cpi?.ToString("N3") ?? "—", fc.Spi?.ToString("N3") ?? "—",
+                fc.Eac, riskSummary.ReserveP80, fc.FinancialResultWithReserve));
+        }
+        return list;
+    }
+
+    private static async Task<List<FreeLimitGridRow>> BuildFreeLimitRowsAsync(DataScope scope)
+    {
+        var projects = await scope.Db.Projects.Where(p => !p.IsDeleted).ToDictionaryAsync(p => p.Id);
+        var objects = await scope.Db.ConstructionObjects.Where(o => !o.IsDeleted).ToListAsync();
+        var costItems = await scope.Db.CostItems.Where(c => !c.IsDeleted).OrderBy(c => c.Code).ToListAsync();
+        var limits = await scope.Db.BudgetLimits.Where(l => !l.IsDeleted).ToListAsync();
+        var obligations = await scope.Db.Obligations.Where(o => !o.IsDeleted).ToListAsync();
+
+        var rows = new List<FreeLimitGridRow>();
+        foreach (var obj in objects)
+        {
+            if (!projects.TryGetValue(obj.ProjectId, out var prj)) continue;
+            foreach (var ci in costItems)
+            {
+                if (!limits.Any(l => l.ConstructionObjectId == obj.Id && l.CostItemId == ci.Id)
+                    && !obligations.Any(o => o.ConstructionObjectId == obj.Id && o.CostItemId == ci.Id))
+                    continue;
+
+                var r = await scope.Budget.CalculateFreeLimitAsync(obj.Id, ci.Id);
+                rows.Add(new FreeLimitGridRow(prj.Code, obj.Name, ci.Code, ci.Name, r.ApprovedBudget, r.GrossObligations, r.PaidFact, r.SubmittedRequests, r.FreeLimit, r.ObligationRemainder));
+            }
+        }
+        return rows;
+    }
+
+    private static async Task<List<CashDayForecast>> ComputeCalendarAsync(DataScope scope, Guid? projectId, int horizonDays)
+    {
+        var startDate = new DateTime(2026, 11, 10);
+        var projects = await scope.Db.Projects.Where(p => !p.IsDeleted).ToListAsync();
+        var sel = projectId.HasValue ? projects.Where(p => p.Id == projectId.Value).ToList() : projects;
+        var selIds = sel.Select(p => p.Id).ToHashSet();
+
+        var contractIds = await scope.Db.Contracts
+            .Where(c => !c.IsDeleted && selIds.Contains(c.ProjectId))
+            .Select(c => c.Id).ToHashSetAsync();
+
+        var schedule = await scope.Db.ContractScheduleItems
+            .Where(s => !s.IsDeleted && !s.IsPaid && contractIds.Contains(s.ContractId)).ToListAsync();
+        var reqs = await scope.Db.PaymentRequests
+            .Where(r => !r.IsDeleted && selIds.Contains(r.ProjectId)
+                        && (r.Status == RequestStatus.PendingApproval || r.Status == RequestStatus.ApprovedByManagement || r.Status == RequestStatus.Approved))
+            .ToListAsync();
+
+        var flows = new Dictionary<DateTime, (decimal Inflows, decimal Outflows)>();
+        foreach (var item in schedule.Where(s => s.PlannedDate.Date > startDate.Date))
+        {
+            var d = item.PlannedDate.Date;
+            flows.TryGetValue(d, out var cur);
+            flows[d] = item.IsIncoming ? (cur.Inflows + item.Amount, cur.Outflows) : (cur.Inflows, cur.Outflows + item.Amount);
+        }
+        foreach (var req in reqs.Where(r => r.PlannedPaymentDate.Date > startDate.AddDays(5)))
+        {
+            var d = req.PlannedPaymentDate.Date;
+            flows.TryGetValue(d, out var cur);
+            flows[d] = (cur.Inflows, cur.Outflows + req.AmountInByn);
+        }
+
+        return FinancialCalculator.CalculateCashCalendar(
+            sel.Sum(p => p.InitialCash), sel.Sum(p => p.MinCashBalance), startDate, Math.Clamp(horizonDays, 5, 180), flows);
+    }
+
+    private async Task RunSafeAsync(Func<Task> action)
+    {
+        try
+        {
+            await action();
+        }
+        catch (Exception ex)
+        {
+            SetStatus(ex.Message, true);
+        }
+    }
+
+    private void SetStatus(string msg, bool error)
+    {
+        StatusMessage = msg;
+        IsStatusError = error;
+    }
+
+    private static decimal ParseDecimal(string text, string fieldName)
+    {
+        var norm = (text ?? string.Empty).Trim().Replace(',', '.');
+        if (!decimal.TryParse(norm, NumberStyles.Number, CultureInfo.InvariantCulture, out var val))
+            throw new DomainException($"Некорректное числовое значение в поле «{fieldName}».");
+        return val;
+    }
+
+    private static DateTime ParseDate(string text, DateTime fallback) =>
+        DateTime.TryParse((text ?? string.Empty).Trim(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)
+            ? d : fallback;
+}
+
+internal static class LookupItemExtensions
+{
+    public static bool HasValueFilter(this LookupItem? item) => item != null && item.Id != Guid.Empty;
 }

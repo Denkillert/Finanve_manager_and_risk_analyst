@@ -1,17 +1,15 @@
 using System.Security.Claims;
-using FinanveManager.Application.Interfaces;
-using FinanveManager.Domain.Entities;
-using FinanveManager.Infrastructure.Persistence;
-using FinanveManager.Infrastructure.Security;
+using FinanveManager.Data.Models;
+using FinanveManager.Data.Persistence;
+using FinanveManager.Data.Services;
 using FinanveManager.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using DomainUser = FinanveManager.Domain.Entities.User;
 
 namespace FinanveManager.Web.Controllers;
 
-[Authorize(Roles = "Admin,CEO,FinancialManager")]
+[Authorize(Roles = "Admin")]
 public class AdminController : Controller
 {
     private readonly AppDbContext _db;
@@ -35,14 +33,22 @@ public class AdminController : Controller
             Roles = await _db.Roles.Where(r => !r.IsDeleted).OrderBy(r => r.Code).ToListAsync(ct),
             Users = await _db.Users.Include(u => u.Role).Where(u => !u.IsDeleted).OrderBy(u => u.Login).ToListAsync(ct),
             NormRules = await _db.NormRules.Where(n => !n.IsDeleted).OrderBy(n => n.Code).ToListAsync(ct),
-            CurrencyRates = await _db.CurrencyRates.Where(c => !c.IsDeleted).OrderBy(c => c.Currency).ToListAsync(ct),
-            AuditLogs = await _db.AuditLogs.OrderByDescending(a => a.Timestamp).Take(100).ToListAsync(ct)
+            CurrencyRates = await _db.CurrencyRates.Where(c => !c.IsDeleted).OrderBy(c => c.Currency).ToListAsync(ct)
+        };
+        return View(vm);
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> Audit(CancellationToken ct)
+    {
+        var vm = new AdminViewModel
+        {
+            AuditLogs = await _db.AuditLogs.OrderByDescending(a => a.Timestamp).Take(200).ToListAsync(ct)
         };
         return View(vm);
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateUser(string login, string fullName, string email, Guid roleId, string password, CancellationToken ct)
     {
@@ -55,11 +61,11 @@ public class AdminController : Controller
         string normLogin = login.Trim().ToLowerInvariant();
         if (await _db.Users.AnyAsync(u => u.Login == normLogin, ct))
         {
-            TempData["Error"] = $"Пользователь с логином «{normLogin}» уже существует.";
+            TempData["Error"] = $"Пользователь «{normLogin}» уже существует.";
             return RedirectToAction(nameof(Index));
         }
 
-        var entity = new DomainUser
+        var entity = new User
         {
             RoleId = roleId,
             Login = normLogin,
@@ -73,14 +79,13 @@ public class AdminController : Controller
         await _db.Users.AddAsync(entity, ct);
 
         var (uid, actor) = CurrentUser();
-        await _audit.LogAsync(uid, actor, nameof(DomainUser), normLogin, "CREATE_USER", null, entity.FullName, null, ct);
+        await _audit.LogAsync(uid, actor, nameof(User), normLogin, "CREATE_USER", null, entity.FullName, null, ct);
         await _db.SaveChangesAsync(ct);
-        TempData["Success"] = $"Создан пользователь {entity.Login} ({entity.FullName}).";
+        TempData["Success"] = $"Создан пользователь {entity.Login}.";
         return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ToggleUserActive(Guid userId, CancellationToken ct)
     {
@@ -92,7 +97,7 @@ public class AdminController : Controller
         }
         if (user.Login == "admin")
         {
-            TempData["Error"] = "Системную учётную запись admin нельзя отключить.";
+            TempData["Error"] = "Учётную запись admin нельзя отключить.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -101,7 +106,7 @@ public class AdminController : Controller
         user.FailedLoginCount = 0;
 
         var (uid, actor) = CurrentUser();
-        await _audit.LogAsync(uid, actor, nameof(DomainUser), user.Login, "TOGGLE_USER_ACTIVE", null, user.IsActive.ToString(), null, ct);
+        await _audit.LogAsync(uid, actor, nameof(User), user.Login, "TOGGLE_USER_ACTIVE", null, user.IsActive.ToString(), null, ct);
         await _db.SaveChangesAsync(ct);
 
         TempData["Success"] = $"Пользователь {user.Login}: IsActive = {user.IsActive}.";
@@ -109,13 +114,12 @@ public class AdminController : Controller
     }
 
     [HttpPost]
-    [Authorize(Roles = "Admin,FinancialManager")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> AddNormRule(string code, string name, string documentSource, string valueText, decimal? numericValue, string responsibleRole, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name))
         {
-            TempData["Error"] = "Укажите код и наименование нормативного правила.";
+            TempData["Error"] = "Укажите код и наименование правила.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -127,7 +131,7 @@ public class AdminController : Controller
             ValueText = valueText?.Trim() ?? "",
             NumericValue = numericValue,
             ValidFrom = new DateTime(2026, 11, 10),
-            ResponsibleRole = string.IsNullOrWhiteSpace(responsibleRole) ? "FinManager" : responsibleRole.Trim(),
+            ResponsibleRole = string.IsNullOrWhiteSpace(responsibleRole) ? "Финансовый менеджер" : responsibleRole.Trim(),
             Revision = 1
         };
         await _db.NormRules.AddAsync(rule, ct);
@@ -135,7 +139,7 @@ public class AdminController : Controller
         await _audit.LogAsync(uid, actor, nameof(NormRule), rule.Code, "ADD_NORM_RULE", null, rule.ValueText, rule.DocumentSource, ct);
         await _db.SaveChangesAsync(ct);
 
-        TempData["Success"] = $"Нормативное правило {rule.Code} добавлено.";
+        TempData["Success"] = $"Правило {rule.Code} добавлено.";
         return RedirectToAction(nameof(Index));
     }
 }

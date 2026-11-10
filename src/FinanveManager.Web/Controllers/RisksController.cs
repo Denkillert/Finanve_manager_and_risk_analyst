@@ -1,10 +1,7 @@
 using System.Security.Claims;
-using FinanveManager.Application.Interfaces;
-using FinanveManager.Domain.Common;
-using FinanveManager.Domain.Entities;
-using FinanveManager.Domain.Enums;
-using FinanveManager.Domain.Services;
-using FinanveManager.Infrastructure.Persistence;
+using FinanveManager.Data.Models;
+using FinanveManager.Data.Persistence;
+using FinanveManager.Data.Services;
 using FinanveManager.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.Web.Controllers;
 
-[Authorize]
+[Authorize(Roles = "CEO,ProjectManager,RiskSpecialist")]
 public class RisksController : Controller
 {
     private readonly AppDbContext _db;
@@ -59,14 +56,8 @@ public class RisksController : Controller
     [Authorize(Roles = "RiskSpecialist,ProjectManager,CEO")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateAssessment(
-        Guid id,
-        Guid projectId,
-        decimal probability,
-        decimal monetaryImpact,
-        decimal? residualProbability,
-        string comment,
-        string? rowVersionBase64,
-        CancellationToken ct)
+        Guid id, Guid projectId, decimal probability, decimal monetaryImpact,
+        decimal? residualProbability, string comment, string? rowVersionBase64, CancellationToken ct)
     {
         try
         {
@@ -88,16 +79,9 @@ public class RisksController : Controller
     [Authorize(Roles = "RiskSpecialist,ProjectManager,CEO")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
-        Guid projectId,
-        string code,
-        string eventText,
-        decimal probability,
-        decimal monetaryImpact,
-        decimal? residualProbability,
-        string ownerRole,
-        string mitigation,
-        string earlyIndicator,
-        CancellationToken ct)
+        Guid projectId, string code, string eventText, decimal probability,
+        decimal monetaryImpact, decimal? residualProbability, string ownerRole,
+        string mitigation, string earlyIndicator, CancellationToken ct)
     {
         try
         {
@@ -111,7 +95,7 @@ public class RisksController : Controller
                 Probability = Math.Clamp(probability, 0.01m, 0.99m),
                 MonetaryImpact = Math.Max(0m, monetaryImpact),
                 ResidualProbability = residualProbability,
-                OwnerRole = string.IsNullOrWhiteSpace(ownerRole) ? "PM" : ownerRole.Trim(),
+                OwnerRole = string.IsNullOrWhiteSpace(ownerRole) ? "Руководитель проекта" : ownerRole.Trim(),
                 Mitigation = mitigation ?? string.Empty,
                 EarlyIndicator = earlyIndicator ?? string.Empty,
                 Status = RiskStatus.Analyzed

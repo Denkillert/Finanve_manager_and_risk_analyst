@@ -9,7 +9,6 @@
     <RootNamespace>FinanveManager.WpfClient</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\FinanveManager.Domain\FinanveManager.Domain.csproj" />
-    <ProjectReference Include="..\FinanveManager.Application\FinanveManager.Application.csproj" />
+    <ProjectReference Include="..\FinanveManager.Data\FinanveManager.Data.csproj" />
   </ItemGroup>
 </Project>

@@ -1,10 +1,10 @@
 @model DashboardViewModel
 @{
-    ViewData["Title"] = "Портфельный дашборд";
+    ViewData["Title"] = "Главная панель";
 }
 
 <div class="alert alert-info">
-    Подключение БД: <strong>@Model.DatabaseProvider</strong> · Референсная дата контрольного примера: <strong>10.11.2026</strong> ·
+    Подключение БД: <strong>@Model.DatabaseProvider</strong> · Референсная дата: <strong>10.11.2026</strong> ·
     Курсы НБ РБ: USD = 3,25 BYN, EUR = 3,52 BYN, RUB(100) = 3,45 BYN.
 </div>
 
@@ -27,7 +27,7 @@
     <div class="kpi-card">
         <div class="kpi-label">Резерв рисков P80</div>
         <div class="kpi-value">@Model.TotalReserveP80.ToString("N2") тыс. р.</div>
-        <div class="kpi-sub">Портфельный квантиль z = 0,8416</div>
+        <div class="kpi-sub">Квантиль z = 0,8416</div>
     </div>
     <div class="kpi-card">
         <div class="kpi-label">Кассовые разрывы (90 дн.)</div>
@@ -41,7 +41,6 @@
 <div class="card">
     <div class="card-header">
         <h3 class="card-title">Прогноз стоимости проектов по освоенному объёму (EVM + резерв P80)</h3>
-        <a class="btn btn-outline btn-sm" asp-controller="Projects" asp-action="Index">Проекты и vFreeLimit →</a>
     </div>
     <div class="table-wrap">
         <table>
@@ -68,8 +67,8 @@
                         <td class="num">@f.Forecast.ContractValue.ToString("N0")</td>
                         <td class="num">@f.Forecast.Bac.ToString("N0")</td>
                         <td class="num">@f.Forecast.Pv.ToString("N0") / @f.Forecast.Ev.ToString("N0") / @f.Forecast.Ac.ToString("N0")</td>
-                        <td class="num"><span class="badge @(f.Forecast.Cpi >= 1m ? "badge-success" : "badge-warn")">@f.Forecast.Cpi.ToString("N3")</span></td>
-                        <td class="num"><span class="badge @(f.Forecast.Spi >= 1m ? "badge-success" : "badge-warn")">@f.Forecast.Spi.ToString("N3")</span></td>
+                        <td class="num"><span class="badge @((f.Forecast.Cpi ?? 0m) >= 1m ? "badge-success" : "badge-warn")">@(f.Forecast.Cpi?.ToString("N3") ?? "—")</span></td>
+                        <td class="num"><span class="badge @((f.Forecast.Spi ?? 0m) >= 1m ? "badge-success" : "badge-warn")">@(f.Forecast.Spi?.ToString("N3") ?? "—")</span></td>
                         <td class="num">@f.Forecast.Eac.ToString("N2")</td>
                         <td class="num">@f.RiskSummary.ReserveP80.ToString("N2")</td>
                         <td class="num"><strong>@f.Forecast.FinancialResultWithReserve.ToString("N2")</strong></td>
@@ -83,8 +82,7 @@
 <div class="grid-2">
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title">Заявки, требующие внимания</h3>
-            <a class="btn btn-outline btn-sm" asp-controller="Requests" asp-action="Index">Все заявки →</a>
+            <h3 class="card-title">Заявки, требующие решения</h3>
         </div>
         <div class="table-wrap">
             <table>
@@ -117,9 +115,9 @@
 
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title">Системные уведомления и триггеры рисков</h3>
+            <h3 class="card-title">Уведомления и триггеры рисков</h3>
             <form method="post" asp-controller="Dashboard" asp-action="ReadAllNotifications">
-                <button type="submit" class="btn btn-outline btn-sm">Отметить все прочитанными</button>
+                <button type="submit" class="btn btn-outline btn-sm">Прочитать все</button>
             </form>
         </div>
         @if (!Model.Notifications.Any())
@@ -133,7 +131,7 @@
                 {
                     var badge = n.Severity == NotificationSeverity.Critical ? "badge-danger"
                         : n.Severity == NotificationSeverity.Warning ? "badge-warn" : "badge-info";
-                    <div style="padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;opacity:@(n.IsRead ? "0.65" : "1")">
+                    <div style="padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;opacity:@(n.IsRead ? "0.6" : "1")">
                         <div style="display:flex;justify-content:space-between;gap:8px">
                             <strong>@n.Title</strong>
                             <span class="badge @badge">@n.Severity</span>

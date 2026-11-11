@@ -1,6 +1,7 @@
 @model ContractsViewModel
 @{
-    ViewData["Title"] = "Договоры, авансы и интеграции (банк / сметы / 1С)";
+    ViewData["Title"] = "Договоры и выписки";
+    ViewData["Subtitle"] = "Реестр договоров, контроль авансов и интеграции с банком и 1С";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
     var refDate = new DateTime(2026, 11, 10);
 }

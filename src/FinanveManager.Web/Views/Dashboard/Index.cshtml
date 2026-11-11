@@ -1,49 +1,83 @@
 @model DashboardViewModel
 @{
     ViewData["Title"] = "Главная панель";
+    ViewData["Subtitle"] = "Сводный контроль портфеля проектов, ликвидности и рисков";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
     var canSeeRisks = RolePermissions.CanAccess(roleCode, AppSection.RisksAndP80);
 }
 
 <div class="alert alert-info">
-    Подключение БД: <strong>@Model.DatabaseProvider</strong> · Референсная дата: <strong>10.11.2026</strong> ·
-    Курсы НБ РБ: USD = 3,25 BYN, EUR = 3,52 BYN, RUB(100) = 3,45 BYN.
+    <span class="alert-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+    </span>
+    <span>
+        Подключение БД: <strong>@Model.DatabaseProvider</strong> · Референсная дата: <strong>10.11.2026</strong> ·
+        Курсы НБ РБ: USD = 3,25 BYN, EUR = 3,52 BYN, RUB(100) = 3,45 BYN.
+    </span>
 </div>
 
 @if (!Model.Forecasts.Any())
 {
     <div class="alert alert-info">
-        В подключённой базе данных пока нет проектов. Добавьте организации/проекты в базе данных или загрузите контрольные примеры при входе.
+        <span class="alert-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+        </span>
+        <span>В подключённой базе данных пока нет проектов. Добавьте организации/проекты в базе данных или загрузите контрольные примеры при входе.</span>
     </div>
 }
 
 <div class="kpi-grid">
     <div class="kpi-card">
-        <div class="kpi-label">Проекты и контрактная цена</div>
-        <div class="kpi-value">@Model.TotalContractValue.ToString("N0") тыс. р.</div>
+        <div class="kpi-top">
+            <div class="kpi-label">Контрактная цена портфеля</div>
+            <div class="kpi-icon blue">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V8l6-4 6 4v13"/><path d="M9 21v-4h4v4"/></svg>
+            </div>
+        </div>
+        <div class="kpi-value">@Model.TotalContractValue.ToString("N0") <span style="font-size:13px;font-weight:600;color:var(--muted)">тыс. р.</span></div>
         <div class="kpi-sub">Активных проектов: @Model.ProjectCount</div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-label">Утверждённый бюджет (BAC / B)</div>
-        <div class="kpi-value">@Model.TotalApprovedBudget.ToString("N0") тыс. р.</div>
+        <div class="kpi-top">
+            <div class="kpi-label">Утверждённый бюджет (BAC / B)</div>
+            <div class="kpi-icon violet">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.4"/><path d="M2.5 10h19"/><path d="M7 15h3"/></svg>
+            </div>
+        </div>
+        <div class="kpi-value">@Model.TotalApprovedBudget.ToString("N0") <span style="font-size:13px;font-weight:600;color:var(--muted)">тыс. р.</span></div>
         <div class="kpi-sub">Обязательства O: @Model.TotalGrossObligations.ToString("N0") тыс. р.</div>
     </div>
     <div class="kpi-card">
-        <div class="kpi-label">Свободный лимит Lдост = B − O</div>
-        <div class="kpi-value">@Model.TotalFreeLimit.ToString("N2") тыс. р.</div>
+        <div class="kpi-top">
+            <div class="kpi-label">Свободный лимит Lдост = B − O</div>
+            <div class="kpi-icon green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 6.5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+        </div>
+        <div class="kpi-value @(Model.TotalFreeLimit < 0 ? "red" : "green")">@Model.TotalFreeLimit.ToString("N2") <span style="font-size:13px;font-weight:600;color:var(--muted)">тыс. р.</span></div>
         <div class="kpi-sub">Без двойного списания заявок Q</div>
     </div>
     @if (canSeeRisks)
     {
         <div class="kpi-card">
-            <div class="kpi-label">Резерв рисков P80</div>
-            <div class="kpi-value">@Model.TotalReserveP80.ToString("N2") тыс. р.</div>
+            <div class="kpi-top">
+                <div class="kpi-label">Резерв рисков P80</div>
+                <div class="kpi-icon amber">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-3.6 8-10V5l-8-3-8 3v7c0 6.4 8 10 8 10z"/><path d="M12 8v4M12 16h.01"/></svg>
+                </div>
+            </div>
+            <div class="kpi-value blue">@Model.TotalReserveP80.ToString("N2") <span style="font-size:13px;font-weight:600;color:var(--muted)">тыс. р.</span></div>
             <div class="kpi-sub">Квантиль z = 0,84 (ф-ла 1.18)</div>
         </div>
     }
     <div class="kpi-card">
-        <div class="kpi-label">Кассовые разрывы (90 дн.)</div>
-        <div class="kpi-value" style="color:@(Model.GapDaysCount90d > 0 ? "#b91c1c" : "#065f46")">
+        <div class="kpi-top">
+            <div class="kpi-label">Кассовые разрывы (90 дн.)</div>
+            <div class="kpi-icon @(Model.GapDaysCount90d > 0 ? "red" : "green")">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-8"/><path d="M15 8h5v5"/></svg>
+            </div>
+        </div>
+        <div class="kpi-value @(Model.GapDaysCount90d > 0 ? "red" : "green")">
             @(Model.GapDaysCount90d > 0 ? $"{Model.MaxCashGap90d:N0} тыс. р." : "Нет")
         </div>
         <div class="kpi-sub">Дней с дефицитом: @Model.GapDaysCount90d</div>
@@ -55,7 +89,9 @@
         <h3 class="card-title">@(canSeeRisks ? "Прогноз стоимости проектов по освоенному объёму (EVM + резерв P80)" : "Финансовое исполнение и освоенный объём проектов (EVM)")</h3>
         @if (canSeeRisks)
         {
-            <a class="btn btn-sm" asp-controller="Risks" asp-action="Index">Матрица рисков 5×5 и P80</a>
+            <div class="card-actions">
+                <a class="btn btn-sm" asp-controller="Risks" asp-action="Index">Матрица рисков 5×5 и P80</a>
+            </div>
         }
     </div>
     <div class="table-wrap">
@@ -111,13 +147,15 @@
     </div>
 </div>
 
-<div class="grid-2">
+<div class="grid-2 dashboard-grid">
     @if (RolePermissions.CanAccess(roleCode, AppSection.PaymentRequests))
     {
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Заявки, требующие решения</h3>
-                <a class="btn btn-outline btn-sm" asp-controller="Requests" asp-action="Index">Открыть все</a>
+                <div class="card-actions">
+                    <a class="btn btn-outline btn-sm" asp-controller="Requests" asp-action="Index">Открыть все</a>
+                </div>
             </div>
             <div class="table-wrap">
                 <table>
@@ -153,7 +191,9 @@
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Сводка по рискам проектов (табл. 1.15–1.18)</h3>
-                <a class="btn btn-outline btn-sm" asp-controller="Reports" asp-action="Index">Отчёты и печать</a>
+                <div class="card-actions">
+                    <a class="btn btn-outline btn-sm" asp-controller="Reports" asp-action="Index">Отчёты и печать</a>
+                </div>
             </div>
             <div class="table-wrap">
                 <table>
@@ -192,21 +232,21 @@
         </div>
         @if (!Model.Notifications.Any())
         {
-            <p class="muted">Новых уведомлений нет.</p>
+            <p class="muted" style="margin:0">Новых уведомлений нет.</p>
         }
         else
         {
-            <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="notification-list">
                 @foreach (var n in Model.Notifications)
                 {
                     var badge = n.Severity == NotificationSeverity.Critical ? "badge-danger"
                         : n.Severity == NotificationSeverity.Warning ? "badge-warn" : "badge-info";
-                    <div style="padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;opacity:@(n.IsRead ? "0.6" : "1")">
-                        <div style="display:flex;justify-content:space-between;gap:8px">
-                            <strong>@n.Title</strong>
+                    <div style="padding:10px 12px;border:1px solid var(--border);border-radius:11px;background:var(--surface-muted);opacity:@(n.IsRead ? "0.62" : "1")">
+                        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center">
+                            <strong style="font-size:12.5px">@n.Title</strong>
                             <span class="badge @badge">@RussianLabels.SeverityName(n.Severity)</span>
                         </div>
-                        <div class="muted">@n.Message</div>
+                        <div class="muted" style="margin-top:3px">@n.Message</div>
                     </div>
                 }
             </div>

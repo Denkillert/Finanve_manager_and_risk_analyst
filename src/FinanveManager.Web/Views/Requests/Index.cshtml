@@ -1,6 +1,7 @@
 @model PaymentRequestsViewModel
 @{
-    ViewData["Title"] = "Платёжные заявки и акты С-2 / С-3";
+    ViewData["Title"] = "Платёжные заявки";
+    ViewData["Subtitle"] = "Маршрут согласования, контроль лимитов и акты С-2 / С-3";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
     var statuses = Enum.GetValues<RequestStatus>();
 }
@@ -126,7 +127,7 @@
     </div>
 </div>
 
-<div class="grid-2">
+<div class="grid-2 grid-stack">
     @if (roleCode is "ProjectManager" or "ProcurementSpecialist" or "FinancialManager" or "CEO")
     {
         <div class="card">

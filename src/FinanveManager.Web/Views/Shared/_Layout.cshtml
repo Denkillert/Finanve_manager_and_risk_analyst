@@ -5,63 +5,151 @@
     var roleName = User.FindFirst("RoleName")?.Value ?? "";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "ProjectManager";
     var sections = RolePermissions.GetSectionsForRole(roleCode);
+    var subtitle = ViewData["Subtitle"] as string ?? "Финансовый контур строительной компании";
+    var initials = string.Concat(fullName
+        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+        .Take(2)
+        .Select(part => char.ToUpperInvariant(part[0])));
+    if (string.IsNullOrWhiteSpace(initials)) { initials = "СФ"; }
 }
+
+@functions {
+    static string SectionIcon(AppSection section) => section switch
+    {
+        AppSection.Dashboard => "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"3\" width=\"7\" height=\"7\" rx=\"1.6\"/><rect x=\"14\" y=\"3\" width=\"7\" height=\"7\" rx=\"1.6\"/><rect x=\"3\" y=\"14\" width=\"7\" height=\"7\" rx=\"1.6\"/><rect x=\"14\" y=\"14\" width=\"7\" height=\"7\" rx=\"1.6\"/></svg>",
+        AppSection.ProjectsAndBudgets => "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 21h18\"/><path d=\"M5 21V7l7-4 7 4v14\"/><path d=\"M9 21v-5h6v5\"/><path d=\"M9 10h.01M15 10h.01M9 13h.01M15 13h.01\"/></svg>",
+        AppSection.PaymentRequests => "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"/><path d=\"M14 2v6h6\"/><path d=\"M8 13h8M8 17h5\"/></svg>",
+        AppSection.PaymentCalendar => "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"17\" rx=\"2.4\"/><path d=\"M16 2v4M8 2v4M3 10h18\"/><path d=\"M8 14h.01M12 14h.01M16 14h.01M8 17.5h.01M12 17.5h.01\"/></svg>",
+        AppSection.ContractsAndStatements => "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M15 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6z\"/><path d=\"M15 2v4h4\"/><path d=\"M9 12h6M9 16h4\"/><path d=\"M9 8h2\"/></svg>",
+        AppSection.RisksAndP80 => "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M12 22s8-3.6 8-10V5l-8-3-8 3v7c0 6.4 8 10 8 10z\"/><path d=\"M12 8v4\"/><path d=\"M12 16h.01\"/></svg>",
+        AppSection.Reports => "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 3v18h18\"/><rect x=\"7\" y=\"12\" width=\"3\" height=\"6\" rx=\"0.8\"/><rect x=\"12.5\" y=\"8\" width=\"3\" height=\"10\" rx=\"0.8\"/><rect x=\"18\" y=\"5\" width=\"3\" height=\"13\" rx=\"0.8\"/></svg>",
+        AppSection.SiteActs => "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1z\"/><path d=\"M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2\"/><path d=\"m8.5 14 2 2 4.5-4.5\"/></svg>",
+        AppSection.Administration => "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M22 21v-2a4 4 0 0 0-3-3.87\"/><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/></svg>",
+        AppSection.AuditLog => "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8\"/><path d=\"M3 3v5h5\"/><path d=\"M12 7v5l4 2\"/></svg>",
+        _ => "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"9\"/></svg>"
+    };
+
+    static string NavAction(AppSection section) => section switch
+    {
+        AppSection.AuditLog => "Audit",
+        AppSection.SiteActs => "Acts",
+        _ => "Index"
+    };
+}
+
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1224" />
     <title>@ViewData["Title"] — СтройФинРиск</title>
+    <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body>
 <div class="app-shell">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
         <div class="brand">
-            <div class="brand-title">СтройФинРиск</div>
-            <div class="brand-sub">@roleName</div>
+            <div class="brand-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 21h18"/>
+                    <path d="M5 21V8l6-4 6 4v13"/>
+                    <path d="M9 21v-4h4v4"/>
+                    <path d="M9 10h.01M13 10h.01"/>
+                </svg>
+            </div>
+            <div>
+                <div class="brand-title">СтройФинРиск</div>
+                <div class="brand-sub">@roleName</div>
+            </div>
         </div>
+
         <nav class="nav-links">
+            <div class="nav-group-title">Разделы системы</div>
             @foreach (var sec in sections)
             {
-                string actionName = sec.Section == AppSection.AuditLog ? "Audit"
-                    : sec.Section == AppSection.SiteActs ? "Acts" : "Index";
+                string actionName = NavAction(sec.Section);
                 bool isActive = string.Equals(currentController, sec.Controller, StringComparison.OrdinalIgnoreCase)
                     && string.Equals(currentAction, actionName, StringComparison.OrdinalIgnoreCase);
 
                 <a class="nav-link @(isActive ? "active" : "")"
-                   asp-controller="@sec.Controller" asp-action="@actionName">@sec.Title</a>
+                   asp-controller="@sec.Controller" asp-action="@actionName"
+                   aria-current="@(isActive ? "page" : null)">
+                    <span class="nav-icon">@Html.Raw(SectionIcon(sec.Section))</span>
+                    <span>@sec.Title</span>
+                </a>
             }
         </nav>
+
         <div class="sidebar-footer">
-            <div style="color:#e2e8f0;font-weight:600">@fullName</div>
-            <div style="margin-bottom:10px">@User.Identity?.Name · @roleCode</div>
+            <div class="sidebar-user">
+                <div class="avatar">@initials</div>
+                <div class="sidebar-user-meta">
+                    <div class="sidebar-user-name" title="@fullName">@fullName</div>
+                    <div class="sidebar-user-role">@User.Identity?.Name · @roleCode</div>
+                </div>
+            </div>
             <form method="post" asp-controller="Account" asp-action="Logout">
-                <button type="submit" class="btn btn-outline btn-sm" style="width:100%">Выйти</button>
+                <button type="submit" class="btn btn-outline btn-sm">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                        <path d="m16 17 5-5-5-5"/>
+                        <path d="M21 12H9"/>
+                    </svg>
+                    Выйти из системы
+                </button>
             </form>
         </div>
     </aside>
 
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
     <div class="main-area">
         <header class="topbar">
-            <div class="topbar-title">@ViewData["Title"]</div>
+            <div class="topbar-left">
+                <button type="button" class="mobile-toggle" id="sidebarToggle" aria-label="Открыть меню" aria-controls="sidebar" aria-expanded="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                        <path d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+                <div>
+                    <h1 class="topbar-title">@ViewData["Title"]</h1>
+                    <div class="topbar-subtitle">@subtitle</div>
+                </div>
+            </div>
             <div class="topbar-user">
-                <span class="user-pill"><strong>@fullName</strong> · @roleName</span>
+                <span class="role-chip"><span class="status-dot"></span>@roleName</span>
+                <span class="user-pill">
+                    <span class="avatar avatar-sm">@initials</span>
+                    <span><strong>@fullName</strong></span>
+                </span>
             </div>
         </header>
 
         <main class="content">
             @if (TempData["Success"] is string ok)
             {
-                <div class="alert alert-success">@ok</div>
+                <div class="alert alert-success">
+                    <span class="alert-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                    </span>
+                    <span>@ok</span>
+                </div>
             }
             @if (TempData["Error"] is string err)
             {
-                <div class="alert alert-danger">@err</div>
+                <div class="alert alert-danger">
+                    <span class="alert-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+                    </span>
+                    <span>@err</span>
+                </div>
             }
             @RenderBody()
         </main>
     </div>
 </div>
+<script src="~/js/app.js" asp-append-version="true"></script>
 </body>
 </html>

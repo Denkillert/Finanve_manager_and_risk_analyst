@@ -2,13 +2,24 @@
 @using System.Security.Claims
 @{
     ViewData["Title"] = "Доступ ограничен";
+    ViewData["Subtitle"] = "Раздел не входит в полномочия текущей роли";
     var roleCode = User.FindFirstValue(ClaimTypes.Role) ?? "ProjectManager";
     var (landingCtrl, landingAct) = RolePermissions.GetLandingRoute(roleCode);
 }
-<div class="card">
-    <h2 style="margin-top:0;color:#991b1b">Доступ к разделу запрещён (HTTP 403)</h2>
-    <p>Данный раздел не входит в полномочия вашей роли (<code>@roleCode</code>). Используйте разделы, доступные в меню слева.</p>
-    <div class="inline-form">
+<div class="card" style="max-width:720px;margin:40px auto;text-align:center;padding:40px 32px">
+    <div class="kpi-icon red" style="width:56px;height:56px;border-radius:16px;margin:0 auto 18px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px">
+            <rect x="3" y="11" width="18" height="10" rx="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+    </div>
+    <h2 style="margin:0 0 8px;font-size:22px">Доступ к разделу запрещён</h2>
+    <p class="muted" style="margin:0 auto 6px;max-width:520px;font-size:13.5px">
+        Данный раздел не входит в полномочия вашей роли (<code>@roleCode</code>).
+        Используйте разделы, доступные в меню слева.
+    </p>
+    <p class="muted" style="margin-bottom:24px">Код ответа: HTTP 403</p>
+    <div class="inline-form" style="justify-content:center">
         <a class="btn" asp-controller="@landingCtrl" asp-action="@landingAct">Вернуться в доступный раздел</a>
         <form method="post" asp-controller="Account" asp-action="Logout" style="display:inline">
             <button type="submit" class="btn btn-outline">Выйти и войти под другой ролью</button>

@@ -27,10 +27,25 @@ public sealed class NavItemViewModel : ViewModelBase
     }
 }
 
-public sealed record LookupItem(Guid Id, string Display);
-public sealed record ReportChoice(string Key, string Title);
-public sealed record StatusFilterChoice(string? Key, string Title);
-public sealed record RequestTypeChoice(RequestType Type, string Title);
+public sealed record LookupItem(Guid Id, string Display)
+{
+    public override string ToString() => Display;
+}
+
+public sealed record ReportChoice(string Key, string Title)
+{
+    public override string ToString() => Title;
+}
+
+public sealed record StatusFilterChoice(string? Key, string Title)
+{
+    public override string ToString() => Title;
+}
+
+public sealed record RequestTypeChoice(RequestType Type, string Title)
+{
+    public override string ToString() => Title;
+}
 
 public sealed record ForecastGridRow(
     string Code,
@@ -269,6 +284,19 @@ public sealed class MainViewModel : ViewModelBase
     public string UserLogin => _session.Login;
     public string RoleName => _session.RoleName;
     public string RoleCode => _session.RoleCode;
+
+    public string UserInitials
+    {
+        get
+        {
+            var parts = UserFullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return "СФ";
+            return parts.Length == 1
+                ? parts[0][..1].ToUpperInvariant()
+                : (parts[0][..1] + parts[1][..1]).ToUpperInvariant();
+        }
+    }
+
     public string DatabaseModeLabel => _dbFactory.ProviderLabel;
 
     // Role Permissions (UI Control Visibility)

@@ -1,6 +1,7 @@
 @model ReportGridModel
 @{
-    ViewData["Title"] = "Регламентные отчёты и экспорт";
+    ViewData["Title"] = "Отчёты";
+    ViewData["Subtitle"] = "Регламентные формы, печать и экспорт в CSV";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
     var reports = roleCode == "RiskSpecialist"
         ? new (string Key, string Name)[]

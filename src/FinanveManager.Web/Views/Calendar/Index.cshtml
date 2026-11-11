@@ -1,6 +1,7 @@
 @model CalendarViewModel
 @{
-    ViewData["Title"] = "Платёжный календарь и кассовые разрывы";
+    ViewData["Title"] = "Платёжный календарь";
+    ViewData["Subtitle"] = "Прогноз остатка средств и кассовых разрывов на горизонте";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
     int horizonDays = ViewBag.HorizonDays is int h ? h : 90;
 }
@@ -27,20 +28,40 @@
 
     <div class="kpi-grid" style="margin-bottom:0">
         <div class="kpi-card">
-            <div class="kpi-label">Начальный остаток C(0)</div>
-            <div class="kpi-value">@Model.InitialCash.ToString("N2") тыс. р.</div>
+            <div class="kpi-top">
+                <div class="kpi-label">Начальный остаток C(0)</div>
+                <div class="kpi-icon blue">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.4"/><path d="M2.5 10h19"/><path d="M7 15h3"/></svg>
+                </div>
+            </div>
+            <div class="kpi-value">@Model.InitialCash.ToString("N2") <span style="font-size:13px;font-weight:600;color:var(--muted)">тыс. р.</span></div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-label">Неснижаемый минимум Cmin</div>
-            <div class="kpi-value">@Model.MinCashBalance.ToString("N2") тыс. р.</div>
+            <div class="kpi-top">
+                <div class="kpi-label">Неснижаемый минимум Cmin</div>
+                <div class="kpi-icon violet">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18V6"/><path d="M4 18h16"/><path d="M8 15l3.5-4 3 2.5L20 7"/></svg>
+                </div>
+            </div>
+            <div class="kpi-value">@Model.MinCashBalance.ToString("N2") <span style="font-size:13px;font-weight:600;color:var(--muted)">тыс. р.</span></div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-label">Дней с кассовым разрывом</div>
-            <div class="kpi-value" style="color:@(Model.GapDaysCount > 0 ? "#b91c1c" : "#065f46")">@Model.GapDaysCount</div>
+            <div class="kpi-top">
+                <div class="kpi-label">Дней с кассовым разрывом</div>
+                <div class="kpi-icon @(Model.GapDaysCount > 0 ? "red" : "green")">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2.4"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="M12 14v3M12 20h.01"/></svg>
+                </div>
+            </div>
+            <div class="kpi-value @(Model.GapDaysCount > 0 ? "red" : "green")">@Model.GapDaysCount</div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-label">Максимальный кассовый разрыв</div>
-            <div class="kpi-value" style="color:@(Model.MaxCashGap > 0 ? "#b91c1c" : "#065f46")">@Model.MaxCashGap.ToString("N2") тыс. р.</div>
+            <div class="kpi-top">
+                <div class="kpi-label">Максимальный кассовый разрыв</div>
+                <div class="kpi-icon @(Model.MaxCashGap > 0 ? "red" : "green")">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="m19 9-7 7-7-7"/></svg>
+                </div>
+            </div>
+            <div class="kpi-value @(Model.MaxCashGap > 0 ? "red" : "green")">@Model.MaxCashGap.ToString("N2") <span style="font-size:13px;font-weight:600;color:var(--muted)">тыс. р.</span></div>
         </div>
     </div>
 </div>
@@ -48,15 +69,20 @@
 @if (Model.OverdueCustomerItems.Any())
 {
     <div class="alert alert-warn">
-        <strong>Риск R-08 (просроченная дебиторская задолженность заказчика &gt; 10 дней):</strong>
-        @foreach (var oc in Model.OverdueCustomerItems)
-        {
-            <span>@oc.Description (@oc.Amount.ToString("N0") тыс. р., срок @oc.PlannedDate.ToString("dd.MM.yyyy")); </span>
-        }
+        <span class="alert-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+        </span>
+        <span>
+            <strong>Риск R-08 (просроченная дебиторская задолженность заказчика &gt; 10 дней):</strong>
+            @foreach (var oc in Model.OverdueCustomerItems)
+            {
+                <span>@oc.Description (@oc.Amount.ToString("N0") тыс. р., срок @oc.PlannedDate.ToString("dd.MM.yyyy")); </span>
+            }
+        </span>
     </div>
 }
 
-<div class="grid-2">
+<div class="grid-2 grid-stack">
     <div class="card">
         <div class="card-header">
             <h3 class="card-title">Поденный график остатка средств (@Model.Days.Count записей)</h3>
@@ -77,12 +103,12 @@
                 <tbody>
                     @foreach (var d in Model.Days.Where(x => x.DayIndex <= 10 || x.Inflows > 0 || x.Outflows > 0 || x.CashGap > 0))
                     {
-                        <tr style="background:@(d.CashGap > 0 ? "#fef2f2" : "transparent")">
+                        <tr style="background:@(d.CashGap > 0 ? "#fef4f4" : "transparent")">
                             <td>+@d.DayIndex</td>
                             <td>@d.Date.ToString("dd.MM.yyyy")</td>
                             <td class="num">@d.OpeningBalance.ToString("N2")</td>
-                            <td class="num" style="color:#065f46">@(d.Inflows > 0 ? $"+{d.Inflows:N2}" : "0.00")</td>
-                            <td class="num" style="color:#b91c1c">@(d.Outflows > 0 ? $"-{d.Outflows:N2}" : "0.00")</td>
+                            <td class="num text-green">@(d.Inflows > 0 ? $"+{d.Inflows:N2}" : "0.00")</td>
+                            <td class="num text-red">@(d.Outflows > 0 ? $"-{d.Outflows:N2}" : "0.00")</td>
                             <td class="num"><strong>@d.ClosingBalance.ToString("N2")</strong></td>
                             <td class="num">
                                 @if (d.CashGap > 0)

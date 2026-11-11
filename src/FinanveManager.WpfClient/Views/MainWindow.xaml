@@ -7,7 +7,16 @@
         MinWidth="1040"
         MinHeight="680"
         WindowStartupLocation="CenterScreen"
-        Background="#F1F5F9">
+        WindowState="Maximized"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display"
+        Background="#F4F6FB">
+    <Window.Resources>
+        <Style x:Key="TrimmedCellText" TargetType="TextBlock">
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+            <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+        </Style>
+    </Window.Resources>
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="235"/>
@@ -15,33 +24,49 @@
         </Grid.ColumnDefinitions>
 
         <!-- Левая боковая навигация (только разрешённые для роли разделы) -->
-        <Border Grid.Column="0" Background="#0F172A">
+        <Border Grid.Column="0" Background="{StaticResource BrushSidebar}">
             <DockPanel LastChildFill="True">
-                <Border DockPanel.Dock="Top" Padding="18,18,18,14" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
-                    <StackPanel>
-                        <TextBlock Text="СтройФинРиск" Foreground="White" FontSize="19" FontWeight="Bold"/>
-                        <TextBlock Text="{Binding RoleName}" Foreground="#94A3B8" FontSize="12" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                <Border DockPanel.Dock="Top" Padding="16,18,16,16" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="38" Height="38" CornerRadius="11" Background="{StaticResource BrushBrandMark}"
+                                VerticalAlignment="Center" Margin="0,0,10,0">
+                            <Path Data="M 4 22 L 20 22 M 6 22 L 6 9 L 13 5 L 20 9 L 20 22 M 10 22 L 10 16 L 16 16 L 16 22"
+                                  Stroke="White" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  Stretch="Uniform" Margin="8"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="СтройФинРиск" Foreground="White" FontSize="17" FontWeight="Bold"/>
+                            <TextBlock Text="{Binding RoleName}" Foreground="#94A3B8" FontSize="11" Margin="0,2,0,0"
+                                       TextWrapping="Wrap" MaxWidth="150"/>
+                        </StackPanel>
                     </StackPanel>
                 </Border>
 
-                <Border DockPanel.Dock="Bottom" Padding="14" BorderBrush="#1E293B" BorderThickness="0,1,0,0">
+                <Border DockPanel.Dock="Bottom" Padding="12,12,12,14" BorderBrush="#1E293B" BorderThickness="0,1,0,0">
                     <StackPanel>
-                        <TextBlock Text="{Binding UserFullName}" Foreground="#E2E8F0" FontWeight="SemiBold" FontSize="12.5" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Margin="0,2,0,10" Foreground="#94A3B8" FontSize="11.5">
-                            <Run Text="{Binding UserLogin, Mode=OneWay}"/>
-                            <Run Text=" · "/>
-                            <Run Text="{Binding RoleCode, Mode=OneWay}"/>
-                        </TextBlock>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <Border Width="32" Height="32" CornerRadius="16" Background="#24365A" Margin="0,0,9,0">
+                                <TextBlock Text="{Binding UserInitials}" Foreground="#BFDBFE" FontSize="11.5"
+                                           FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <StackPanel VerticalAlignment="Center" MaxWidth="150">
+                                <TextBlock Text="{Binding UserFullName}" Foreground="#E2E8F0" FontWeight="SemiBold"
+                                           FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Foreground="#8FA2BD" FontSize="10.5" TextTrimming="CharacterEllipsis">
+                                    <Run Text="{Binding UserLogin, Mode=OneWay}"/>
+                                    <Run Text=" · "/>
+                                    <Run Text="{Binding RoleCode, Mode=OneWay}"/>
+                                </TextBlock>
+                            </StackPanel>
+                        </StackPanel>
                         <Button Content="Обновить данные"
                                 Command="{Binding RefreshCommand}"
-                                Background="#1E293B" Foreground="#E2E8F0" BorderThickness="0"
-                                Padding="10,7" Margin="0,0,0,6" Cursor="Hand"/>
+                                Style="{StaticResource SidebarPrimaryButton}"
+                                Margin="0,0,0,6"/>
                         <Button x:Name="LogoutButton"
                                 Content="Выйти / Сменить роль"
                                 Click="LogoutButton_OnClick"
-                                Background="Transparent" Foreground="#CBD5E1"
-                                BorderBrush="#334155" BorderThickness="1"
-                                Padding="10,7" Cursor="Hand"/>
+                                Style="{StaticResource SidebarOutlineButton}"/>
                     </StackPanel>
                 </Border>
 
@@ -52,31 +77,7 @@
                                 <Button Content="{Binding Title}"
                                         Command="{Binding DataContext.SelectSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                         CommandParameter="{Binding}"
-                                        HorizontalContentAlignment="Left"
-                                        Padding="12,10"
-                                        Margin="0,0,0,4"
-                                        BorderThickness="0"
-                                        Cursor="Hand"
-                                        FontSize="13">
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Background" Value="Transparent"/>
-                                            <Setter Property="Foreground" Value="#CBD5E1"/>
-                                            <Setter Property="FontWeight" Value="Normal"/>
-                                            <Style.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="#1E293B"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                </Trigger>
-                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                    <Setter Property="Background" Value="#2563EB"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                    <Setter Property="FontWeight" Value="SemiBold"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
+                                        Style="{StaticResource NavButton}"/>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -87,17 +88,25 @@
         <!-- Основная рабочая область -->
         <DockPanel Grid.Column="1" LastChildFill="True">
             <!-- Верхняя строка заголовка -->
-            <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E2E8F0" BorderThickness="0,0,0,1" Padding="22,13">
+            <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E5EAF2" BorderThickness="0,0,0,1" Padding="24,13">
                 <DockPanel>
-                    <Border DockPanel.Dock="Right" Background="#EFF6FF" CornerRadius="12" Padding="10,4" VerticalAlignment="Center">
-                        <TextBlock Text="{Binding DatabaseModeLabel}" Foreground="#1D4ED8" FontSize="11.5" FontWeight="SemiBold"/>
-                    </Border>
-                    <TextBlock Text="{Binding SelectedSectionTitle}" FontSize="17" FontWeight="SemiBold" Foreground="#0F172A" VerticalAlignment="Center"/>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Background="#EFF6FF" CornerRadius="12" Padding="11,5" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="7" Height="7" Fill="#22C55E" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding DatabaseModeLabel}" Foreground="#1D4ED8" FontSize="11.5" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding SelectedSectionTitle}" FontSize="18" FontWeight="Bold" Foreground="#0F172A"/>
+                        <TextBlock Text="Рабочее пространство финансового контура" FontSize="11.5" Foreground="#64748B" Margin="0,1,0,0"/>
+                    </StackPanel>
                 </DockPanel>
             </Border>
 
             <!-- Нижняя строка статуса -->
-            <Border DockPanel.Dock="Bottom" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Padding="18,8">
+            <Border DockPanel.Dock="Bottom" BorderBrush="#E5EAF2" BorderThickness="0,1,0,0" Padding="20,8">
                 <Border.Style>
                     <Style TargetType="Border">
                         <Setter Property="Background" Value="White"/>
@@ -124,7 +133,7 @@
             </Border>
 
             <!-- Контент активного раздела -->
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="20">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24">
                 <Grid>
                     <!-- 1. Обзор портфеля -->
                     <StackPanel Visibility="{Binding IsDashboardSection, Converter={StaticResource BoolToVis}}">
@@ -201,7 +210,7 @@
                                             <DataGridTextColumn Header="Статус" Binding="{Binding StatusText}" Width="120"/>
                                             <DataGridTextColumn Header="К оплате" Binding="{Binding PayableAmount, StringFormat=N2}" Width="85"/>
                                             <DataGridTextColumn Header="Дата" Binding="{Binding PlannedDate, StringFormat=dd.MM.yyyy}" Width="85"/>
-                                            <DataGridTextColumn Header="Примечание" Binding="{Binding NoteText}" Width="*"/>
+                                            <DataGridTextColumn Header="Примечание" Binding="{Binding NoteText}" Width="*" ElementStyle="{StaticResource TrimmedCellText}"/>
                                         </DataGrid.Columns>
                                     </DataGrid>
                                 </StackPanel>
@@ -240,7 +249,7 @@
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Уровень" Binding="{Binding SeverityText}" Width="120"/>
                                         <DataGridTextColumn Header="Заголовок" Binding="{Binding Title}" Width="260"/>
-                                        <DataGridTextColumn Header="Сообщение" Binding="{Binding Message}" Width="*"/>
+                                        <DataGridTextColumn Header="Сообщение" Binding="{Binding Message}" Width="*" ElementStyle="{StaticResource TrimmedCellText}"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
                             </StackPanel>
@@ -295,7 +304,7 @@
                                         <TextBlock Text="Адрес объекта" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewProjectObjectAddress}" Padding="6,5"/>
                                     </StackPanel>
-                                    <StackPanel Width="260" Margin="0,0,10,8">
+                                    <StackPanel Width="300" Margin="0,0,10,8">
                                         <TextBlock Text="Назначить руководителя (прораба)" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
                                         <ComboBox ItemsSource="{Binding ProjectManagerUserLookups}" SelectedItem="{Binding SelectedNewProjectManager}" DisplayMemberPath="Display" Padding="6,5"/>
                                     </StackPanel>
@@ -307,7 +316,7 @@
                                 <TextBlock Text="Добавление объекта строительства и этапа работ (PV) к существующему проекту"
                                            FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,8"/>
                                 <WrapPanel>
-                                    <ComboBox ItemsSource="{Binding ProjectLookups}" SelectedItem="{Binding ObjectStageProject}" DisplayMemberPath="Display" Width="210" Padding="6,5" Margin="0,0,8,6"/>
+                                    <ComboBox ItemsSource="{Binding ProjectLookups}" SelectedItem="{Binding ObjectStageProject}" DisplayMemberPath="Display" Width="250" Padding="6,5" Margin="0,0,8,6"/>
                                     <TextBox Text="{Binding NewObjectName}" Width="180" Padding="6,5" Margin="0,0,8,6" ToolTip="Наименование объекта"/>
                                     <TextBox Text="{Binding NewObjectAddress}" Width="150" Padding="6,5" Margin="0,0,8,6" ToolTip="Адрес"/>
                                     <TextBox Text="{Binding NewStageName}" Width="190" Padding="6,5" Margin="0,0,8,6" ToolTip="Этап работ"/>
@@ -323,8 +332,8 @@
                                 <TextBlock Text="Команда проекта и закреплённые руководители (прорабы)"
                                            FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
                                 <WrapPanel Margin="0,0,0,10">
-                                    <ComboBox ItemsSource="{Binding ProjectLookups}" SelectedItem="{Binding AssignProject}" DisplayMemberPath="Display" Width="220" Padding="6,5" Margin="0,0,8,6"/>
-                                    <ComboBox ItemsSource="{Binding AssignableUserLookups}" SelectedItem="{Binding AssignUser}" DisplayMemberPath="Display" Width="260" Padding="6,5" Margin="0,0,8,6"/>
+                                    <ComboBox ItemsSource="{Binding ProjectLookups}" SelectedItem="{Binding AssignProject}" DisplayMemberPath="Display" Width="250" Padding="6,5" Margin="0,0,8,6"/>
+                                    <ComboBox ItemsSource="{Binding AssignableUserLookups}" SelectedItem="{Binding AssignUser}" DisplayMemberPath="Display" Width="310" Padding="6,5" Margin="0,0,8,6"/>
                                     <TextBox Text="{Binding AssignRoleInput}" Width="210" Padding="6,5" Margin="0,0,8,6" ToolTip="Проектная роль"/>
                                     <CheckBox IsChecked="{Binding AssignIsPrimaryManager}" Content="Ответственный прораб / РП" VerticalAlignment="Center" Margin="0,0,10,6"/>
                                     <Button Content="Назначить в проект" Command="{Binding AssignMemberCommand}" Style="{StaticResource SuccessButton}" Margin="0,0,8,6"/>
@@ -447,8 +456,8 @@
                                         <DataGridTextColumn Header="К оплате" Binding="{Binding PayableAmount, StringFormat=N2}" Width="90"/>
                                         <DataGridTextColumn Header="Вал." Binding="{Binding Currency}" Width="50"/>
                                         <DataGridTextColumn Header="Дата" Binding="{Binding PlannedDate, StringFormat=dd.MM.yyyy}" Width="88"/>
-                                        <DataGridTextColumn Header="Статус" Binding="{Binding StatusText}" Width="145"/>
-                                        <DataGridTextColumn Header="Контроль / ЭЦП / Примечание" Binding="{Binding NoteText}" Width="*"/>
+                                        <DataGridTextColumn Header="Статус" Binding="{Binding StatusText}" Width="170"/>
+                                        <DataGridTextColumn Header="Контроль / ЭЦП / Примечание" Binding="{Binding NoteText}" Width="*" ElementStyle="{StaticResource TrimmedCellText}"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
 
@@ -634,7 +643,7 @@
                                 <ColumnDefinition Width="14"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Style="{StaticResource CardBorder}">
+                            <Border Grid.Column="0" Style="{StaticResource CardBorder}" VerticalAlignment="Top">
                                 <StackPanel>
                                     <TextBlock Text="Поденный остаток C(t) и кассовые разрывы (дефицит выделен цветом)" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
                                     <DataGrid ItemsSource="{Binding CalendarDays}" MaxHeight="440">
@@ -659,7 +668,7 @@
                                     </DataGrid>
                                 </StackPanel>
                             </Border>
-                            <Border Grid.Column="2" Style="{StaticResource CardBorder}">
+                            <Border Grid.Column="2" Style="{StaticResource CardBorder}" VerticalAlignment="Top">
                                 <StackPanel>
                                     <TextBlock Text="График платежей по договорам" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
                                     <DataGrid ItemsSource="{Binding ScheduleItems}" SelectedItem="{Binding SelectedScheduleItem}" MaxHeight="380">
@@ -693,9 +702,9 @@
                                 <DataGrid ItemsSource="{Binding Contracts}" MaxHeight="200">
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Номер" Binding="{Binding Number}" Width="125"/>
-                                        <DataGridTextColumn Header="Контрагент" Binding="{Binding Counterparty}" Width="210"/>
+                                        <DataGridTextColumn Header="Контрагент" Binding="{Binding Counterparty}" Width="210" ElementStyle="{StaticResource TrimmedCellText}"/>
                                         <DataGridTextColumn Header="УНП" Binding="{Binding Unp}" Width="90"/>
-                                        <DataGridTextColumn Header="Направление" Binding="{Binding DirectionText}" Width="165"/>
+                                        <DataGridTextColumn Header="Направление" Binding="{Binding DirectionText}" Width="200" ElementStyle="{StaticResource TrimmedCellText}"/>
                                         <DataGridTextColumn Header="Сумма" Binding="{Binding EffectiveAmount, StringFormat=N2}" Width="95"/>
                                         <DataGridTextColumn Header="Вал." Binding="{Binding Currency}" Width="48"/>
                                         <DataGridTextColumn Header="Обязат. O" Binding="{Binding GrossObligations, StringFormat=N2}" Width="90"/>
@@ -838,8 +847,8 @@
                                 <DataGrid ItemsSource="{Binding Risks}" SelectedItem="{Binding SelectedRisk}" MaxHeight="240">
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="Код" Binding="{Binding Code}" Width="55"/>
-                                        <DataGridTextColumn Header="Событие" Binding="{Binding Event}" Width="260"/>
-                                        <DataGridTextColumn Header="Владелец" Binding="{Binding OwnerRole}" Width="105"/>
+                                        <DataGridTextColumn Header="Событие" Binding="{Binding Event}" Width="320" ElementStyle="{StaticResource TrimmedCellText}"/>
+                                        <DataGridTextColumn Header="Владелец" Binding="{Binding OwnerRole}" Width="200" ElementStyle="{StaticResource TrimmedCellText}"/>
                                         <DataGridTextColumn Header="p" Binding="{Binding Probability, StringFormat=P0}" Width="50"/>
                                         <DataGridTextColumn Header="Ущерб C" Binding="{Binding MonetaryImpact, StringFormat=N0}" Width="75"/>
                                         <DataGridTextColumn Header="R" Binding="{Binding IntegralScore}" Width="40"/>
@@ -947,10 +956,10 @@
 
                                     <DataGrid ItemsSource="{Binding Users}" SelectedItem="{Binding SelectedUser}" MaxHeight="360">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Логин" Binding="{Binding Login}" Width="105"/>
-                                            <DataGridTextColumn Header="ФИО" Binding="{Binding FullName}" Width="185"/>
+                                            <DataGridTextColumn Header="Логин" Binding="{Binding Login}" Width="100"/>
+                                            <DataGridTextColumn Header="ФИО" Binding="{Binding FullName}" Width="215" ElementStyle="{StaticResource TrimmedCellText}"/>
                                             <DataGridTextColumn Header="Роль" Binding="{Binding Role.Name}" Width="*"/>
-                                            <DataGridCheckBoxColumn Header="Активен" Binding="{Binding IsActive, Mode=OneWay}" Width="75"/>
+                                            <DataGridCheckBoxColumn Header="Активен" Binding="{Binding IsActive, Mode=OneWay}" Width="70"/>
                                         </DataGrid.Columns>
                                     </DataGrid>
                                     <Button Content="Включить / отключить выбранного пользователя"
@@ -972,9 +981,9 @@
 
                                     <DataGrid ItemsSource="{Binding NormRules}" MaxHeight="220" Margin="0,0,0,12">
                                         <DataGrid.Columns>
-                                            <DataGridTextColumn Header="Код" Binding="{Binding Code}" Width="90"/>
-                                            <DataGridTextColumn Header="Наименование" Binding="{Binding Name}" Width="190"/>
-                                            <DataGridTextColumn Header="Значение" Binding="{Binding ValueText}" Width="*"/>
+                                            <DataGridTextColumn Header="Код" Binding="{Binding Code}" Width="115"/>
+                                            <DataGridTextColumn Header="Наименование" Binding="{Binding Name}" Width="240" ElementStyle="{StaticResource TrimmedCellText}"/>
+                                            <DataGridTextColumn Header="Значение" Binding="{Binding ValueText}" Width="*" ElementStyle="{StaticResource TrimmedCellText}"/>
                                         </DataGrid.Columns>
                                     </DataGrid>
 

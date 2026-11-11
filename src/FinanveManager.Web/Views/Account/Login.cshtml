@@ -7,14 +7,59 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1224" />
     <title>Авторизация — СтройФинРиск</title>
+    <link rel="icon" type="image/svg+xml" href="~/favicon.svg" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
 </head>
 <body class="login-page">
-<div class="login-shell">
-    <div class="card">
-        <h2 style="margin-top:0">Вход в систему «СтройФинРиск»</h2>
-        <p class="muted">Интерфейс и доступные разделы автоматически настраиваются под вашу роль (табл. 1.8, НФТ-1).</p>
+<main class="login-shell">
+    <section class="login-brand">
+        <div class="login-logo">
+            <div class="brand-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 21h18"/>
+                    <path d="M5 21V8l6-4 6 4v13"/>
+                    <path d="M9 21v-4h4v4"/>
+                    <path d="M9 10h.01M13 10h.01"/>
+                </svg>
+            </div>
+            <div>
+                <h1>СтройФинРиск</h1>
+                <div class="brand-tag">Finance &amp; Risk Analyst</div>
+            </div>
+        </div>
+
+        <p class="lead">
+            Сетевое программное средство управления финансами проектов
+            и анализа рисков строительной компании.
+        </p>
+
+        <ul class="login-features">
+            <li>
+                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                Контроль свободного лимита L<sub>дост</sub> = B − O и платёжной дисциплины
+            </li>
+            <li>
+                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                Матрица рисков 5×5 и портфельный резерв P80
+            </li>
+            <li>
+                <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+                Разграничение прав по 7 ролям и журнал аудита
+            </li>
+        </ul>
+
+        <div class="login-brand-footer">
+            Веб-клиент предназначен для оперативного контура:
+            <strong>финансовый менеджер</strong>, <strong>руководитель проекта</strong>
+            и <strong>специалист по рискам</strong>.
+        </div>
+    </section>
+
+    <section class="login-card">
+        <h2>Вход в систему</h2>
+        <p class="login-sub">Интерфейс и доступные разделы настраиваются под вашу роль автоматически.</p>
 
         @if (!string.IsNullOrEmpty(Model.InfoMessage))
         {
@@ -26,60 +71,58 @@
         }
 
         <form method="post" asp-controller="Account" asp-action="Login">
-            <div class="field" style="margin-bottom:10px">
+            <div class="field">
                 <label for="Login">Логин</label>
-                <input id="Login" name="Login" value="@Model.Login" autocomplete="username" required />
+                <input id="Login" name="Login" value="@Model.Login" autocomplete="username" placeholder="Введите логин" required />
             </div>
-            <div class="field" style="margin-bottom:14px">
+            <div class="field">
                 <label for="Password">Пароль</label>
-                <input id="Password" name="Password" type="password" value="@Model.Password" autocomplete="current-password" required />
+                <input id="Password" name="Password" type="password" value="@Model.Password" autocomplete="current-password" placeholder="Введите пароль" required />
             </div>
             @if (Model.RequiresTwoFactor)
             {
-                <div class="field" style="margin-bottom:14px">
-                    <label for="TwoFactorCode">Код 2FA</label>
-                    <input id="TwoFactorCode" name="TwoFactorCode" value="@Model.TwoFactorCode" />
+                <div class="field">
+                    <label for="TwoFactorCode">Код двухфакторной аутентификации</label>
+                    <input id="TwoFactorCode" name="TwoFactorCode" value="@Model.TwoFactorCode" placeholder="6-значный код" />
                 </div>
             }
-            <button type="submit" class="btn" style="width:100%">Войти</button>
+            <button type="submit" class="btn">Войти в систему</button>
         </form>
-        <p class="muted" style="margin-top:12px">
-            База данных MS SQL Server: <code>@(string.IsNullOrEmpty(Model.DatabaseName) ? "FinanveManagerDb" : Model.DatabaseName)</code> ·
-            Демонстрационный пароль: <code>StroyFin2026!</code>
-        </p>
-        <p class="muted" style="margin-bottom:0">
-            Согласно НФТ-1 (табл. 1.8), в Веб-клиенте работают 3 роли: <strong>Финансовый менеджер</strong>, <strong>Руководитель проекта</strong> и <strong>Специалист по рискам</strong>.
-            Остальные 4 роли (<strong>Руководитель организации</strong>, <strong>Бухгалтер</strong>, <strong>Специалист по снабжению</strong>, <strong>Администратор системы</strong>) работают в настольном WPF-клиенте.
-        </p>
-    </div>
 
-    <div class="card">
+        <div class="login-meta">
+            База данных MS SQL Server: <code>@(string.IsNullOrEmpty(Model.DatabaseName) ? "FinanveManagerDb" : Model.DatabaseName)</code><br />
+            Демонстрационный пароль: <code>StroyFin2026!</code>
+        </div>
+
         @if (!Model.HasUsers)
         {
-            <h3 style="margin-top:0">База данных пуста</h3>
-            <div class="alert alert-info">
-                Подключение к MS SQL Server установлено, структура таблиц создана, но учётные записи пользователей ещё отсутствуют.
-                Вы можете выполнить скрипт <code>database/02_seed_data.sql</code> в SSMS или выбрать способ инициализации ниже:
-            </div>
-            <form method="post" asp-controller="Account" asp-action="InitializeRolesAndAdmin" style="margin-bottom:10px">
+            <div class="divider"></div>
+            <h3 class="card-title" style="margin-bottom:6px">База данных пуста</h3>
+            <p class="muted" style="margin-top:0">
+                Структура таблиц создана, но учётные записи отсутствуют. Выполните
+                <code>database/02_seed_data.sql</code> или выберите способ инициализации:
+            </p>
+            <form method="post" asp-controller="Account" asp-action="InitializeRolesAndAdmin" style="margin-bottom:9px">
                 <button type="submit" class="btn btn-outline" style="width:100%">
-                    Создать 7 ролей (табл. 1.8), admin и director (CEO) без демо-проектов
+                    Создать 7 ролей, admin и director без демо-проектов
                 </button>
             </form>
             <form method="post" asp-controller="Account" asp-action="InitializeDemoData">
                 <button type="submit" class="btn btn-success" style="width:100%">
-                    Загрузить контрольные примеры главы 1 (7 ролей, проекты, 12 рисков)
+                    Загрузить контрольные примеры главы 1
                 </button>
             </form>
         }
         else
         {
-            <h3 style="margin-top:0">Роли Веб-клиента (табл. 1.8)</h3>
-            <p class="muted">Нажмите на роль, чтобы подставить логин и пароль в форму входа:</p>
+            <div class="divider"></div>
+            <h3 class="card-title" style="margin-bottom:4px">Демонстрационные роли</h3>
+            <p class="muted" style="margin-top:0">Нажмите на карточку, чтобы подставить логин и пароль.</p>
             @if (!Model.DemoUsers.Any())
             {
                 <div class="alert alert-info">
-                    В базе пока нет активных веб-пользователей. Создайте их через WPF-клиент администратора (<code>admin</code>) или выполните <code>database/02_seed_data.sql</code>.
+                    В базе нет активных веб-пользователей. Создайте их через WPF-клиент администратора
+                    (<code>admin</code>) или выполните <code>database/02_seed_data.sql</code>.
                 </div>
             }
             else
@@ -87,25 +130,29 @@
                 <div class="demo-grid">
                     @foreach (var u in Model.DemoUsers)
                     {
-                        <button type="button" class="demo-btn"
-                                onclick="fillLogin('@u.Login')">
-                            <div style="font-weight:700">@u.RoleName</div>
-                            <div class="muted">@u.FullName</div>
-                            <div style="margin-top:4px;font-size:11.5px">
+                        <button type="button" class="demo-btn" onclick="fillLogin('@u.Login')">
+                            <div style="font-weight:700;font-size:12.5px">@u.RoleName</div>
+                            <div class="muted" style="margin-top:2px">@u.FullName</div>
+                            <div style="margin-top:6px;font-size:11px">
                                 <code>@u.Login</code> · <span class="badge badge-info">@u.RoleCode</span>
                             </div>
                         </button>
                     }
                 </div>
             }
+            <p class="login-note">
+                Остальные роли — руководитель организации, бухгалтер, специалист по снабжению
+                и администратор — работают в настольном WPF-клиенте.
+            </p>
         }
-    </div>
-</div>
+    </section>
+</main>
 <script>
-function fillLogin(login) {
-    document.getElementById('Login').value = login;
-    document.getElementById('Password').value = 'StroyFin2026!';
-}
+    function fillLogin(login) {
+        document.getElementById('Login').value = login;
+        document.getElementById('Password').value = 'StroyFin2026!';
+        document.getElementById('Password').focus();
+    }
 </script>
 </body>
 </html>

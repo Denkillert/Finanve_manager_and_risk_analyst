@@ -1,6 +1,7 @@
 @model ProjectsBudgetsViewModel
 @{
-    ViewData["Title"] = "Проекты, объекты, этапы и версионирование бюджетов";
+    ViewData["Title"] = "Проекты и бюджеты";
+    ViewData["Subtitle"] = "Портфель проектов, команды, лимиты и версии бюджетов";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
     var canEditBudgets = roleCode is "FinancialManager" or "CEO";
     var objDict = Model.Objects.ToDictionary(o => o.Id);

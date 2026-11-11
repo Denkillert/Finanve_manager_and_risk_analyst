@@ -111,7 +111,8 @@ public class ControlExamplesAndWorkflowTests
 
         var matrix = RiskCalculator.BuildRiskMatrix(risks);
         Assert.Equal(25, matrix.Count);
-        Assert.Contains(matrix, m => m.IntegralScore == 16 && m.RiskCodes.Contains("R-02"));
+        // R-02: p = 0,46 → балл вероятности 3; C = 450 → балл влияния 4; R = 3 × 4 = 12.
+        Assert.Contains(matrix, m => m.IntegralScore == 12 && m.RiskCodes.Contains("R-02"));
     }
 
     [Fact]

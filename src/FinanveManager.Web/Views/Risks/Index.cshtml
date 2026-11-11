@@ -1,6 +1,7 @@
 @model RisksViewModel
 @{
-    ViewData["Title"] = "Реестр рисков, матрица 5×5, резерв P80 и торнадо-анализ";
+    ViewData["Title"] = "Риски и резерв P80";
+    ViewData["Subtitle"] = "Матрица 5×5, реестр рисков и анализ чувствительности EAC";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
 }
 
@@ -20,23 +21,43 @@
 
     <div class="kpi-grid" style="margin-bottom:0">
         <div class="kpi-card">
-            <div class="kpi-label">ΣEMV (ожидаемые потери)</div>
-            <div class="kpi-value">@Model.Summary.TotalEmv.ToString("N2") тыс. р.</div>
+            <div class="kpi-top">
+                <div class="kpi-label">ΣEMV (ожидаемые потери)</div>
+                <div class="kpi-icon amber">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-3.6 8-10V5l-8-3-8 3v7c0 6.4 8 10 8 10z"/><path d="M12 8v4M12 16h.01"/></svg>
+                </div>
+            </div>
+            <div class="kpi-value">@Model.Summary.TotalEmv.ToString("N2") <span style="font-size:13px;font-weight:600;color:var(--muted)">тыс. р.</span></div>
             <div class="kpi-sub">Контроль PRJ-2026-01: 1 340,00 тыс. р.</div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-label">Портфельное СКО σ</div>
-            <div class="kpi-value">@Model.Summary.Sigma.ToString("N2") тыс. р.</div>
+            <div class="kpi-top">
+                <div class="kpi-label">Портфельное СКО σ</div>
+                <div class="kpi-icon violet">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-8"/><path d="M15 8h5v5"/></svg>
+                </div>
+            </div>
+            <div class="kpi-value">@Model.Summary.Sigma.ToString("N2") <span style="font-size:13px;font-weight:600;color:var(--muted)">тыс. р.</span></div>
             <div class="kpi-sub">Контроль PRJ-2026-01: 723,22 тыс. р.</div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-label">Резерв P80</div>
-            <div class="kpi-value" style="color:#1d4ed8">@Model.Summary.ReserveP80.ToString("N2") тыс. р.</div>
+            <div class="kpi-top">
+                <div class="kpi-label">Резерв P80</div>
+                <div class="kpi-icon blue">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 6.5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+            </div>
+            <div class="kpi-value blue">@Model.Summary.ReserveP80.ToString("N2") <span style="font-size:13px;font-weight:600;color:var(--muted)">тыс. р.</span></div>
             <div class="kpi-sub">Контроль PRJ-2026-01: 1 947,51 / 1 948 тыс. р.</div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-label">Остаточный EMV после мер</div>
-            <div class="kpi-value" style="color:#065f46">@Model.Summary.TotalResidualEmv.ToString("N2") тыс. р.</div>
+            <div class="kpi-top">
+                <div class="kpi-label">Остаточный EMV после мер</div>
+                <div class="kpi-icon green">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+            </div>
+            <div class="kpi-value green">@Model.Summary.TotalResidualEmv.ToString("N2") <span style="font-size:13px;font-weight:600;color:var(--muted)">тыс. р.</span></div>
             <div class="kpi-sub">Снижение риска ΔEMV: −@Model.Summary.EmvReduction.ToString("N2")</div>
         </div>
     </div>
@@ -47,7 +68,7 @@
         <h3 class="card-title">Матрица вероятности и влияния 5×5 (табл. 1.16, R = p_б × I)</h3>
         <span class="muted">1–4 Низкий · 5–9 Умеренный · 10–16 Высокий · 20–25 Критический</span>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap" style="padding:14px">
         <div class="risk-matrix">
             <div class="risk-matrix-head">p_б \ I</div>
             <div class="risk-matrix-head">1 (≤150)</div>
@@ -73,6 +94,12 @@
             }
         </div>
     </div>
+    <div class="risk-legend">
+        <span><i style="background:#a7f3d0"></i>Низкий (1–4)</span>
+        <span><i style="background:#fde68a"></i>Умеренный (5–9)</span>
+        <span><i style="background:#fdba74"></i>Высокий (10–16)</span>
+        <span><i style="background:#fca5a5"></i>Критический (17–25)</span>
+    </div>
 </div>
 
 <div class="card">
@@ -80,7 +107,7 @@
         <h3 class="card-title">Реестр рисков проекта (@Model.Risks.Count записей)</h3>
     </div>
     <div class="table-wrap">
-        <table>
+        <table class="table-compact risk-register">
             <thead>
                 <tr>
                     <th>Код</th>
@@ -90,7 +117,7 @@
                     <th>Интеграл R (Зона)</th>
                     <th class="num">EMV / Остат. EMV</th>
                     <th>Статус</th>
-                    <th>Переоценка (RiskSpecialist / PM / CEO)</th>
+                    <th>Переоценка</th>
                 </tr>
             </thead>
             <tbody>
@@ -152,7 +179,7 @@
                         <th class="num">База</th>
                         <th>Сдвиг</th>
                         <th class="num">Влияние ΔEAC</th>
-                        <th>Относительный размах</th>
+                        <th title="Относительный размах влияния на EAC">Размах</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -167,9 +194,9 @@
                             <td class="num">@f.BaseAmount.ToString("N0")</td>
                             <td>@f.RangeLabel</td>
                             <td class="num"><strong>+@f.ImpactOnEac.ToString("N2")</strong></td>
-                            <td style="width:160px">
-                                <div style="background:#e2e8f0;border-radius:4px;height:12px;overflow:hidden">
-                                    <div style="background:#2563eb;height:100%;width:@(pct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                            <td style="width:170px">
+                                <div class="progress">
+                                    <span style="width:@(pct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></span>
                                 </div>
                             </td>
                         </tr>

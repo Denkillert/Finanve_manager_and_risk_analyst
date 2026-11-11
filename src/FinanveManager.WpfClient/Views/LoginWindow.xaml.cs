@@ -9,6 +9,8 @@ namespace FinanveManager.WpfClient.Views;
 public sealed record DemoAccountChoice(string Login, string RoleCode, string RoleName, bool RequiresTwoFactor)
 {
     public string Display => RequiresTwoFactor ? $"{RoleName} ({Login}, 2FA)" : $"{RoleName} ({Login})";
+
+    public override string ToString() => Display;
 }
 
 public partial class LoginWindow : Window

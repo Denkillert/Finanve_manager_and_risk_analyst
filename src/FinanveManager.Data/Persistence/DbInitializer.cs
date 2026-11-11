@@ -206,7 +206,8 @@ public static class DbInitializer
         bool isIncomplete;
         bool hasRows;
 
-        await using (var targetConn = new SqlConnection(targetConnStr))
+        var inspectBuilder = new SqlConnectionStringBuilder(targetConnStr) { Pooling = false };
+        await using (var targetConn = new SqlConnection(inspectBuilder.ConnectionString))
         {
             await targetConn.OpenAsync(ct);
             await using var inspectCmd = targetConn.CreateCommand();
@@ -241,18 +242,22 @@ public static class DbInitializer
 
         // Если предыдущая попытка создания пустой БД оборвалась на середине DDL, безопасно пересоздаём пустую БД
         string escapedName = databaseName.Replace("]", "]]");
-        await using var masterConn = new SqlConnection(masterConnStr);
-        await masterConn.OpenAsync(ct);
-        await using var dropCmd = masterConn.CreateCommand();
-        dropCmd.CommandText = $"""
-            IF DB_ID(@dbName) IS NOT NULL
-            BEGIN
-                ALTER DATABASE [{escapedName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-                DROP DATABASE [{escapedName}];
-            END
-            """;
-        dropCmd.Parameters.AddWithValue("@dbName", databaseName);
-        await dropCmd.ExecuteNonQueryAsync(ct);
+        var cleanMasterBuilder = new SqlConnectionStringBuilder(masterConnStr) { Pooling = false };
+        await using (var masterConn = new SqlConnection(cleanMasterBuilder.ConnectionString))
+        {
+            await masterConn.OpenAsync(ct);
+            await using var dropCmd = masterConn.CreateCommand();
+            dropCmd.CommandText = $"""
+                IF DB_ID(@dbName) IS NOT NULL
+                BEGIN
+                    ALTER DATABASE [{escapedName}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+                    DROP DATABASE [{escapedName}];
+                END
+                """;
+            dropCmd.Parameters.AddWithValue("@dbName", databaseName);
+            await dropCmd.ExecuteNonQueryAsync(ct);
+        }
+        SqlConnection.ClearAllPools();
     }
 
     private static async Task EnsureSqlViewsAsync(AppDbContext db, CancellationToken ct)

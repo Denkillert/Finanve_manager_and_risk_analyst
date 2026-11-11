@@ -1,5 +1,6 @@
 using FinanveManager.Data.Models;
 using FinanveManager.Data.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.Data.Services;
 
@@ -920,8 +921,7 @@ public class ProjectManagementService : IProjectManagementService
                 org = new Organization
                 {
                     Name = "Строительная организация",
-                    TaxId = "100000001",
-                    BaseCurrency = "BYN"
+                    Unp = "100000001"
                 };
                 await _db.Organizations.AddAsync(org, ct);
             }
@@ -929,8 +929,7 @@ public class ProjectManagementService : IProjectManagementService
             portfolio = new Portfolio
             {
                 OrganizationId = org.Id,
-                Name = "Основной портфель строительных проектов",
-                Description = "Стартовый портфель проектов организации"
+                Name = "Основной портфель строительных проектов"
             };
             await _db.Portfolios.AddAsync(portfolio, ct);
         }
@@ -1003,11 +1002,13 @@ public class ProjectManagementService : IProjectManagementService
 
             await _notifications.PublishAsync(new Notification
             {
-                UserId = managerUser.Id,
-                ProjectId = project.Id,
+                TargetUserId = managerUser.Id,
+                TargetRoleCode = managerUser.Role?.Code ?? "ProjectManager",
                 Title = "Назначение на проект",
                 Message = $"Вы назначены руководителем проекта (прорабом) на «{project.Code} — {project.Name}».",
-                Severity = NotificationSeverity.Info
+                Severity = NotificationSeverity.Info,
+                Category = NotificationCategory.System,
+                EntityLink = $"Project:{project.Code}"
             }, ct);
         }
 
@@ -1127,13 +1128,15 @@ public class ProjectManagementService : IProjectManagementService
 
         await _notifications.PublishAsync(new Notification
         {
-            UserId = user.Id,
-            ProjectId = project.Id,
+            TargetUserId = user.Id,
+            TargetRoleCode = user.Role?.Code,
             Title = "Назначение на проект",
             Message = dto.IsPrimaryManager
                 ? $"Вы назначены ответственным руководителем проекта (прорабом) на «{project.Code} — {project.Name}»."
                 : $"Вы включены в команду проекта «{project.Code} — {project.Name}» ({projectRole}).",
-            Severity = NotificationSeverity.Info
+            Severity = NotificationSeverity.Info,
+            Category = NotificationCategory.System,
+            EntityLink = $"Project:{project.Code}"
         }, ct);
 
         await _audit.LogAsync(actorUserId, actorLogin, "ProjectAssignment", $"{project.Code}:{user.Login}", "ASSIGN_PROJECT_MEMBER",

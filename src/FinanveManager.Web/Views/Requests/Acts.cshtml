@@ -1,0 +1,129 @@
+@model SiteActsViewModel
+@{
+    ViewData["Title"] = "Этапы строительства и акты С-2 (объект)";
+    var objDict = Model.Objects.ToDictionary(o => o.Id);
+}
+
+<div class="grid-2">
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Оформление акта сдачи-приёмки С-2 / С-3</h3>
+        </div>
+        <form method="post" asp-controller="Requests" asp-action="CreateAct" class="form-grid">
+            <input type="hidden" name="returnTo" value="Acts" />
+            <div class="field">
+                <label>Договор</label>
+                <select name="contractId">
+                    @foreach (var c in Model.Contracts)
+                    {
+                        <option value="@c.Id">@c.Number — @c.Counterparty</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label>Объект строительства</label>
+                <select name="constructionObjectId">
+                    @foreach (var o in Model.Objects)
+                    {
+                        <option value="@o.Id">@o.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label>Вид документа</label>
+                <select name="documentType">
+                    <option value="ActS2">Акт С-2</option>
+                    <option value="CertificateS3">Справка С-3</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Номер документа</label>
+                <input name="number" value="С-2/204" required />
+            </div>
+            <div class="field">
+                <label>Стоимость работ Sакт (тыс. р.)</label>
+                <input type="number" step="0.01" name="grossAmount" value="350.00" required />
+            </div>
+            <div class="field">
+                <label>Зачёт аванса (тыс. р.)</label>
+                <input type="number" step="0.01" name="advanceOffset" value="50.00" />
+            </div>
+            <div class="field">
+                <label>Гарант. удержание (тыс. р.)</label>
+                <input type="number" step="0.01" name="retentionAmount" value="17.50" />
+            </div>
+            <div class="field">
+                <label>Фотофиксация (путь / ссылка)</label>
+                <input name="photoEvidencePaths" placeholder="photos/obj1_stage2.jpg" />
+            </div>
+            <div class="field">
+                <label>Описание выполненных работ</label>
+                <input name="actWorkDescription" value="Устройство стяжки и монтаж ограждающих конструкций" required />
+            </div>
+            <div>
+                <button type="submit" class="btn">Зарегистрировать акт</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Этапы работ на объектах</h3>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Объект</th>
+                        <th>Этап</th>
+                        <th>Срок по плану</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var s in Model.Stages)
+                    {
+                        var objName = objDict.TryGetValue(s.ConstructionObjectId, out var o) ? o.Name : "—";
+                        <tr>
+                            <td>@objName</td>
+                            <td><strong>@s.Name</strong></td>
+                            <td>@s.PlannedStartDate.ToString("dd.MM.yyyy") — @s.PlannedEndDate.ToString("dd.MM.yyyy")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Зарегистрированные акты С-2 и справки С-3</h3>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Номер</th>
+                    <th>Дата</th>
+                    <th class="num">Сумма Sакт</th>
+                    <th class="num">Зачёт / Удерж.</th>
+                    <th class="num">К оплате Sк_опл</th>
+                    <th>Выполненные работы</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var a in Model.Acts)
+                {
+                    <tr>
+                        <td><strong>@a.Number</strong></td>
+                        <td>@a.Date.ToString("dd.MM.yyyy")</td>
+                        <td class="num">@a.GrossAmount.ToString("N2")</td>
+                        <td class="num">@a.AdvanceOffset.ToString("N2") / @a.RetentionAmount.ToString("N2")</td>
+                        <td class="num"><strong>@a.NetAmount.ToString("N2")</strong></td>
+                        <td>@a.ActWorkDescription</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

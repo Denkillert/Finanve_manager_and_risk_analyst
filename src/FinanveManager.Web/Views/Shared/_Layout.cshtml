@@ -1,0 +1,67 @@
+@{
+    var currentController = ViewContext.RouteData.Values["controller"]?.ToString() ?? "Dashboard";
+    var currentAction = ViewContext.RouteData.Values["action"]?.ToString() ?? "Index";
+    var fullName = User.FindFirst("FullName")?.Value ?? User.Identity?.Name ?? "Гость";
+    var roleName = User.FindFirst("RoleName")?.Value ?? "";
+    var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "ProjectManager";
+    var sections = RolePermissions.GetSectionsForRole(roleCode);
+}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] — СтройФинРиск</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-title">СтройФинРиск</div>
+            <div class="brand-sub">@roleName</div>
+        </div>
+        <nav class="nav-links">
+            @foreach (var sec in sections)
+            {
+                string actionName = sec.Section == AppSection.AuditLog ? "Audit"
+                    : sec.Section == AppSection.SiteActs ? "Acts" : "Index";
+                bool isActive = string.Equals(currentController, sec.Controller, StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(currentAction, actionName, StringComparison.OrdinalIgnoreCase);
+
+                <a class="nav-link @(isActive ? "active" : "")"
+                   asp-controller="@sec.Controller" asp-action="@actionName">@sec.Title</a>
+            }
+        </nav>
+        <div class="sidebar-footer">
+            <div style="color:#e2e8f0;font-weight:600">@fullName</div>
+            <div style="margin-bottom:10px">@User.Identity?.Name · @roleCode</div>
+            <form method="post" asp-controller="Account" asp-action="Logout">
+                <button type="submit" class="btn btn-outline btn-sm" style="width:100%">Выйти</button>
+            </form>
+        </div>
+    </aside>
+
+    <div class="main-area">
+        <header class="topbar">
+            <div class="topbar-title">@ViewData["Title"]</div>
+            <div class="topbar-user">
+                <span class="user-pill"><strong>@fullName</strong> · @roleName</span>
+            </div>
+        </header>
+
+        <main class="content">
+            @if (TempData["Success"] is string ok)
+            {
+                <div class="alert alert-success">@ok</div>
+            }
+            @if (TempData["Error"] is string err)
+            {
+                <div class="alert alert-danger">@err</div>
+            }
+            @RenderBody()
+        </main>
+    </div>
+</div>
+</body>
+</html>

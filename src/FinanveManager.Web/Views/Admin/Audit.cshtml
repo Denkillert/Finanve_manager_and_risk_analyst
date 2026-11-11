@@ -1,0 +1,39 @@
+@model AdminViewModel
+@{
+    ViewData["Title"] = "Неизменяемый журнал аудита (AuditLogs)";
+}
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">События безопасности и операций (@Model.AuditLogs.Count записей)</h3>
+    </div>
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th>Время UTC</th>
+                    <th>Пользователь</th>
+                    <th>Действие</th>
+                    <th>Объект</th>
+                    <th>Старое значение</th>
+                    <th>Новое значение</th>
+                    <th>Детали</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var a in Model.AuditLogs)
+                {
+                    <tr>
+                        <td style="white-space:nowrap">@a.Timestamp.ToString("dd.MM.yyyy HH:mm:ss")</td>
+                        <td><code>@a.UserLogin</code></td>
+                        <td><span class="badge badge-neutral">@a.Action</span></td>
+                        <td>@a.ObjectName (@a.ObjectId)</td>
+                        <td class="muted">@a.OldValue</td>
+                        <td>@a.NewValue</td>
+                        <td class="muted">@a.Details</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

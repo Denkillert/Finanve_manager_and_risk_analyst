@@ -1,0 +1,111 @@
+@model LoginViewModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Авторизация — СтройФинРиск</title>
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body class="login-page">
+<div class="login-shell">
+    <div class="card">
+        <h2 style="margin-top:0">Вход в систему «СтройФинРиск»</h2>
+        <p class="muted">Интерфейс и доступные разделы автоматически настраиваются под вашу роль (табл. 1.8, НФТ-1).</p>
+
+        @if (!string.IsNullOrEmpty(Model.InfoMessage))
+        {
+            <div class="alert alert-success">@Model.InfoMessage</div>
+        }
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div class="alert alert-danger">@Model.ErrorMessage</div>
+        }
+
+        <form method="post" asp-controller="Account" asp-action="Login">
+            <div class="field" style="margin-bottom:10px">
+                <label for="Login">Логин</label>
+                <input id="Login" name="Login" value="@Model.Login" autocomplete="username" required />
+            </div>
+            <div class="field" style="margin-bottom:14px">
+                <label for="Password">Пароль</label>
+                <input id="Password" name="Password" type="password" value="@Model.Password" autocomplete="current-password" required />
+            </div>
+            @if (Model.RequiresTwoFactor)
+            {
+                <div class="field" style="margin-bottom:14px">
+                    <label for="TwoFactorCode">Код 2FA</label>
+                    <input id="TwoFactorCode" name="TwoFactorCode" value="@Model.TwoFactorCode" />
+                </div>
+            }
+            <button type="submit" class="btn" style="width:100%">Войти</button>
+        </form>
+        <p class="muted" style="margin-top:12px">
+            База данных MS SQL Server: <code>@(string.IsNullOrEmpty(Model.DatabaseName) ? "FinanveManagerDb" : Model.DatabaseName)</code> ·
+            Демонстрационный пароль: <code>StroyFin2026!</code>
+        </p>
+        <p class="muted" style="margin-bottom:0">
+            Согласно НФТ-1 (табл. 1.8), в Веб-клиенте работают 3 роли: <strong>Финансовый менеджер</strong>, <strong>Руководитель проекта</strong> и <strong>Специалист по рискам</strong>.
+            Остальные 4 роли (<strong>Руководитель организации</strong>, <strong>Бухгалтер</strong>, <strong>Специалист по снабжению</strong>, <strong>Администратор системы</strong>) работают в настольном WPF-клиенте.
+        </p>
+    </div>
+
+    <div class="card">
+        @if (!Model.HasUsers)
+        {
+            <h3 style="margin-top:0">База данных пуста</h3>
+            <div class="alert alert-info">
+                Подключение к MS SQL Server установлено, структура таблиц создана, но учётные записи пользователей ещё отсутствуют.
+                Вы можете выполнить скрипт <code>database/02_seed_data.sql</code> в SSMS или выбрать способ инициализации ниже:
+            </div>
+            <form method="post" asp-controller="Account" asp-action="InitializeRolesAndAdmin" style="margin-bottom:10px">
+                <button type="submit" class="btn btn-outline" style="width:100%">
+                    Создать 7 ролей (табл. 1.8), admin и director (CEO) без демо-проектов
+                </button>
+            </form>
+            <form method="post" asp-controller="Account" asp-action="InitializeDemoData">
+                <button type="submit" class="btn btn-success" style="width:100%">
+                    Загрузить контрольные примеры главы 1 (7 ролей, проекты, 12 рисков)
+                </button>
+            </form>
+        }
+        else
+        {
+            <h3 style="margin-top:0">Роли Веб-клиента (табл. 1.8)</h3>
+            <p class="muted">Нажмите на роль, чтобы подставить логин и пароль в форму входа:</p>
+            @if (!Model.DemoUsers.Any())
+            {
+                <div class="alert alert-info">
+                    В базе пока нет активных веб-пользователей. Создайте их через WPF-клиент администратора (<code>admin</code>) или выполните <code>database/02_seed_data.sql</code>.
+                </div>
+            }
+            else
+            {
+                <div class="demo-grid">
+                    @foreach (var u in Model.DemoUsers)
+                    {
+                        <button type="button" class="demo-btn"
+                                onclick="fillLogin('@u.Login')">
+                            <div style="font-weight:700">@u.RoleName</div>
+                            <div class="muted">@u.FullName</div>
+                            <div style="margin-top:4px;font-size:11.5px">
+                                <code>@u.Login</code> · <span class="badge badge-info">@u.RoleCode</span>
+                            </div>
+                        </button>
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>
+<script>
+function fillLogin(login) {
+    document.getElementById('Login').value = login;
+    document.getElementById('Password').value = 'StroyFin2026!';
+}
+</script>
+</body>
+</html>

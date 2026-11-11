@@ -11,6 +11,7 @@ public class AppDbContext : DbContext
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<Portfolio> Portfolios => Set<Portfolio>();
     public DbSet<Project> Projects => Set<Project>();
+    public DbSet<ProjectAssignment> ProjectAssignments => Set<ProjectAssignment>();
     public DbSet<ConstructionObject> ConstructionObjects => Set<ConstructionObject>();
     public DbSet<WorkStage> WorkStages => Set<WorkStage>();
     public DbSet<CostItem> CostItems => Set<CostItem>();
@@ -41,6 +42,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Portfolio>().ToTable("Portfolios", "finance");
         modelBuilder.Entity<Project>().ToTable("Projects", "finance")
             .HasIndex(p => new { p.PortfolioId, p.Code }).IsUnique();
+        modelBuilder.Entity<ProjectAssignment>().ToTable("ProjectAssignments", "finance")
+            .HasIndex(a => new { a.ProjectId, a.UserId }).IsUnique();
+        modelBuilder.Entity<ProjectAssignment>().Property(a => a.ProjectRole).HasMaxLength(150);
         modelBuilder.Entity<ConstructionObject>().ToTable("ConstructionObjects", "finance");
         modelBuilder.Entity<WorkStage>().ToTable("WorkStages", "finance");
         modelBuilder.Entity<CostItem>().ToTable("CostItems", "finance")

@@ -24,7 +24,16 @@ public class ReportsController : Controller
     {
         var role = User.FindFirstValue(ClaimTypes.Role) ?? "";
         if (role == "RiskSpecialist")
-            return reportType == "project-evm-forecast" ? "project-evm-forecast" : "risks-reserve-p80";
+            return "risks-reserve-p80";
+        if (role == "FinancialManager")
+        {
+            return reportType switch
+            {
+                "contracts-advances" => "contracts-advances",
+                "payment-requests-violations" => "payment-requests-violations",
+                _ => "budget-plan-fact"
+            };
+        }
         return string.IsNullOrWhiteSpace(reportType) ? "budget-plan-fact" : reportType;
     }
 

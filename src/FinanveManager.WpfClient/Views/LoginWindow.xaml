@@ -25,7 +25,7 @@
                     <TextBlock Text="База данных пуста (структура таблиц создана, учётные записи отсутствуют). Выполните database/02_seed_data.sql в SSMS или выберите инициализацию:"
                                Foreground="#1E3A8A" TextWrapping="Wrap" FontSize="11.5" Margin="0,0,0,8"/>
                     <Button x:Name="InitRolesAdminButton"
-                            Content="Создать только 7 ролей (табл. 1.8) и admin"
+                            Content="Создать 7 ролей (табл. 1.8), admin и director (CEO)"
                             Margin="0,0,0,6"
                             Padding="8,6"
                             Click="InitRolesAdminButton_OnClick"/>

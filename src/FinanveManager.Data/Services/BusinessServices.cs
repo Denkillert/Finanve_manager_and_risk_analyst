@@ -873,3 +873,344 @@ public class StatementImportService
         return new StatementImportReportDto(parsedOps.Count, matched, duplicates, unmatched.Count, warnings, unmatched);
     }
 }
+
+public class ProjectManagementService : IProjectManagementService
+{
+    private readonly AppDbContext _db;
+    private readonly INotificationPublisher _notifications;
+    private readonly IAuditService _audit;
+
+    public ProjectManagementService(
+        AppDbContext db,
+        INotificationPublisher notifications,
+        IAuditService audit)
+    {
+        _db = db;
+        _notifications = notifications;
+        _audit = audit;
+    }
+
+    public async Task<CreateProjectResultDto> CreateProjectAsync(
+        CreateProjectDto dto, Guid actorUserId, string actorLogin, CancellationToken ct = default)
+    {
+        string code = (dto.Code ?? string.Empty).Trim();
+        string name = (dto.Name ?? string.Empty).Trim();
+        string objectName = (dto.InitialObjectName ?? string.Empty).Trim();
+        string objectAddress = string.IsNullOrWhiteSpace(dto.InitialObjectAddress) ? "г. Минск" : dto.InitialObjectAddress.Trim();
+        string queueName = string.IsNullOrWhiteSpace(dto.InitialQueueName) ? "1-я очередь" : dto.InitialQueueName.Trim();
+        string currency = string.IsNullOrWhiteSpace(dto.Currency) ? "BYN" : dto.Currency.Trim().ToUpperInvariant();
+
+        if (string.IsNullOrWhiteSpace(code))
+            throw new InvalidOperationException("Укажите шифр проекта.");
+        if (string.IsNullOrWhiteSpace(name))
+            throw new InvalidOperationException("Укажите наименование проекта.");
+        if (string.IsNullOrWhiteSpace(objectName))
+            throw new InvalidOperationException("Укажите наименование первого строительного объекта.");
+        if (dto.ContractValue < 0 || dto.InitialCash < 0 || dto.MinCashBalance < 0)
+            throw new InvalidOperationException("Денежные суммы проекта не могут быть отрицательными.");
+        if (dto.PlannedEndDate.Date < dto.PlannedStartDate.Date)
+            throw new InvalidOperationException("Дата окончания проекта не может быть раньше даты начала.");
+
+        var portfolio = await _db.Portfolios.FirstOrDefaultAsync(p => !p.IsDeleted, ct);
+        if (portfolio == null)
+        {
+            var org = await _db.Organizations.FirstOrDefaultAsync(o => !o.IsDeleted, ct);
+            if (org == null)
+            {
+                org = new Organization
+                {
+                    Name = "Строительная организация",
+                    TaxId = "100000001",
+                    BaseCurrency = "BYN"
+                };
+                await _db.Organizations.AddAsync(org, ct);
+            }
+
+            portfolio = new Portfolio
+            {
+                OrganizationId = org.Id,
+                Name = "Основной портфель строительных проектов",
+                Description = "Стартовый портфель проектов организации"
+            };
+            await _db.Portfolios.AddAsync(portfolio, ct);
+        }
+
+        if (!await _db.CostItems.AnyAsync(c => !c.IsDeleted, ct))
+        {
+            await _db.CostItems.AddRangeAsync(new List<CostItem>
+            {
+                new() { Code = "ST-01", Name = "Строительные материалы и конструкции", Category = "Материалы" },
+                new() { Code = "ST-02", Name = "Субподрядные монтажные и специальные работы", Category = "Субподряд" },
+                new() { Code = "ST-03", Name = "Инженерное и технологическое оборудование", Category = "Оборудование" },
+                new() { Code = "ST-04", Name = "Накладные расходы, транспорт и механизмы", Category = "Накладные" }
+            }, ct);
+        }
+
+        bool duplicateCode = await _db.Projects.AnyAsync(
+            p => !p.IsDeleted && p.PortfolioId == portfolio.Id && p.Code == code, ct);
+        if (duplicateCode)
+            throw new InvalidOperationException($"Проект с шифром «{code}» уже существует в портфеле.");
+
+        var project = new Project
+        {
+            PortfolioId = portfolio.Id,
+            Code = code,
+            Name = name,
+            ContractValue = dto.ContractValue,
+            Currency = currency,
+            InitialCash = dto.InitialCash,
+            MinCashBalance = dto.MinCashBalance,
+            PlannedStartDate = dto.PlannedStartDate.Date,
+            PlannedEndDate = dto.PlannedEndDate.Date
+        };
+        await _db.Projects.AddAsync(project, ct);
+
+        var obj = new ConstructionObject
+        {
+            ProjectId = project.Id,
+            QueueName = queueName,
+            Name = objectName,
+            Address = objectAddress
+        };
+        await _db.ConstructionObjects.AddAsync(obj, ct);
+
+        var draftBudget = new BudgetVersion
+        {
+            ProjectId = project.Id,
+            VersionNumber = 1,
+            Status = BudgetVersionStatus.Draft,
+            Comment = "Начальная версия бюджета (черновик)"
+        };
+        await _db.BudgetVersions.AddAsync(draftBudget, ct);
+
+        ProjectAssignment? assignment = null;
+        if (dto.ProjectManagerUserId.HasValue && dto.ProjectManagerUserId.Value != Guid.Empty)
+        {
+            var managerUser = await _db.Users.Include(u => u.Role)
+                .FirstOrDefaultAsync(u => !u.IsDeleted && u.IsActive && u.Id == dto.ProjectManagerUserId.Value, ct)
+                ?? throw new InvalidOperationException("Выбранный руководитель проекта не найден или заблокирован.");
+
+            assignment = new ProjectAssignment
+            {
+                ProjectId = project.Id,
+                UserId = managerUser.Id,
+                ProjectRole = "Руководитель проекта (прораб)",
+                IsPrimaryManager = true,
+                AssignedByUserId = actorUserId,
+                AssignedAt = DateTime.UtcNow
+            };
+            await _db.ProjectAssignments.AddAsync(assignment, ct);
+
+            await _notifications.PublishAsync(new Notification
+            {
+                UserId = managerUser.Id,
+                ProjectId = project.Id,
+                Title = "Назначение на проект",
+                Message = $"Вы назначены руководителем проекта (прорабом) на «{project.Code} — {project.Name}».",
+                Severity = NotificationSeverity.Info
+            }, ct);
+        }
+
+        await _audit.LogAsync(actorUserId, actorLogin, "Project", project.Code, "CREATE_PROJECT",
+            null, $"{project.Name}; Contract={project.ContractValue}; Object={obj.Name}; PM={dto.ProjectManagerUserId}", null, ct);
+
+        await _db.SaveChangesAsync(ct);
+        return new CreateProjectResultDto(project, obj, draftBudget, assignment);
+    }
+
+    public async Task<(ConstructionObject Object, WorkStage? Stage)> AddObjectAndStageAsync(
+        AddObjectAndStageDto dto, Guid actorUserId, string actorLogin, CancellationToken ct = default)
+    {
+        var project = await _db.Projects.FirstOrDefaultAsync(p => !p.IsDeleted && p.Id == dto.ProjectId, ct)
+            ?? throw new InvalidOperationException("Проект не найден.");
+
+        ConstructionObject obj;
+        if (dto.ExistingObjectId.HasValue && dto.ExistingObjectId.Value != Guid.Empty)
+        {
+            obj = await _db.ConstructionObjects.FirstOrDefaultAsync(
+                o => !o.IsDeleted && o.Id == dto.ExistingObjectId.Value && o.ProjectId == project.Id, ct)
+                ?? throw new InvalidOperationException("Выбранный строительный объект не принадлежит проекту.");
+        }
+        else
+        {
+            string objectName = (dto.ObjectName ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(objectName))
+                throw new InvalidOperationException("Укажите наименование строительного объекта или выберите существующий.");
+
+            obj = new ConstructionObject
+            {
+                ProjectId = project.Id,
+                QueueName = string.IsNullOrWhiteSpace(dto.QueueName) ? "1-я очередь" : dto.QueueName.Trim(),
+                Name = objectName,
+                Address = string.IsNullOrWhiteSpace(dto.ObjectAddress) ? "г. Минск" : dto.ObjectAddress.Trim()
+            };
+            await _db.ConstructionObjects.AddAsync(obj, ct);
+        }
+
+        WorkStage? stage = null;
+        if (!string.IsNullOrWhiteSpace(dto.InitialStageName))
+        {
+            if (dto.InitialStagePv < 0)
+                throw new InvalidOperationException("Плановая стоимость этапа (PV) не может быть отрицательной.");
+
+            stage = new WorkStage
+            {
+                ConstructionObjectId = obj.Id,
+                Name = dto.InitialStageName.Trim(),
+                PlannedStartDate = project.PlannedStartDate,
+                PlannedEndDate = project.PlannedEndDate,
+                PlannedValuePV = dto.InitialStagePv,
+                EarnedValueEV = 0m,
+                ActualCostAC = 0m
+            };
+            await _db.WorkStages.AddAsync(stage, ct);
+        }
+
+        await _audit.LogAsync(actorUserId, actorLogin, "ConstructionObject", obj.Name, "ADD_OBJECT_STAGE",
+            null, stage == null ? $"Object={obj.Name}" : $"Object={obj.Name}; Stage={stage.Name}; PV={stage.PlannedValuePV}", null, ct);
+        await _db.SaveChangesAsync(ct);
+
+        return (obj, stage);
+    }
+
+    public async Task<ProjectAssignment> AssignMemberAsync(
+        AssignProjectMemberDto dto, Guid actorUserId, string actorLogin, CancellationToken ct = default)
+    {
+        var project = await _db.Projects.FirstOrDefaultAsync(p => !p.IsDeleted && p.Id == dto.ProjectId, ct)
+            ?? throw new InvalidOperationException("Проект не найден.");
+
+        var user = await _db.Users.Include(u => u.Role)
+            .FirstOrDefaultAsync(u => !u.IsDeleted && u.IsActive && u.Id == dto.UserId, ct)
+            ?? throw new InvalidOperationException("Сотрудник не найден или деактивирован.");
+
+        string projectRole = string.IsNullOrWhiteSpace(dto.ProjectRole)
+            ? (user.Role?.Code == "ProjectManager" ? "Руководитель проекта (прораб)" : user.Role?.Name ?? "Участник проекта")
+            : dto.ProjectRole.Trim();
+
+        if (dto.IsPrimaryManager)
+        {
+            var currentPrimaries = await _db.ProjectAssignments
+                .Where(a => !a.IsDeleted && a.ProjectId == project.Id && a.IsPrimaryManager && a.UserId != user.Id)
+                .ToListAsync(ct);
+            foreach (var prev in currentPrimaries)
+            {
+                prev.IsPrimaryManager = false;
+                prev.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+
+        var existing = await _db.ProjectAssignments
+            .FirstOrDefaultAsync(a => a.ProjectId == project.Id && a.UserId == user.Id, ct);
+
+        if (existing == null)
+        {
+            existing = new ProjectAssignment
+            {
+                ProjectId = project.Id,
+                UserId = user.Id,
+                ProjectRole = projectRole,
+                IsPrimaryManager = dto.IsPrimaryManager,
+                AssignedByUserId = actorUserId,
+                AssignedAt = DateTime.UtcNow
+            };
+            await _db.ProjectAssignments.AddAsync(existing, ct);
+        }
+        else
+        {
+            existing.IsDeleted = false;
+            existing.ProjectRole = projectRole;
+            existing.IsPrimaryManager = dto.IsPrimaryManager;
+            existing.AssignedByUserId = actorUserId;
+            existing.AssignedAt = DateTime.UtcNow;
+            existing.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _notifications.PublishAsync(new Notification
+        {
+            UserId = user.Id,
+            ProjectId = project.Id,
+            Title = "Назначение на проект",
+            Message = dto.IsPrimaryManager
+                ? $"Вы назначены ответственным руководителем проекта (прорабом) на «{project.Code} — {project.Name}»."
+                : $"Вы включены в команду проекта «{project.Code} — {project.Name}» ({projectRole}).",
+            Severity = NotificationSeverity.Info
+        }, ct);
+
+        await _audit.LogAsync(actorUserId, actorLogin, "ProjectAssignment", $"{project.Code}:{user.Login}", "ASSIGN_PROJECT_MEMBER",
+            null, $"Role={projectRole}; Primary={dto.IsPrimaryManager}", null, ct);
+
+        await _db.SaveChangesAsync(ct);
+        return existing;
+    }
+
+    public async Task RemoveMemberAsync(
+        Guid assignmentId, Guid actorUserId, string actorLogin, CancellationToken ct = default)
+    {
+        var assignment = await _db.ProjectAssignments
+            .Include(a => a.Project)
+            .Include(a => a.User)
+            .FirstOrDefaultAsync(a => !a.IsDeleted && a.Id == assignmentId, ct)
+            ?? throw new InvalidOperationException("Назначение на проект не найдено.");
+
+        assignment.IsDeleted = true;
+        assignment.IsPrimaryManager = false;
+        assignment.UpdatedAt = DateTime.UtcNow;
+
+        await _audit.LogAsync(actorUserId, actorLogin, "ProjectAssignment",
+            $"{assignment.Project?.Code}:{assignment.User?.Login}", "REMOVE_PROJECT_MEMBER",
+            assignment.ProjectRole, "Removed", null, ct);
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<BudgetLimit> UpsertDraftBudgetLimitAsync(
+        Guid budgetVersionId, Guid constructionObjectId, Guid costItemId, decimal amount,
+        Guid actorUserId, string actorLogin, CancellationToken ct = default)
+    {
+        if (amount < 0)
+            throw new InvalidOperationException("Лимит бюджета не может быть отрицательным.");
+
+        var bv = await _db.BudgetVersions.Include(v => v.Project)
+            .FirstOrDefaultAsync(v => !v.IsDeleted && v.Id == budgetVersionId, ct)
+            ?? throw new InvalidOperationException("Версия бюджета не найдена.");
+        if (bv.Status != BudgetVersionStatus.Draft)
+            throw new InvalidOperationException("Редактировать лимиты можно только в версии бюджета со статусом «Черновик».");
+
+        var obj = await _db.ConstructionObjects
+            .FirstOrDefaultAsync(o => !o.IsDeleted && o.Id == constructionObjectId && o.ProjectId == bv.ProjectId, ct)
+            ?? throw new InvalidOperationException("Строительный объект не принадлежит проекту выбранной версии бюджета.");
+
+        var item = await _db.CostItems.FirstOrDefaultAsync(c => !c.IsDeleted && c.Id == costItemId, ct)
+            ?? throw new InvalidOperationException("Статья затрат не найдена.");
+
+        var existing = await _db.BudgetLimits.FirstOrDefaultAsync(
+            l => !l.IsDeleted && l.BudgetVersionId == budgetVersionId &&
+                 l.ConstructionObjectId == constructionObjectId && l.CostItemId == costItemId, ct);
+
+        if (existing == null)
+        {
+            existing = new BudgetLimit
+            {
+                BudgetVersionId = budgetVersionId,
+                ConstructionObjectId = constructionObjectId,
+                CostItemId = costItemId,
+                PeriodStart = bv.Project?.PlannedStartDate ?? new DateTime(DateTime.UtcNow.Year, 1, 1),
+                PeriodEnd = bv.Project?.PlannedEndDate ?? new DateTime(DateTime.UtcNow.Year, 12, 31),
+                Amount = amount
+            };
+            await _db.BudgetLimits.AddAsync(existing, ct);
+        }
+        else
+        {
+            existing.Amount = amount;
+            existing.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _audit.LogAsync(actorUserId, actorLogin, "BudgetLimit", $"{obj.Name}:{item.Code}", "UPSERT_DRAFT_BUDGET_LIMIT",
+            null, amount.ToString("N2"), null, ct);
+
+        await _db.SaveChangesAsync(ct);
+        return existing;
+    }
+}
+

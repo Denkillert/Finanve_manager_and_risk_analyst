@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.Web.Controllers;
 
-[Authorize(Roles = "CEO,FinancialManager,Accountant")]
+[Authorize(Roles = "CEO,FinancialManager")]
 public class CalendarController : Controller
 {
     private readonly AppDbContext _db;

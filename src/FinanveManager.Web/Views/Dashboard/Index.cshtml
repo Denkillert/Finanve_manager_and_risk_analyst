@@ -2,6 +2,7 @@
 @{
     ViewData["Title"] = "Главная панель";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
+    var canSeeRisks = RolePermissions.CanAccess(roleCode, AppSection.RisksAndP80);
 }
 
 <div class="alert alert-info">
@@ -32,11 +33,14 @@
         <div class="kpi-value">@Model.TotalFreeLimit.ToString("N2") тыс. р.</div>
         <div class="kpi-sub">Без двойного списания заявок Q</div>
     </div>
-    <div class="kpi-card">
-        <div class="kpi-label">Резерв рисков P80</div>
-        <div class="kpi-value">@Model.TotalReserveP80.ToString("N2") тыс. р.</div>
-        <div class="kpi-sub">Квантиль z = 0,84 (ф-ла 1.18)</div>
-    </div>
+    @if (canSeeRisks)
+    {
+        <div class="kpi-card">
+            <div class="kpi-label">Резерв рисков P80</div>
+            <div class="kpi-value">@Model.TotalReserveP80.ToString("N2") тыс. р.</div>
+            <div class="kpi-sub">Квантиль z = 0,84 (ф-ла 1.18)</div>
+        </div>
+    }
     <div class="kpi-card">
         <div class="kpi-label">Кассовые разрывы (90 дн.)</div>
         <div class="kpi-value" style="color:@(Model.GapDaysCount90d > 0 ? "#b91c1c" : "#065f46")">
@@ -48,8 +52,8 @@
 
 <div class="card">
     <div class="card-header">
-        <h3 class="card-title">Прогноз стоимости проектов по освоенному объёму (EVM + резерв P80)</h3>
-        @if (roleCode is "RiskSpecialist" or "ProjectManager")
+        <h3 class="card-title">@(canSeeRisks ? "Прогноз стоимости проектов по освоенному объёму (EVM + резерв P80)" : "Финансовое исполнение и освоенный объём проектов (EVM)")</h3>
+        @if (canSeeRisks)
         {
             <a class="btn btn-sm" asp-controller="Risks" asp-action="Index">Матрица рисков 5×5 и P80</a>
         }
@@ -66,8 +70,15 @@
                     <th class="num">CPI</th>
                     <th class="num">SPI</th>
                     <th class="num">EAC</th>
-                    <th class="num">Резерв P80</th>
-                    <th class="num">Фин. результат Rфин</th>
+                    @if (canSeeRisks)
+                    {
+                        <th class="num">Резерв P80</th>
+                        <th class="num">Фин. результат Rфин</th>
+                    }
+                    else
+                    {
+                        <th class="num">Маржа (V − EAC)</th>
+                    }
                 </tr>
             </thead>
             <tbody>
@@ -84,8 +95,15 @@
                         <td class="num"><span class="badge @((f.Forecast.Cpi ?? 0m) >= 1m ? "badge-success" : "badge-warn")">@cpiText</span></td>
                         <td class="num"><span class="badge @((f.Forecast.Spi ?? 0m) >= 1m ? "badge-success" : "badge-warn")">@spiText</span></td>
                         <td class="num">@f.Forecast.Eac.ToString("N2")</td>
-                        <td class="num">@f.RiskSummary.ReserveP80.ToString("N2")</td>
-                        <td class="num"><strong>@f.Forecast.FinancialResultWithReserve.ToString("N2")</strong></td>
+                        @if (canSeeRisks)
+                        {
+                            <td class="num">@f.RiskSummary.ReserveP80.ToString("N2")</td>
+                            <td class="num"><strong>@f.Forecast.FinancialResultWithReserve.ToString("N2")</strong></td>
+                        }
+                        else
+                        {
+                            <td class="num"><strong>@((f.Forecast.ContractValue - f.Forecast.Eac).ToString("N2"))</strong></td>
+                        }
                     </tr>
                 }
             </tbody>
@@ -130,7 +148,7 @@
             </div>
         </div>
     }
-    else
+    else if (canSeeRisks)
     {
         <div class="card">
             <div class="card-header">

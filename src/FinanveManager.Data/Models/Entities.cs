@@ -32,6 +32,19 @@ public class Project : BaseEntity
     public List<Risk> Risks { get; set; } = new();
     public List<BudgetVersion> BudgetVersions { get; set; } = new();
     public List<Contract> Contracts { get; set; } = new();
+    public List<ProjectAssignment> Assignments { get; set; } = new();
+}
+
+public class ProjectAssignment : BaseEntity
+{
+    public Guid ProjectId { get; set; }
+    public Project? Project { get; set; }
+    public Guid UserId { get; set; }
+    public User? User { get; set; }
+    public string ProjectRole { get; set; } = "Руководитель проекта (прораб)";
+    public bool IsPrimaryManager { get; set; }
+    public Guid? AssignedByUserId { get; set; }
+    public DateTime AssignedAt { get; set; } = DateTime.UtcNow;
 }
 
 public class ConstructionObject : BaseEntity

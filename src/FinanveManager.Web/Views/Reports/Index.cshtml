@@ -5,8 +5,14 @@
     var reports = roleCode == "RiskSpecialist"
         ? new (string Key, string Name)[]
         {
-            ("risks-reserve-p80", "1. Реестр рисков и расчёт резерва P80"),
-            ("project-evm-forecast", "2. Прогноз стоимости проектов (EVM + P80)")
+            ("risks-reserve-p80", "1. Реестр рисков и расчёт резерва P80")
+        }
+        : roleCode == "FinancialManager"
+        ? new (string Key, string Name)[]
+        {
+            ("budget-plan-fact", "1. План-факт исполнения бюджета (vFreeLimit)"),
+            ("contracts-advances", "2. Договоры и контроль выданных авансов"),
+            ("payment-requests-violations", "3. Реестр заявок и нарушений лимитов")
         }
         : new (string Key, string Name)[]
         {

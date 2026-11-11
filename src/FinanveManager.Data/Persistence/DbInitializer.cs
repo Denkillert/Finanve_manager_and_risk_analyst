@@ -262,6 +262,28 @@ public static class DbInitializer
 
     private static async Task EnsureSqlViewsAsync(AppDbContext db, CancellationToken ct)
     {
+        const string upgradeTablesSql = """
+            IF OBJECT_ID(N'finance.ProjectAssignments', N'U') IS NULL
+            BEGIN
+                CREATE TABLE finance.ProjectAssignments (
+                    Id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_ProjectAssignments PRIMARY KEY,
+                    ProjectId UNIQUEIDENTIFIER NOT NULL CONSTRAINT FK_ProjectAssignments_Project FOREIGN KEY REFERENCES finance.Projects(Id),
+                    UserId UNIQUEIDENTIFIER NOT NULL CONSTRAINT FK_ProjectAssignments_User FOREIGN KEY REFERENCES security.Users(Id),
+                    ProjectRole NVARCHAR(150) NOT NULL DEFAULT N'Руководитель проекта (прораб)',
+                    IsPrimaryManager BIT NOT NULL DEFAULT 0,
+                    AssignedByUserId UNIQUEIDENTIFIER NULL,
+                    AssignedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+                    CreatedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+                    UpdatedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+                    IsDeleted BIT NOT NULL DEFAULT 0,
+                    RowVersion ROWVERSION NOT NULL
+                );
+                CREATE UNIQUE INDEX IX_ProjectAssignments_ProjectId_UserId ON finance.ProjectAssignments (ProjectId, UserId);
+            END
+            """;
+
+        await db.Database.ExecuteSqlRawAsync(upgradeTablesSql, ct);
+
         const string createViewSql = """
             IF OBJECT_ID('finance.vFreeLimit', 'V') IS NULL
             EXEC(N'
@@ -341,20 +363,47 @@ public static class DbInitializer
         if (!await db.Roles.AnyAsync(ct))
             await db.Roles.AddRangeAsync(BuildStandardRoles(), ct);
 
-        await db.Users.AddAsync(new User
+        await db.Users.AddRangeAsync(new List<User>
         {
-            Id = SeedIds.UserAdmin,
-            RoleId = SeedIds.RoleAdmin,
-            Login = "admin",
-            PasswordHash = SeedIds.DefaultDemoPasswordHash,
-            FullName = "Администратор системы",
-            Email = "admin@stroyfin.by",
-            IsActive = true,
-            TwoFactorEnabled = true,
-            TwoFactorSecret = "246810",
-            PersonalDataConsentGiven = true,
-            ConsentDate = DateTime.UtcNow
+            new()
+            {
+                Id = SeedIds.UserCeo,
+                RoleId = SeedIds.RoleCeo,
+                Login = "director",
+                PasswordHash = SeedIds.DefaultDemoPasswordHash,
+                FullName = "Руководитель организации",
+                Email = "director@stroyfin.by",
+                IsActive = true,
+                TwoFactorEnabled = false,
+                PersonalDataConsentGiven = true,
+                ConsentDate = DateTime.UtcNow
+            },
+            new()
+            {
+                Id = SeedIds.UserAdmin,
+                RoleId = SeedIds.RoleAdmin,
+                Login = "admin",
+                PasswordHash = SeedIds.DefaultDemoPasswordHash,
+                FullName = "Администратор системы",
+                Email = "admin@stroyfin.by",
+                IsActive = true,
+                TwoFactorEnabled = true,
+                TwoFactorSecret = "246810",
+                PersonalDataConsentGiven = true,
+                ConsentDate = DateTime.UtcNow
+            }
         }, ct);
+
+        if (!await db.CostItems.AnyAsync(ct))
+        {
+            await db.CostItems.AddRangeAsync(new List<CostItem>
+            {
+                new() { Id = SeedIds.ItemMat, Code = "ST-01", Name = "Строительные материалы и конструкции", Category = "Материалы" },
+                new() { Id = SeedIds.ItemSub, Code = "ST-02", Name = "Субподрядные монтажные и специальные работы", Category = "Субподряд" },
+                new() { Id = SeedIds.ItemEq, Code = "ST-03", Name = "Инженерное и технологическое оборудование", Category = "Оборудование" },
+                new() { Id = SeedIds.ItemOvr, Code = "ST-04", Name = "Накладные расходы, транспорт и механизмы", Category = "Накладные" }
+            }, ct);
+        }
 
         await db.AuditLogs.AddAsync(new AuditLog
         {
@@ -365,7 +414,7 @@ public static class DbInitializer
             ObjectId = "INIT_ADMIN",
             Action = "INIT_ROLES_AND_ADMIN",
             NewValue = "Completed",
-            Details = "Созданы 7 ролей (табл. 1.8) и стартовая учётная запись администратора"
+            Details = "Созданы 7 ролей (табл. 1.8), admin и director (CEO) без демо-проектов"
         }, ct);
 
         await db.SaveChangesAsync(ct);
@@ -435,6 +484,14 @@ public static class DbInitializer
                 PlannedStartDate = new DateTime(2026, 3, 1),
                 PlannedEndDate = new DateTime(2027, 6, 30)
             }
+        }, ct);
+
+        await db.ProjectAssignments.AddRangeAsync(new List<ProjectAssignment>
+        {
+            new() { ProjectId = SeedIds.Project1, UserId = SeedIds.UserPm, ProjectRole = "Руководитель проекта (прораб)", IsPrimaryManager = true, AssignedByUserId = SeedIds.UserCeo, AssignedAt = baseDate },
+            new() { ProjectId = SeedIds.Project2, UserId = SeedIds.UserPm, ProjectRole = "Руководитель проекта (прораб)", IsPrimaryManager = true, AssignedByUserId = SeedIds.UserCeo, AssignedAt = baseDate },
+            new() { ProjectId = SeedIds.Project1, UserId = SeedIds.UserFin, ProjectRole = "Финансовый менеджер проекта", IsPrimaryManager = false, AssignedByUserId = SeedIds.UserCeo, AssignedAt = baseDate },
+            new() { ProjectId = SeedIds.Project1, UserId = SeedIds.UserRisk, ProjectRole = "Специалист по рискам проекта", IsPrimaryManager = false, AssignedByUserId = SeedIds.UserCeo, AssignedAt = baseDate }
         }, ct);
 
         await db.ConstructionObjects.AddRangeAsync(new List<ConstructionObject>

@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.Web.Controllers;
 
-[Authorize(Roles = "CEO,FinancialManager,Accountant,ProcurementSpecialist,ProjectManager,RiskSpecialist")]
+[Authorize(Roles = "CEO,FinancialManager")]
 public class DashboardController : Controller
 {
     private readonly AppDbContext _db;

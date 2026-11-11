@@ -95,6 +95,21 @@ CREATE TABLE finance.Projects (
     CONSTRAINT CK_Projects_Dates CHECK (PlannedEndDate >= PlannedStartDate)
 );
 
+CREATE TABLE finance.ProjectAssignments (
+    Id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_ProjectAssignments PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
+    ProjectId UNIQUEIDENTIFIER NOT NULL CONSTRAINT FK_ProjectAssignments_Project FOREIGN KEY REFERENCES finance.Projects(Id),
+    UserId UNIQUEIDENTIFIER NOT NULL CONSTRAINT FK_ProjectAssignments_User FOREIGN KEY REFERENCES security.Users(Id),
+    ProjectRole NVARCHAR(150) NOT NULL DEFAULT N'Руководитель проекта (прораб)',
+    IsPrimaryManager BIT NOT NULL DEFAULT 0,
+    AssignedByUserId UNIQUEIDENTIFIER NULL,
+    AssignedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    CreatedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    UpdatedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+    IsDeleted BIT NOT NULL DEFAULT 0,
+    RowVersion ROWVERSION NOT NULL,
+    CONSTRAINT UQ_ProjectAssignments_Project_User UNIQUE (ProjectId, UserId)
+);
+
 CREATE TABLE finance.ConstructionObjects (
     Id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_ConstructionObjects PRIMARY KEY DEFAULT NEWSEQUENTIALID(),
     ProjectId UNIQUEIDENTIFIER NOT NULL CONSTRAINT FK_ConstructionObjects_Project FOREIGN KEY REFERENCES finance.Projects(Id),

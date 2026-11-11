@@ -8,10 +8,29 @@ namespace FinanveManager.Web.Services;
 
 public static class WebPortfolioHelper
 {
-    public static async Task<List<ProjectForecastItem>> BuildForecastsAsync(
-        AppDbContext db, CancellationToken ct = default)
+    public static async Task<HashSet<Guid>?> GetVisibleProjectIdsAsync(
+        AppDbContext db, string? roleCode, Guid userId, CancellationToken ct = default)
     {
-        var projects = await db.Projects.Where(p => !p.IsDeleted).OrderBy(p => p.Code).ToListAsync(ct);
+        if (!string.Equals(roleCode, "ProjectManager", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var ids = await db.ProjectAssignments
+            .Where(a => !a.IsDeleted && a.UserId == userId)
+            .Select(a => a.ProjectId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        return ids.ToHashSet();
+    }
+
+    public static async Task<List<ProjectForecastItem>> BuildForecastsAsync(
+        AppDbContext db, CancellationToken ct = default, HashSet<Guid>? allowedProjectIds = null)
+    {
+        var query = db.Projects.Where(p => !p.IsDeleted);
+        if (allowedProjectIds != null)
+            query = query.Where(p => allowedProjectIds.Contains(p.Id));
+
+        var projects = await query.OrderBy(p => p.Code).ToListAsync(ct);
         var objects = await db.ConstructionObjects.Where(o => !o.IsDeleted).ToListAsync(ct);
         var stages = await db.WorkStages.Where(s => !s.IsDeleted).ToListAsync(ct);
         var versions = await db.BudgetVersions.Where(v => !v.IsDeleted && v.Status == BudgetVersionStatus.Approved).ToListAsync(ct);
@@ -52,9 +71,13 @@ public static class WebPortfolioHelper
     }
 
     public static async Task<List<FreeLimitRowItem>> BuildFreeLimitsAsync(
-        AppDbContext db, IBudgetService budgetService, CancellationToken ct = default)
+        AppDbContext db, IBudgetService budgetService, CancellationToken ct = default, HashSet<Guid>? allowedProjectIds = null)
     {
-        var projects = await db.Projects.Where(p => !p.IsDeleted).ToDictionaryAsync(p => p.Id, ct);
+        var projQuery = db.Projects.Where(p => !p.IsDeleted);
+        if (allowedProjectIds != null)
+            projQuery = projQuery.Where(p => allowedProjectIds.Contains(p.Id));
+
+        var projects = await projQuery.ToDictionaryAsync(p => p.Id, ct);
         var objects = await db.ConstructionObjects.Where(o => !o.IsDeleted).ToListAsync(ct);
         var costItems = await db.CostItems.Where(c => !c.IsDeleted).OrderBy(c => c.Code).ToListAsync(ct);
         var limits = await db.BudgetLimits.Where(l => !l.IsDeleted).ToListAsync(ct);

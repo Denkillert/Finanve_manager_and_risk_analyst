@@ -85,7 +85,7 @@ public class AccountController : Controller
     public async Task<IActionResult> InitializeRolesAndAdmin(CancellationToken ct = default)
     {
         await DbInitializer.SeedRolesAndAdminOnlyAsync(_db, ct);
-        TempData["LoginInfo"] = "Созданы 7 стандартных ролей (табл. 1.8) и учётная запись администратора (admin / StroyFin2026!, 2FA: 246810). Создайте веб-пользователей через WPF-клиент администратора.";
+        TempData["LoginInfo"] = "Созданы 7 стандартных ролей (табл. 1.8), администратор (admin / StroyFin2026!, 2FA: 246810) и руководитель организации (director / StroyFin2026!). Войдите в WPF-клиент для настройки пользователей и создания проектов.";
         return RedirectToAction(nameof(Login));
     }
 

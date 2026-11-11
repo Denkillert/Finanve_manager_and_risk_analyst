@@ -231,6 +231,7 @@ public static class DataServiceCollectionExtensions
         services.AddScoped<IBudgetService, BudgetService>();
         services.AddScoped<IPaymentRequestService, PaymentRequestService>();
         services.AddScoped<IRiskService, RiskService>();
+        services.AddScoped<IProjectManagementService, ProjectManagementService>();
         services.AddScoped<StatementImportService>();
         services.AddScoped<AuthService>();
         return services;
@@ -247,6 +248,7 @@ public sealed class DataScope : IAsyncDisposable, IDisposable
     public IBudgetService Budget { get; }
     public IPaymentRequestService Requests { get; }
     public IRiskService Risks { get; }
+    public IProjectManagementService ProjectMgmt { get; }
     public StatementImportService StatementImport { get; }
     public IAccountingAdapter Accounting { get; }
     public IEstimateImporter EstimateImporter { get; }
@@ -283,6 +285,7 @@ public sealed class DataScope : IAsyncDisposable, IDisposable
             new EfRepository<RiskAssessment>(db),
             new P80ReserveStrategy(),
             pub, Audit, uow);
+        ProjectMgmt = new ProjectManagementService(db, pub, Audit);
         StatementImport = new StatementImportService(
             bank,
             new EfRepository<Payment>(db),

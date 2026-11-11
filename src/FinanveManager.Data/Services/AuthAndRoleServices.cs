@@ -75,28 +75,22 @@ public static class RolePermissions
         ],
         ["Accountant"] =
         [
-            AppSection.Dashboard,
             AppSection.PaymentRequests,
-            AppSection.PaymentCalendar,
             AppSection.ContractsAndStatements
         ],
         ["ProcurementSpecialist"] =
         [
-            AppSection.Dashboard,
             AppSection.ContractsAndStatements,
             AppSection.PaymentRequests
         ],
         ["ProjectManager"] =
         [
-            AppSection.Dashboard,
             AppSection.ProjectsAndBudgets,
             AppSection.PaymentRequests,
-            AppSection.SiteActs,
-            AppSection.RisksAndP80
+            AppSection.SiteActs
         ],
         ["RiskSpecialist"] =
         [
-            AppSection.Dashboard,
             AppSection.RisksAndP80,
             AppSection.Reports
         ],
@@ -146,6 +140,10 @@ public static class RolePermissions
     public static (string Controller, string Action) GetLandingRoute(string roleCode) => roleCode switch
     {
         "Admin" => ("Admin", "Index"),
+        "Accountant" => ("Requests", "Index"),
+        "ProcurementSpecialist" => ("Contracts", "Index"),
+        "ProjectManager" => ("Projects", "Index"),
+        "RiskSpecialist" => ("Risks", "Index"),
         _ => ("Dashboard", "Index")
     };
 }

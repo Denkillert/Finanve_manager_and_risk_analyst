@@ -164,6 +164,16 @@ public sealed record RiskMatrixCellView(
 
 public sealed record ReportRowView(string Col1, string Col2, string Col3, string Col4, string Col5, string Col6);
 
+public sealed record ProjectAssignmentGridRow(
+    Guid Id,
+    Guid ProjectId,
+    string ProjectCode,
+    string UserFullName,
+    string UserLogin,
+    string SystemRoleName,
+    string ProjectRole,
+    string PrimaryMarkText);
+
 public sealed class MainViewModel : ViewModelBase
 {
     private readonly AppDatabaseFactory _dbFactory;
@@ -202,7 +212,12 @@ public sealed class MainViewModel : ViewModelBase
         });
         RefreshCommand = new RelayCommand(async () => await LoadAllAsync());
 
-        // Budgets
+        // Budgets & CEO Project Management
+        CreateProjectCommand = new RelayCommand(async () => await CreateProjectAsync());
+        AddObjectStageCommand = new RelayCommand(async () => await AddObjectAndStageAsync());
+        AssignMemberCommand = new RelayCommand(async () => await AssignProjectMemberAsync());
+        RemoveMemberCommand = new RelayCommand(async () => await RemoveProjectMemberAsync());
+        AddDraftLimitCommand = new RelayCommand(async () => await AddDraftLimitAsync());
         CreateBudgetVersionCommand = new RelayCommand(async () => await CreateBudgetVersionAsync());
         UpdateLimitCommand = new RelayCommand(async () => await UpdateSelectedLimitAsync());
         ApproveVersionCommand = new RelayCommand(async () => await ApproveSelectedVersionAsync());
@@ -258,6 +273,7 @@ public sealed class MainViewModel : ViewModelBase
 
     // Role Permissions (UI Control Visibility)
     public bool IsCeoDashboard => RoleCode == "CEO";
+    public bool CanManageProjectsAndTeam => RoleCode == "CEO";
     public bool CanManageBudgets => RoleCode is "FinancialManager" or "CEO";
     public bool CanApproveVersion => RoleCode == "CEO";
     public bool CanCreateRequest => RoleCode is "ProjectManager" or "ProcurementSpecialist" or "FinancialManager" or "CEO";
@@ -349,6 +365,10 @@ public sealed class MainViewModel : ViewModelBase
     public ObservableCollection<LookupItem> OutgoingContractLookups { get; } = new();
     public ObservableCollection<LookupItem> CostItemLookups { get; } = new();
     public ObservableCollection<LookupItem> RoleLookups { get; } = new();
+    public ObservableCollection<LookupItem> ProjectManagerUserLookups { get; } = new();
+    public ObservableCollection<LookupItem> AssignableUserLookups { get; } = new();
+    public ObservableCollection<LookupItem> DraftVersionLookups { get; } = new();
+    public ObservableCollection<ProjectAssignmentGridRow> ProjectAssignments { get; } = new();
 
     public ObservableCollection<ForecastGridRow> Forecasts { get; } = new();
     public ObservableCollection<PaymentRequestGridRow> DashboardPendingRequests { get; } = new();
@@ -603,9 +623,69 @@ public sealed class MainViewModel : ViewModelBase
     private string _newRuleValue = "До 50 % стоимости этапа";
     public string NewRuleValue { get => _newRuleValue; set => SetField(ref _newRuleValue, value); }
 
+    // CEO Project Creation, Object/Stage & Team Assignment Inputs
+    private string _newProjectCode = "PRJ-2026-03";
+    public string NewProjectCode { get => _newProjectCode; set => SetField(ref _newProjectCode, value); }
+    private string _newProjectName = "Новый строительный проект";
+    public string NewProjectName { get => _newProjectName; set => SetField(ref _newProjectName, value); }
+    private string _newProjectContractValue = "10000.00";
+    public string NewProjectContractValue { get => _newProjectContractValue; set => SetField(ref _newProjectContractValue, value); }
+    private string _newProjectCurrency = "BYN";
+    public string NewProjectCurrency { get => _newProjectCurrency; set => SetField(ref _newProjectCurrency, value); }
+    private string _newProjectInitialCash = "1500.00";
+    public string NewProjectInitialCash { get => _newProjectInitialCash; set => SetField(ref _newProjectInitialCash, value); }
+    private string _newProjectMinCash = "500.00";
+    public string NewProjectMinCash { get => _newProjectMinCash; set => SetField(ref _newProjectMinCash, value); }
+    private string _newProjectStartDate = "2026-11-10";
+    public string NewProjectStartDate { get => _newProjectStartDate; set => SetField(ref _newProjectStartDate, value); }
+    private string _newProjectEndDate = "2027-12-31";
+    public string NewProjectEndDate { get => _newProjectEndDate; set => SetField(ref _newProjectEndDate, value); }
+    private string _newProjectObjectName = "Основной корпус (1-я очередь)";
+    public string NewProjectObjectName { get => _newProjectObjectName; set => SetField(ref _newProjectObjectName, value); }
+    private string _newProjectObjectAddress = "г. Минск";
+    public string NewProjectObjectAddress { get => _newProjectObjectAddress; set => SetField(ref _newProjectObjectAddress, value); }
+    private LookupItem? _selectedNewProjectManager;
+    public LookupItem? SelectedNewProjectManager { get => _selectedNewProjectManager; set => SetField(ref _selectedNewProjectManager, value); }
+
+    private LookupItem? _objectStageProject;
+    public LookupItem? ObjectStageProject { get => _objectStageProject; set => SetField(ref _objectStageProject, value); }
+    private string _newObjectName = "Второй корпус";
+    public string NewObjectName { get => _newObjectName; set => SetField(ref _newObjectName, value); }
+    private string _newObjectAddress = "г. Минск";
+    public string NewObjectAddress { get => _newObjectAddress; set => SetField(ref _newObjectAddress, value); }
+    private string _newStageName = "Нулевой цикл и фундамент";
+    public string NewStageName { get => _newStageName; set => SetField(ref _newStageName, value); }
+    private string _newStagePvInput = "1200.00";
+    public string NewStagePvInput { get => _newStagePvInput; set => SetField(ref _newStagePvInput, value); }
+
+    private LookupItem? _assignProject;
+    public LookupItem? AssignProject { get => _assignProject; set => SetField(ref _assignProject, value); }
+    private LookupItem? _assignUser;
+    public LookupItem? AssignUser { get => _assignUser; set => SetField(ref _assignUser, value); }
+    private string _assignRoleInput = "Руководитель проекта (прораб)";
+    public string AssignRoleInput { get => _assignRoleInput; set => SetField(ref _assignRoleInput, value); }
+    private bool _assignIsPrimaryManager = true;
+    public bool AssignIsPrimaryManager { get => _assignIsPrimaryManager; set => SetField(ref _assignIsPrimaryManager, value); }
+    private ProjectAssignmentGridRow? _selectedAssignment;
+    public ProjectAssignmentGridRow? SelectedAssignment { get => _selectedAssignment; set => SetField(ref _selectedAssignment, value); }
+
+    private LookupItem? _selectedDraftVersionLookup;
+    public LookupItem? SelectedDraftVersionLookup { get => _selectedDraftVersionLookup; set => SetField(ref _selectedDraftVersionLookup, value); }
+    private LookupItem? _newLimitObject;
+    public LookupItem? NewLimitObject { get => _newLimitObject; set => SetField(ref _newLimitObject, value); }
+    private LookupItem? _newLimitCostItem;
+    public LookupItem? NewLimitCostItem { get => _newLimitCostItem; set => SetField(ref _newLimitCostItem, value); }
+    private string _newLimitAmountInput = "5000.00";
+    public string NewLimitAmountInput { get => _newLimitAmountInput; set => SetField(ref _newLimitAmountInput, value); }
+
     // Commands
     public RelayCommand<NavItemViewModel> SelectSectionCommand { get; }
     public RelayCommand RefreshCommand { get; }
+    public RelayCommand CreateProjectCommand { get; }
+    public RelayCommand AddObjectStageCommand { get; }
+    public RelayCommand AssignMemberCommand { get; }
+    public RelayCommand RemoveMemberCommand { get; }
+    public RelayCommand AddDraftLimitCommand { get; }
     public RelayCommand CreateBudgetVersionCommand { get; }
     public RelayCommand UpdateLimitCommand { get; }
     public RelayCommand ApproveVersionCommand { get; }
@@ -693,11 +773,14 @@ public sealed class MainViewModel : ViewModelBase
         RiskProject = ProjectLookups.FirstOrDefault(x => x.Id == prevRiskPrj) ?? ProjectLookups.FirstOrDefault();
         CalendarProject = CalendarProjectLookups.FirstOrDefault(x => x.Id == prevCalPrj) ?? CalendarProjectLookups.FirstOrDefault();
         NewContractProject ??= ProjectLookups.FirstOrDefault();
+        ObjectStageProject ??= ProjectLookups.FirstOrDefault();
+        AssignProject ??= ProjectLookups.FirstOrDefault();
 
         ObjectLookups.Clear();
         foreach (var o in objects) ObjectLookups.Add(new LookupItem(o.Id, o.Name));
         NewReqObject ??= ObjectLookups.FirstOrDefault();
         NewActObject ??= ObjectLookups.FirstOrDefault();
+        NewLimitObject ??= ObjectLookups.FirstOrDefault();
 
         OutgoingContractLookups.Clear();
         foreach (var c in contracts) OutgoingContractLookups.Add(new LookupItem(c.Id, $"{c.Number} — {c.Counterparty}"));
@@ -707,6 +790,41 @@ public sealed class MainViewModel : ViewModelBase
         CostItemLookups.Clear();
         foreach (var ci in costItems) CostItemLookups.Add(new LookupItem(ci.Id, $"{ci.Code} — {ci.Name}"));
         NewReqCostItem ??= CostItemLookups.FirstOrDefault();
+        NewLimitCostItem ??= CostItemLookups.FirstOrDefault();
+
+        if (CanManageProjectsAndTeam)
+        {
+            var activeUsers = await scope.Db.Users.Include(u => u.Role)
+                .Where(u => !u.IsDeleted && u.IsActive)
+                .OrderBy(u => u.FullName)
+                .ToListAsync();
+
+            var prevPm = SelectedNewProjectManager?.Id;
+            var prevAssign = AssignUser?.Id;
+
+            ProjectManagerUserLookups.Clear();
+            ProjectManagerUserLookups.Add(new LookupItem(Guid.Empty, "— Без назначения прораба —"));
+            AssignableUserLookups.Clear();
+
+            foreach (var u in activeUsers.Where(x => x.Role?.Code == "ProjectManager"))
+                ProjectManagerUserLookups.Add(new LookupItem(u.Id, $"{u.FullName} ({u.Login}) — Прораб/РП"));
+
+            foreach (var u in activeUsers.Where(x => x.Role?.Code != "Admin"))
+            {
+                string roleLabel = u.Role?.Code == "ProjectManager"
+                    ? "Руководитель проекта (прораб)"
+                    : (u.Role?.Name ?? "Сотрудник");
+                AssignableUserLookups.Add(new LookupItem(u.Id, $"{u.FullName} ({u.Login}) — {roleLabel}"));
+                if (u.Role?.Code != "ProjectManager")
+                    ProjectManagerUserLookups.Add(new LookupItem(u.Id, $"{u.FullName} ({u.Login}) — {roleLabel}"));
+            }
+
+            SelectedNewProjectManager = ProjectManagerUserLookups.FirstOrDefault(x => x.Id == prevPm)
+                ?? ProjectManagerUserLookups.Skip(1).FirstOrDefault()
+                ?? ProjectManagerUserLookups.FirstOrDefault();
+            AssignUser = AssignableUserLookups.FirstOrDefault(x => x.Id == prevAssign)
+                ?? AssignableUserLookups.FirstOrDefault();
+        }
 
         if (IsAdminRole)
         {
@@ -803,6 +921,39 @@ public sealed class MainViewModel : ViewModelBase
             BudgetLimits.Add(new BudgetLimitGridRow(
                 l.Id, bv?.VersionNumber ?? 0, vs, RussianLabels.BudgetVersionStatusName(vs),
                 obj?.Name ?? "—", ci?.Code ?? "—", l.Amount, l.RowVersion));
+        }
+
+        var prevDraftId = SelectedDraftVersionLookup?.Id;
+        DraftVersionLookups.Clear();
+        foreach (var v in versions.Where(v => v.Status == BudgetVersionStatus.Draft))
+        {
+            projects.TryGetValue(v.ProjectId, out var p);
+            DraftVersionLookups.Add(new LookupItem(v.Id, $"{p?.Code ?? "—"} — v{v.VersionNumber} (Черновик)"));
+        }
+        SelectedDraftVersionLookup = DraftVersionLookups.FirstOrDefault(x => x.Id == prevDraftId)
+            ?? DraftVersionLookups.FirstOrDefault();
+
+        var assignments = await scope.Db.ProjectAssignments
+            .Include(a => a.User)
+            .ThenInclude(u => u!.Role)
+            .Where(a => !a.IsDeleted)
+            .OrderByDescending(a => a.IsPrimaryManager)
+            .ThenBy(a => a.ProjectRole)
+            .ToListAsync();
+
+        ProjectAssignments.Clear();
+        foreach (var a in assignments)
+        {
+            projects.TryGetValue(a.ProjectId, out var p);
+            ProjectAssignments.Add(new ProjectAssignmentGridRow(
+                a.Id,
+                a.ProjectId,
+                p?.Code ?? "—",
+                a.User?.FullName ?? "—",
+                a.User?.Login ?? "—",
+                a.User?.Role?.Name ?? "—",
+                a.ProjectRole,
+                a.IsPrimaryManager ? "Да (Прораб / РП)" : "Участник"));
         }
     }
 
@@ -1062,6 +1213,124 @@ public sealed class MainViewModel : ViewModelBase
     }
 
     // Write Operations (Role-Gated)
+    private async Task CreateProjectAsync()
+    {
+        if (!CanManageProjectsAndTeam) return;
+        await RunSafeAsync(async () =>
+        {
+            decimal contractVal = ParseDecimal(NewProjectContractValue, "контрактная цена");
+            decimal initCash = ParseDecimal(NewProjectInitialCash, "начальный остаток");
+            decimal minCash = ParseDecimal(NewProjectMinCash, "неснижаемый остаток");
+            var startDate = ParseDate(NewProjectStartDate, new DateTime(2026, 11, 10));
+            var endDate = ParseDate(NewProjectEndDate, new DateTime(2027, 12, 31));
+            Guid? pmId = SelectedNewProjectManager != null && SelectedNewProjectManager.Id != Guid.Empty
+                ? SelectedNewProjectManager.Id
+                : null;
+
+            using var scope = _dbFactory.CreateScope();
+            var dto = new CreateProjectDto(
+                NewProjectCode,
+                NewProjectName,
+                contractVal,
+                NewProjectCurrency,
+                initCash,
+                minCash,
+                startDate,
+                endDate,
+                NewProjectObjectName,
+                NewProjectObjectAddress,
+                "1-я очередь",
+                pmId);
+
+            var res = await scope.ProjectMgmt.CreateProjectAsync(dto, _session.UserId, _session.Login);
+            await LoadLookupsAsync();
+            await LoadBudgetsAsync();
+
+            var newPrjItem = ProjectLookups.FirstOrDefault(x => x.Id == res.Project.Id);
+            if (newPrjItem != null)
+            {
+                BudgetProject = newPrjItem;
+                ObjectStageProject = newPrjItem;
+                AssignProject = newPrjItem;
+                NewContractProject = newPrjItem;
+            }
+            NewLimitObject = ObjectLookups.FirstOrDefault(x => x.Id == res.InitialObject.Id) ?? NewLimitObject;
+            SelectedDraftVersionLookup = DraftVersionLookups.FirstOrDefault(x => x.Id == res.InitialBudgetVersion.Id) ?? SelectedDraftVersionLookup;
+
+            SetStatus(res.ManagerAssignment != null
+                ? $"Создан проект {res.Project.Code} (Draft v1) и назначен прораб/РП."
+                : $"Создан проект {res.Project.Code} (Draft v1).", false);
+        });
+    }
+
+    private async Task AddObjectAndStageAsync()
+    {
+        if (!CanManageProjectsAndTeam || ObjectStageProject == null) return;
+        await RunSafeAsync(async () =>
+        {
+            decimal pv = string.IsNullOrWhiteSpace(NewStagePvInput) ? 0m : ParseDecimal(NewStagePvInput, "PV этапа");
+            using var scope = _dbFactory.CreateScope();
+            var dto = new AddObjectAndStageDto(
+                ObjectStageProject.Id,
+                null,
+                "1-я очередь",
+                NewObjectName,
+                NewObjectAddress,
+                NewStageName,
+                pv);
+            var (obj, stage) = await scope.ProjectMgmt.AddObjectAndStageAsync(dto, _session.UserId, _session.Login);
+            await LoadLookupsAsync();
+            await LoadBudgetsAsync();
+            SetStatus(stage != null
+                ? $"Добавлен объект «{obj.Name}» и этап «{stage.Name}» (PV={stage.PlannedValuePV:N2})."
+                : $"Добавлен объект «{obj.Name}».", false);
+        });
+    }
+
+    private async Task AssignProjectMemberAsync()
+    {
+        if (!CanManageProjectsAndTeam || AssignProject == null || AssignUser == null) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            var dto = new AssignProjectMemberDto(AssignProject.Id, AssignUser.Id, AssignRoleInput, AssignIsPrimaryManager);
+            var assigned = await scope.ProjectMgmt.AssignMemberAsync(dto, _session.UserId, _session.Login);
+            await LoadBudgetsAsync();
+            SetStatus($"Сотрудник назначен в проект {AssignProject.Display} ({assigned.ProjectRole}).", false);
+        });
+    }
+
+    private async Task RemoveProjectMemberAsync()
+    {
+        if (!CanManageProjectsAndTeam || SelectedAssignment == null) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            await scope.ProjectMgmt.RemoveMemberAsync(SelectedAssignment.Id, _session.UserId, _session.Login);
+            await LoadBudgetsAsync();
+            SetStatus($"Назначение {SelectedAssignment.UserFullName} в проекте {SelectedAssignment.ProjectCode} снято.", false);
+        });
+    }
+
+    private async Task AddDraftLimitAsync()
+    {
+        if (!CanManageBudgets || SelectedDraftVersionLookup == null || NewLimitObject == null || NewLimitCostItem == null) return;
+        await RunSafeAsync(async () =>
+        {
+            decimal amount = ParseDecimal(NewLimitAmountInput, "лимит бюджета");
+            using var scope = _dbFactory.CreateScope();
+            await scope.ProjectMgmt.UpsertDraftBudgetLimitAsync(
+                SelectedDraftVersionLookup.Id,
+                NewLimitObject.Id,
+                NewLimitCostItem.Id,
+                amount,
+                _session.UserId,
+                _session.Login);
+            await LoadBudgetsAsync();
+            SetStatus($"Лимит {amount:N2} тыс. р. сохранён в черновую версию бюджета.", false);
+        });
+    }
+
     private async Task CreateBudgetVersionAsync()
     {
         if (!CanManageBudgets || BudgetProject == null) return;

@@ -146,6 +146,56 @@ public interface IRiskService
         string comment, byte[] rowVersion, Guid userId, string userLogin, CancellationToken ct = default);
 }
 
+public record CreateProjectDto(
+    string Code,
+    string Name,
+    decimal ContractValue,
+    string Currency,
+    decimal InitialCash,
+    decimal MinCashBalance,
+    DateTime PlannedStartDate,
+    DateTime PlannedEndDate,
+    string InitialObjectName,
+    string InitialObjectAddress,
+    string InitialQueueName = "1-я очередь",
+    Guid? ProjectManagerUserId = null);
+
+public record CreateProjectResultDto(
+    Project Project,
+    ConstructionObject InitialObject,
+    BudgetVersion InitialBudgetVersion,
+    ProjectAssignment? ManagerAssignment);
+
+public record AddObjectAndStageDto(
+    Guid ProjectId,
+    Guid? ExistingObjectId,
+    string QueueName,
+    string ObjectName,
+    string ObjectAddress,
+    string? InitialStageName = null,
+    decimal InitialStagePv = 0m);
+
+public record AssignProjectMemberDto(
+    Guid ProjectId,
+    Guid UserId,
+    string ProjectRole,
+    bool IsPrimaryManager);
+
+public interface IProjectManagementService
+{
+    Task<CreateProjectResultDto> CreateProjectAsync(
+        CreateProjectDto dto, Guid actorUserId, string actorLogin, CancellationToken ct = default);
+    Task<(ConstructionObject Object, WorkStage? Stage)> AddObjectAndStageAsync(
+        AddObjectAndStageDto dto, Guid actorUserId, string actorLogin, CancellationToken ct = default);
+    Task<ProjectAssignment> AssignMemberAsync(
+        AssignProjectMemberDto dto, Guid actorUserId, string actorLogin, CancellationToken ct = default);
+    Task RemoveMemberAsync(
+        Guid assignmentId, Guid actorUserId, string actorLogin, CancellationToken ct = default);
+    Task<BudgetLimit> UpsertDraftBudgetLimitAsync(
+        Guid budgetVersionId, Guid constructionObjectId, Guid costItemId, decimal amount,
+        Guid actorUserId, string actorLogin, CancellationToken ct = default);
+}
+
 public interface INotificationPublisher
 {
     Task PublishAsync(Notification notification, CancellationToken ct = default);

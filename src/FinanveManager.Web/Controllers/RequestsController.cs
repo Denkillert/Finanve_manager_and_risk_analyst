@@ -3,6 +3,7 @@ using FinanveManager.Data.Models;
 using FinanveManager.Data.Persistence;
 using FinanveManager.Data.Services;
 using FinanveManager.Web.Models;
+using FinanveManager.Web.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -34,24 +35,44 @@ public class RequestsController : Controller
     [Authorize(Roles = "CEO,FinancialManager,Accountant,ProcurementSpecialist,ProjectManager")]
     public async Task<IActionResult> Index(string? status = null, CancellationToken ct = default)
     {
+        var (uid, _) = CurrentUser();
+        var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        var allowedIds = await WebPortfolioHelper.GetVisibleProjectIdsAsync(_db, role, uid, ct);
+
         var query = _db.PaymentRequests
             .Include(r => r.Contract)
             .Include(r => r.CostItem)
             .Where(r => !r.IsDeleted);
 
+        if (allowedIds != null)
+            query = query.Where(r => allowedIds.Contains(r.ProjectId));
+
         if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<RequestStatus>(status, true, out var parsed))
             query = query.Where(r => r.Status == parsed);
+
+        var projQuery = _db.Projects.Where(p => !p.IsDeleted);
+        var objQuery = _db.ConstructionObjects.Where(o => !o.IsDeleted);
+        var conQuery = _db.Contracts.Where(c => !c.IsDeleted && c.Direction == ContractDirection.SupplierSubcontractorOutgoing);
+        if (allowedIds != null)
+        {
+            projQuery = projQuery.Where(p => allowedIds.Contains(p.Id));
+            objQuery = objQuery.Where(o => allowedIds.Contains(o.ProjectId));
+            conQuery = conQuery.Where(c => allowedIds.Contains(c.ProjectId));
+        }
+
+        var visibleObjIds = (await objQuery.Select(o => o.Id).ToListAsync(ct)).ToHashSet();
 
         var vm = new PaymentRequestsViewModel
         {
             StatusFilter = status,
             Requests = await query.OrderByDescending(r => r.CreatedAt).ToListAsync(ct),
-            Projects = await _db.Projects.Where(p => !p.IsDeleted).OrderBy(p => p.Code).ToListAsync(ct),
-            Objects = await _db.ConstructionObjects.Where(o => !o.IsDeleted).ToListAsync(ct),
-            Contracts = await _db.Contracts.Where(c => !c.IsDeleted && c.Direction == ContractDirection.SupplierSubcontractorOutgoing).ToListAsync(ct),
+            Projects = await projQuery.OrderBy(p => p.Code).ToListAsync(ct),
+            Objects = await objQuery.ToListAsync(ct),
+            Contracts = await conQuery.ToListAsync(ct),
             CostItems = await _db.CostItems.Where(c => !c.IsDeleted).OrderBy(c => c.Code).ToListAsync(ct),
             Acts = await _db.Documents
-                .Where(d => !d.IsDeleted && (d.Type == DocumentType.ActS2 || d.Type == DocumentType.CertificateS3))
+                .Where(d => !d.IsDeleted && (d.Type == DocumentType.ActS2 || d.Type == DocumentType.CertificateS3)
+                            && (allowedIds == null || (d.ConstructionObjectId.HasValue && visibleObjIds.Contains(d.ConstructionObjectId.Value))))
                 .OrderByDescending(d => d.Date)
                 .ToListAsync(ct)
         };
@@ -62,13 +83,29 @@ public class RequestsController : Controller
     [Authorize(Roles = "ProjectManager,Accountant,ProcurementSpecialist")]
     public async Task<IActionResult> Acts(CancellationToken ct = default)
     {
+        var (uid, _) = CurrentUser();
+        var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+        var allowedIds = await WebPortfolioHelper.GetVisibleProjectIdsAsync(_db, role, uid, ct);
+
+        var objQuery = _db.ConstructionObjects.Where(o => !o.IsDeleted);
+        var conQuery = _db.Contracts.Where(c => !c.IsDeleted && c.Direction == ContractDirection.SupplierSubcontractorOutgoing);
+        if (allowedIds != null)
+        {
+            objQuery = objQuery.Where(o => allowedIds.Contains(o.ProjectId));
+            conQuery = conQuery.Where(c => allowedIds.Contains(c.ProjectId));
+        }
+
+        var objs = await objQuery.ToListAsync(ct);
+        var objIds = objs.Select(o => o.Id).ToHashSet();
+
         var vm = new SiteActsViewModel
         {
-            Objects = await _db.ConstructionObjects.Where(o => !o.IsDeleted).ToListAsync(ct),
-            Stages = await _db.WorkStages.Where(s => !s.IsDeleted).ToListAsync(ct),
-            Contracts = await _db.Contracts.Where(c => !c.IsDeleted && c.Direction == ContractDirection.SupplierSubcontractorOutgoing).ToListAsync(ct),
+            Objects = objs,
+            Stages = await _db.WorkStages.Where(s => !s.IsDeleted && objIds.Contains(s.ConstructionObjectId)).ToListAsync(ct),
+            Contracts = await conQuery.ToListAsync(ct),
             Acts = await _db.Documents
-                .Where(d => !d.IsDeleted && (d.Type == DocumentType.ActS2 || d.Type == DocumentType.CertificateS3))
+                .Where(d => !d.IsDeleted && (d.Type == DocumentType.ActS2 || d.Type == DocumentType.CertificateS3)
+                            && (allowedIds == null || (d.ConstructionObjectId.HasValue && objIds.Contains(d.ConstructionObjectId.Value))))
                 .OrderByDescending(d => d.Date)
                 .ToListAsync(ct)
         };
@@ -102,8 +139,14 @@ public class RequestsController : Controller
 
         try
         {
+            var (uid, login) = CurrentUser();
+            var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+            var allowedIds = await WebPortfolioHelper.GetVisibleProjectIdsAsync(_db, role, uid, ct);
+
             var obj = await _db.ConstructionObjects.FirstOrDefaultAsync(o => o.Id == constructionObjectId && !o.IsDeleted, ct)
                 ?? throw new DomainException("Объект строительства не найден.");
+            if (allowedIds != null && !allowedIds.Contains(obj.ProjectId))
+                throw new DomainException("Доступ запрещён: вы не назначены руководителем этого проекта.");
             if (!await _db.Contracts.AnyAsync(c => c.Id == contractId && !c.IsDeleted, ct))
                 throw new DomainException("Договор не найден.");
             if (!await _db.CostItems.AnyAsync(ci => ci.Id == costItemId && !ci.IsDeleted, ct))
@@ -127,7 +170,6 @@ public class RequestsController : Controller
                 $"WEB-{Guid.NewGuid():N}",
                 true);
 
-            var (uid, login) = CurrentUser();
             var (created, checks) = await _requestService.CreateAsync(dto, uid, login, ct);
             var msg = $"Заявка {created.Number} создана в статусе «{RussianLabels.RequestStatusName(created.Status)}». " + string.Join(" | ", checks.Messages);
             if (created.Status == RequestStatus.Blocked)
@@ -273,6 +315,14 @@ public class RequestsController : Controller
             if (contractId == Guid.Empty || constructionObjectId == Guid.Empty)
                 throw new DomainException("Выберите договор и объект строительства.");
 
+            var (uid, login) = CurrentUser();
+            var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+            var allowedIds = await WebPortfolioHelper.GetVisibleProjectIdsAsync(_db, role, uid, ct);
+            var obj = await _db.ConstructionObjects.FirstOrDefaultAsync(o => o.Id == constructionObjectId && !o.IsDeleted, ct)
+                ?? throw new DomainException("Объект строительства не найден.");
+            if (allowedIds != null && !allowedIds.Contains(obj.ProjectId))
+                throw new DomainException("Доступ запрещён: вы не назначены руководителем этого проекта.");
+
             var docType = documentType == DocumentType.CertificateS3 ? DocumentType.CertificateS3 : DocumentType.ActS2;
             string docNumber = string.IsNullOrWhiteSpace(number) ? $"С-2/{DateTime.UtcNow:MMdd-HHmm}" : number.Trim();
             var docDate = new DateTime(2026, 11, 10);
@@ -299,7 +349,6 @@ public class RequestsController : Controller
                 IsVerifiedByInstruction53 = true
             };
             await _db.Documents.AddAsync(doc, ct);
-            var (uid, login) = CurrentUser();
             await _audit.LogAsync(uid, login, nameof(Document), doc.Number, "CREATE_ACT_S2", null,
                 $"Gross={grossAmount:N2};Payable={payable:N2}", actWorkDescription, ct);
             await _db.SaveChangesAsync(ct);

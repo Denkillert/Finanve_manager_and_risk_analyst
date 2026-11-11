@@ -70,6 +70,12 @@ INSERT INTO finance.Projects (Id, PortfolioId, Code, Name, ContractValue, Curren
 (@Project1Id, @PortfolioId, N'PRJ-2026-01', N'ЖК «Лошицкий квартал», жилые дома № 4 и № 5', 14500.0000, 'BYN', 2000.0000, 1000.0000, '2026-01-15', '2026-12-30'),
 (@Project2Id, @PortfolioId, N'PRJ-2026-02', N'Детский сад на 230 мест в м-не Каменная Горка', 8900.0000, 'BYN', 1200.0000, 500.0000, '2026-03-01', '2027-06-30');
 
+INSERT INTO finance.ProjectAssignments (ProjectId, UserId, ProjectRole, IsPrimaryManager, AssignedByUserId) VALUES
+(@Project1Id, @UserPm, N'Руководитель проекта (прораб)', 1, @UserCeo),
+(@Project2Id, @UserPm, N'Руководитель проекта (прораб)', 1, @UserCeo),
+(@Project1Id, @UserFin, N'Финансовый менеджер проекта', 0, @UserCeo),
+(@Project1Id, @UserRisk, N'Специалист по рискам проекта', 0, @UserCeo);
+
 INSERT INTO finance.ConstructionObjects (Id, ProjectId, QueueName, Name, Address) VALUES
 (@Obj1Id, @Project1Id, N'1-я очередь', N'Жилой дом № 4 (серия М464-У1)', N'г. Минск, ул. Игуменский тракт, 42'),
 (@Obj2Id, @Project1Id, N'2-я очередь', N'Жилой дом № 5 и инженерные сети', N'г. Минск, ул. Игуменский тракт, 44'),

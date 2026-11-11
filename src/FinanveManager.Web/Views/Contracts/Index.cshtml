@@ -172,14 +172,14 @@
 </div>
 
 <div class="grid-2">
-    <div class="card">
-        <h3 class="card-title" style="margin-bottom:8px">Импорт банковской выписки CSV / MT940 (контроль дублей по BankOperationId)</h3>
-        @if (!string.IsNullOrEmpty(Model.ImportReportSummary))
-        {
-            <div class="alert alert-info">@Model.ImportReportSummary</div>
-        }
-        @if (roleCode == "Accountant")
-        {
+    @if (roleCode == "Accountant")
+    {
+        <div class="card">
+            <h3 class="card-title" style="margin-bottom:8px">Импорт банковской выписки CSV / MT940 (контроль дублей по BankOperationId)</h3>
+            @if (!string.IsNullOrEmpty(Model.ImportReportSummary))
+            {
+                <div class="alert alert-info">@Model.ImportReportSummary</div>
+            }
             <form method="post" asp-controller="Contracts" asp-action="ImportStatement">
                 <div class="field" style="margin-bottom:8px">
                     <label>Имя файла</label>
@@ -192,12 +192,8 @@ OP-2026-9001;2026-11-10;850.00;BYN;ОАО Белорусский цементн�
                 </div>
                 <button type="submit" class="btn">Загрузить и сверить выписку</button>
             </form>
-        }
-        else
-        {
-            <p class="muted">Импорт банковских выписок доступен роли <strong>Бухгалтер (Accountant)</strong>.</p>
-        }
-    </div>
+        </div>
+    }
 
     <div class="card">
         <h3 class="card-title" style="margin-bottom:8px">Импорт локальной сметы и маппинг статей затрат (≥ 95 %)</h3>

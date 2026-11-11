@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanveManager.Web.Controllers;
 
-[Authorize(Roles = "CEO,ProjectManager,RiskSpecialist")]
+[Authorize(Roles = "CEO,RiskSpecialist")]
 public class RisksController : Controller
 {
     private readonly AppDbContext _db;
@@ -54,7 +54,7 @@ public class RisksController : Controller
     }
 
     [HttpPost]
-    [Authorize(Roles = "RiskSpecialist,ProjectManager,CEO")]
+    [Authorize(Roles = "RiskSpecialist,CEO")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> UpdateAssessment(
         Guid id, Guid projectId, decimal probability, decimal monetaryImpact,
@@ -87,7 +87,7 @@ public class RisksController : Controller
     }
 
     [HttpPost]
-    [Authorize(Roles = "RiskSpecialist,ProjectManager,CEO")]
+    [Authorize(Roles = "RiskSpecialist,CEO")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
         Guid projectId, string code, string eventText, decimal probability,

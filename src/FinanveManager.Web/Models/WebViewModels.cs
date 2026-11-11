@@ -62,6 +62,7 @@ public class ProjectsBudgetsViewModel
     public List<FreeLimitRowItem> FreeLimits { get; set; } = new();
     public List<BudgetVersion> BudgetVersions { get; set; } = new();
     public List<BudgetLimit> BudgetLimits { get; set; } = new();
+    public List<ProjectAssignment> Assignments { get; set; } = new();
 }
 
 public class PaymentRequestsViewModel

@@ -152,14 +152,26 @@ public class ControlExamplesAndWorkflowTests
         var adminSections = RolePermissions.GetSectionsForRole("Admin").Select(s => s.Section).ToList();
         Assert.Equal(new[] { AppSection.Administration, AppSection.AuditLog }, adminSections);
 
+        var accSections = RolePermissions.GetSectionsForRole("Accountant").Select(s => s.Section).ToList();
+        Assert.Equal(new[] { AppSection.PaymentRequests, AppSection.ContractsAndStatements }, accSections);
+
+        var procSections = RolePermissions.GetSectionsForRole("ProcurementSpecialist").Select(s => s.Section).ToList();
+        Assert.Equal(new[] { AppSection.ContractsAndStatements, AppSection.PaymentRequests }, procSections);
+
         var pmSections = RolePermissions.GetSectionsForRole("ProjectManager").Select(s => s.Section).ToList();
-        Assert.Contains(AppSection.SiteActs, pmSections);
+        Assert.Equal(new[] { AppSection.ProjectsAndBudgets, AppSection.PaymentRequests, AppSection.SiteActs }, pmSections);
 
         var riskSections = RolePermissions.GetSectionsForRole("RiskSpecialist").Select(s => s.Section).ToList();
-        Assert.Equal(new[] { AppSection.Dashboard, AppSection.RisksAndP80, AppSection.Reports }, riskSections);
+        Assert.Equal(new[] { AppSection.RisksAndP80, AppSection.Reports }, riskSections);
 
         Assert.False(RolePermissions.CanAccess("Accountant", AppSection.RisksAndP80));
+        Assert.False(RolePermissions.CanAccess("Accountant", AppSection.PaymentCalendar));
+        Assert.False(RolePermissions.CanAccess("ProcurementSpecialist", AppSection.PaymentCalendar));
+        Assert.False(RolePermissions.CanAccess("ProjectManager", AppSection.RisksAndP80));
+        Assert.False(RolePermissions.CanAccess("FinancialManager", AppSection.RisksAndP80));
         Assert.False(RolePermissions.CanAccess("FinancialManager", AppSection.Administration));
+        Assert.False(RolePermissions.CanAccess("RiskSpecialist", AppSection.Dashboard));
+        Assert.False(RolePermissions.CanAccess("RiskSpecialist", AppSection.ProjectsAndBudgets));
         Assert.False(RolePermissions.CanAccess("Admin", AppSection.Dashboard));
 
         // Табл. 1.8 и НФТ-1: строго 7 ролей (4 в WPF, 3 в Веб)
@@ -171,8 +183,79 @@ public class ControlExamplesAndWorkflowTests
         Assert.True(RolePermissions.IsClientAllowed("ProjectManager", ClientApp.Web));
 
         Assert.Equal(("Admin", "Index"), RolePermissions.GetLandingRoute("Admin"));
-        Assert.Equal(("Dashboard", "Index"), RolePermissions.GetLandingRoute("RiskSpecialist"));
+        Assert.Equal(("Requests", "Index"), RolePermissions.GetLandingRoute("Accountant"));
+        Assert.Equal(("Contracts", "Index"), RolePermissions.GetLandingRoute("ProcurementSpecialist"));
+        Assert.Equal(("Projects", "Index"), RolePermissions.GetLandingRoute("ProjectManager"));
+        Assert.Equal(("Risks", "Index"), RolePermissions.GetLandingRoute("RiskSpecialist"));
+        Assert.Equal(("Dashboard", "Index"), RolePermissions.GetLandingRoute("FinancialManager"));
         Assert.Equal("Заблокирована", RussianLabels.RequestStatusName(RequestStatus.Blocked));
+    }
+
+    [Fact]
+    public async Task Ceo_CanCreateProject_FromEmptyDb_AndAssignProjectManager()
+    {
+        var factory = AppDatabaseFactory.CreateInMemoryForTests($"CeoEmptyDb_{Guid.NewGuid():N}");
+        using (var initScope = factory.CreateScope())
+        {
+            await DbInitializer.SeedRolesAndAdminOnlyAsync(initScope.Db);
+            await initScope.Db.Users.AddAsync(new User
+            {
+                Id = SeedIds.UserPm,
+                RoleId = SeedIds.RolePm,
+                Login = "prorab1",
+                PasswordHash = SeedIds.DefaultDemoPasswordHash,
+                FullName = "Сидоров А.В. (Прораб)",
+                Email = "prorab1@stroyfin.by",
+                IsActive = true,
+                PersonalDataConsentGiven = true,
+                ConsentDate = DateTime.UtcNow
+            });
+            await initScope.Db.SaveChangesAsync();
+        }
+
+        using var scope = factory.CreateScope();
+        var created = await scope.ProjectMgmt.CreateProjectAsync(
+            new CreateProjectDto(
+                "PRJ-EMPTY-01",
+                "Школа на 1020 мест",
+                12500m,
+                "BYN",
+                2000m,
+                600m,
+                new DateTime(2026, 11, 10),
+                new DateTime(2028, 8, 31),
+                "Учебный корпус",
+                "г. Минск, ул. Притыцкого, 90",
+                "1-я очередь",
+                SeedIds.UserPm),
+            SeedIds.UserCeo,
+            "director");
+
+        Assert.Equal("PRJ-EMPTY-01", created.Project.Code);
+        Assert.Equal(BudgetVersionStatus.Draft, created.InitialBudgetVersion.Status);
+        Assert.NotNull(created.ManagerAssignment);
+        Assert.True(created.ManagerAssignment!.IsPrimaryManager);
+        Assert.Equal(SeedIds.UserPm, created.ManagerAssignment.UserId);
+
+        var matCost = await scope.Db.CostItems.FirstAsync(c => c.Code == "ST-01");
+        var limit = await scope.ProjectMgmt.UpsertDraftBudgetLimitAsync(
+            created.InitialBudgetVersion.Id, created.InitialObject.Id, matCost.Id, 7500m, SeedIds.UserCeo, "director");
+        Assert.Equal(7500m, limit.Amount);
+
+        var approved = await scope.Budget.ApproveVersionAsync(
+            created.InitialBudgetVersion.Id, created.InitialBudgetVersion.RowVersion, SeedIds.UserCeo, "director");
+        Assert.Equal(BudgetVersionStatus.Approved, approved.Status);
+
+        var free = await scope.Budget.CalculateFreeLimitAsync(created.InitialObject.Id, matCost.Id);
+        Assert.Equal(7500m, free.ApprovedBudget);
+
+        // Снятие и повторное назначение прораба безопасно переактивирует запись без нарушения уникального индекса
+        await scope.ProjectMgmt.RemoveMemberAsync(created.ManagerAssignment.Id, SeedIds.UserCeo, "director");
+        var reassigned = await scope.ProjectMgmt.AssignMemberAsync(
+            new AssignProjectMemberDto(created.Project.Id, SeedIds.UserPm, "Руководитель проекта (прораб)", true),
+            SeedIds.UserCeo, "director");
+        Assert.False(reassigned.IsDeleted);
+        Assert.True(reassigned.IsPrimaryManager);
     }
 
     [Fact]

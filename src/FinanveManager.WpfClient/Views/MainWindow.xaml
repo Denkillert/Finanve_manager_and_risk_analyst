@@ -249,6 +249,100 @@
 
                     <!-- 2. Проекты и бюджеты -->
                     <StackPanel Visibility="{Binding IsProjectsSection, Converter={StaticResource BoolToVis}}">
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14"
+                                Visibility="{Binding CanManageProjectsAndTeam, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="Создание нового проекта и назначение руководителя проекта (прораба)"
+                                           FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                <WrapPanel Margin="0,0,0,8">
+                                    <StackPanel Width="115" Margin="0,0,10,8">
+                                        <TextBlock Text="Шифр проекта" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewProjectCode}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="250" Margin="0,0,10,8">
+                                        <TextBlock Text="Наименование проекта" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewProjectName}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="115" Margin="0,0,10,8">
+                                        <TextBlock Text="Цена V (тыс. р.)" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewProjectContractValue}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="75" Margin="0,0,10,8">
+                                        <TextBlock Text="Валюта" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <ComboBox ItemsSource="{Binding Currencies}" SelectedItem="{Binding NewProjectCurrency}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="105" Margin="0,0,10,8">
+                                        <TextBlock Text="Нач. остаток ДС" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewProjectInitialCash}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="105" Margin="0,0,10,8">
+                                        <TextBlock Text="Мин. остаток ДС" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewProjectMinCash}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="110" Margin="0,0,10,8">
+                                        <TextBlock Text="Дата начала" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewProjectStartDate}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="110" Margin="0,0,10,8">
+                                        <TextBlock Text="Дата окончания" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewProjectEndDate}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="220" Margin="0,0,10,8">
+                                        <TextBlock Text="Первый объект строительства" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewProjectObjectName}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="190" Margin="0,0,10,8">
+                                        <TextBlock Text="Адрес объекта" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewProjectObjectAddress}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="260" Margin="0,0,10,8">
+                                        <TextBlock Text="Назначить руководителя (прораба)" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <ComboBox ItemsSource="{Binding ProjectManagerUserLookups}" SelectedItem="{Binding SelectedNewProjectManager}" DisplayMemberPath="Display" Padding="6,5"/>
+                                    </StackPanel>
+                                    <Button Content="Создать проект и назначить прораба" Command="{Binding CreateProjectCommand}"
+                                            Style="{StaticResource PrimaryButton}" VerticalAlignment="Bottom" Margin="0,0,0,8"/>
+                                </WrapPanel>
+
+                                <Separator Margin="0,4,0,10" Background="#E2E8F0"/>
+                                <TextBlock Text="Добавление объекта строительства и этапа работ (PV) к существующему проекту"
+                                           FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,8"/>
+                                <WrapPanel>
+                                    <ComboBox ItemsSource="{Binding ProjectLookups}" SelectedItem="{Binding ObjectStageProject}" DisplayMemberPath="Display" Width="210" Padding="6,5" Margin="0,0,8,6"/>
+                                    <TextBox Text="{Binding NewObjectName}" Width="180" Padding="6,5" Margin="0,0,8,6" ToolTip="Наименование объекта"/>
+                                    <TextBox Text="{Binding NewObjectAddress}" Width="150" Padding="6,5" Margin="0,0,8,6" ToolTip="Адрес"/>
+                                    <TextBox Text="{Binding NewStageName}" Width="190" Padding="6,5" Margin="0,0,8,6" ToolTip="Этап работ"/>
+                                    <TextBox Text="{Binding NewStagePvInput}" Width="90" Padding="6,5" Margin="0,0,8,6" ToolTip="PV этапа"/>
+                                    <Button Content="Добавить объект / этап" Command="{Binding AddObjectStageCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,0,6"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14"
+                                Visibility="{Binding CanManageProjectsAndTeam, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="Команда проекта и закреплённые руководители (прорабы)"
+                                           FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                <WrapPanel Margin="0,0,0,10">
+                                    <ComboBox ItemsSource="{Binding ProjectLookups}" SelectedItem="{Binding AssignProject}" DisplayMemberPath="Display" Width="220" Padding="6,5" Margin="0,0,8,6"/>
+                                    <ComboBox ItemsSource="{Binding AssignableUserLookups}" SelectedItem="{Binding AssignUser}" DisplayMemberPath="Display" Width="260" Padding="6,5" Margin="0,0,8,6"/>
+                                    <TextBox Text="{Binding AssignRoleInput}" Width="210" Padding="6,5" Margin="0,0,8,6" ToolTip="Проектная роль"/>
+                                    <CheckBox IsChecked="{Binding AssignIsPrimaryManager}" Content="Ответственный прораб / РП" VerticalAlignment="Center" Margin="0,0,10,6"/>
+                                    <Button Content="Назначить в проект" Command="{Binding AssignMemberCommand}" Style="{StaticResource SuccessButton}" Margin="0,0,8,6"/>
+                                    <Button Content="Снять выбранное назначение" Command="{Binding RemoveMemberCommand}" Style="{StaticResource DangerButton}" Margin="0,0,0,6"/>
+                                </WrapPanel>
+                                <DataGrid ItemsSource="{Binding ProjectAssignments}" SelectedItem="{Binding SelectedAssignment}" MaxHeight="200">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Проект" Binding="{Binding ProjectCode}" Width="105"/>
+                                        <DataGridTextColumn Header="Сотрудник" Binding="{Binding UserFullName}" Width="200"/>
+                                        <DataGridTextColumn Header="Логин" Binding="{Binding UserLogin}" Width="110"/>
+                                        <DataGridTextColumn Header="Системная роль" Binding="{Binding SystemRoleName}" Width="190"/>
+                                        <DataGridTextColumn Header="Роль в проекте" Binding="{Binding ProjectRole}" Width="210"/>
+                                        <DataGridTextColumn Header="Прораб / статус" Binding="{Binding PrimaryMarkText}" Width="*"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </Border>
+
                         <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
                             <StackPanel>
                                 <TextBlock Text="Витрина свободного лимита vFreeLimit (Lдост = B − O, Oост = O − F)"
@@ -306,6 +400,13 @@
                             <Border Grid.Column="2" Style="{StaticResource CardBorder}">
                                 <StackPanel>
                                     <TextBlock Text="Лимиты по версиям и статьям" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                    <WrapPanel Margin="0,0,0,8" Visibility="{Binding CanManageBudgets, Converter={StaticResource BoolToVis}}">
+                                        <ComboBox ItemsSource="{Binding DraftVersionLookups}" SelectedItem="{Binding SelectedDraftVersionLookup}" DisplayMemberPath="Display" Width="170" Padding="6,5" Margin="0,0,6,6"/>
+                                        <ComboBox ItemsSource="{Binding ObjectLookups}" SelectedItem="{Binding NewLimitObject}" DisplayMemberPath="Display" Width="165" Padding="6,5" Margin="0,0,6,6"/>
+                                        <ComboBox ItemsSource="{Binding CostItemLookups}" SelectedItem="{Binding NewLimitCostItem}" DisplayMemberPath="Display" Width="150" Padding="6,5" Margin="0,0,6,6"/>
+                                        <TextBox Text="{Binding NewLimitAmountInput}" Width="90" Padding="6,5" Margin="0,0,6,6" ToolTip="Сумма лимита (тыс. р.)"/>
+                                        <Button Content="Добавить в Draft" Command="{Binding AddDraftLimitCommand}" Style="{StaticResource PrimaryButton}" Margin="0,0,0,6"/>
+                                    </WrapPanel>
                                     <DataGrid ItemsSource="{Binding BudgetLimits}" SelectedItem="{Binding SelectedBudgetLimit}" MaxHeight="240">
                                         <DataGrid.Columns>
                                             <DataGridTextColumn Header="Вер." Binding="{Binding VersionNumber}" Width="45"/>
@@ -362,7 +463,8 @@
 
                                 <WrapPanel Margin="0,12,0,0">
                                     <TextBox Text="{Binding ActionReasonInput}" Width="210" Padding="6,5" Margin="0,0,8,6"
-                                             ToolTip="Обоснование решения / возврата"/>
+                                             ToolTip="Обоснование решения / возврата"
+                                             Visibility="{Binding CanApproveRequest, Converter={StaticResource BoolToVis}}"/>
                                     <Button Content="Согласовать перерасход (CEO)" Command="{Binding ApproveOverrunCommand}"
                                             Style="{StaticResource WarningButton}" Margin="0,0,8,6"
                                             Visibility="{Binding CanApproveOverrun, Converter={StaticResource BoolToVis}}"/>
@@ -620,7 +722,8 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14"
+                                Visibility="{Binding CanOffsetAdvance, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
                                 <TextBlock Text="Контроль выданных авансов (Aост = A − Aисп, Kисп = Aисп / A)" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
                                 <DataGrid ItemsSource="{Binding Advances}" SelectedItem="{Binding SelectedAdvance}" MaxHeight="180">

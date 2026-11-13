@@ -285,4 +285,79 @@ public class ControlExamplesAndWorkflowTests
         var wrongClient = await scope.Auth.LoginAsync("finmanager", "StroyFin2026!", null, "Tests", ClientApp.Wpf);
         Assert.False(wrongClient.Success);
     }
+
+    [Fact]
+    public async Task MaterialRequest_Workflow_KeepsProcurementWithSupplyAndAuthoringWithForeman()
+    {
+        var factory = AppDatabaseFactory.CreateInMemoryForTests($"MaterialRequestDb_{Guid.NewGuid():N}");
+        await factory.InitializeAsync();
+        using var scope = factory.CreateScope();
+
+        var dto = new CreateMaterialRequestDto(
+            SeedIds.Project1,
+            SeedIds.Obj1,
+            SeedIds.ItemMat,
+            "Керамическая плитка 600×600",
+            "м²",
+            120m,
+            32.5m,
+            new DateTime(2026, 12, 1),
+            "Отделка холлов 1–3 этажей",
+            "ГОСТ 6787-2001",
+            SubmitImmediately: true);
+
+        // Прораб создаёт потребность в материале: поставщик и цена договора не выбираются.
+        var created = await scope.MaterialRequests.CreateAsync(dto, SeedIds.UserPm, "pm");
+        Assert.Equal(MaterialRequestStatus.Submitted, created.Status);
+        Assert.Equal(3900m, created.EstimatedTotal);
+        Assert.Null(created.SupplierName);
+        Assert.Null(created.ContractId);
+        Assert.Null(created.AgreedTotal);
+
+        // Снабженец возвращает заявку на доработку.
+        var rejected = await scope.MaterialRequests.RejectAsync(
+            created.Id, "Уточните класс износостойкости PEI", SeedIds.UserProc, "supply");
+        Assert.Equal(MaterialRequestStatus.Rejected, rejected.Status);
+
+        // Дорабатывать может только автор заявки.
+        await Assert.ThrowsAsync<DomainException>(() => scope.MaterialRequests.UpdateAsync(
+            created.Id, dto, SeedIds.UserProc, "supply"));
+
+        var updated = await scope.MaterialRequests.UpdateAsync(
+            created.Id, dto with { SpecificationNotes = "PEI IV, морозостойкость F100" }, SeedIds.UserPm, "pm");
+        Assert.Equal(MaterialRequestStatus.Submitted, updated.Status);
+        Assert.Null(updated.RejectedAt);
+
+        // Снабженец подбирает договор поставки, поставщика и согласованную цену.
+        var approved = await scope.MaterialRequests.ApproveAsync(
+            created.Id,
+            new SupplyMaterialRequestDto(SeedIds.ContractMat, null, 30m, "Поставка по договору П-2026/14"),
+            SeedIds.UserProc,
+            "supply");
+        Assert.Equal(MaterialRequestStatus.Approved, approved.Status);
+        Assert.Equal(SeedIds.ContractMat, approved.ContractId);
+        Assert.False(string.IsNullOrWhiteSpace(approved.SupplierName));
+        Assert.Equal(30m, approved.AgreedUnitPrice);
+        Assert.Equal(3600m, approved.AgreedTotal);
+
+        // После согласования прораб уже не может менять заявку.
+        await Assert.ThrowsAsync<DomainException>(() => scope.MaterialRequests.UpdateAsync(
+            created.Id, dto, SeedIds.UserPm, "pm"));
+
+        var ordered = await scope.MaterialRequests.MarkOrderedAsync(
+            created.Id,
+            new SupplyMaterialRequestDto(SeedIds.ContractMat, null, 30m, null),
+            SeedIds.UserProc,
+            "supply");
+        Assert.Equal(MaterialRequestStatus.Ordered, ordered.Status);
+
+        var delivered = await scope.MaterialRequests.MarkDeliveredAsync(created.Id, SeedIds.UserProc, "supply");
+        Assert.Equal(MaterialRequestStatus.Delivered, delivered.Status);
+
+        // Поставленную заявку нельзя отклонить или согласовать повторно.
+        await Assert.ThrowsAsync<DomainException>(() => scope.MaterialRequests.RejectAsync(
+            created.Id, "Повторный возврат", SeedIds.UserProc, "supply"));
+        await Assert.ThrowsAsync<DomainException>(() => scope.MaterialRequests.ApproveAsync(
+            created.Id, new SupplyMaterialRequestDto(SeedIds.ContractMat, null, 31m, null), SeedIds.UserProc, "supply"));
+    }
 }

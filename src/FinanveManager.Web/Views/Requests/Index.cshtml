@@ -29,7 +29,7 @@
         <div class="card-header">
             <div>
                 <h3 class="card-title">@(edit == null ? "Новая заявка на материал" : $"Доработка заявки {edit.Number}")</h3>
-                <p class="muted card-hint">Прораб указывает только потребность: материал, количество, срок и назначение. Поставщика и договор подбирает снабженец.</p>
+                <p class="muted card-hint">Прораб указывает только потребность: материал, количество, срок и назначение. Поставщика, цену и договор подбирает снабженец.</p>
             </div>
             @if (edit != null)
             {
@@ -82,11 +82,6 @@
                            value="@((edit?.Quantity ?? 1m).ToString(System.Globalization.CultureInfo.InvariantCulture))" required />
                 </div>
                 <div class="field">
-                    <label>Ориентировочная цена за единицу, BYN</label>
-                    <input type="number" step="0.01" min="0" name="estimatedUnitPrice"
-                           value="@((edit?.EstimatedUnitPrice ?? 0m).ToString(System.Globalization.CultureInfo.InvariantCulture))" />
-                </div>
-                <div class="field">
                     <label>Требуемая дата поставки</label>
                     <input type="date" name="requiredDate"
                            value="@((edit?.RequiredDate ?? DateTime.UtcNow.Date.AddDays(7)).ToString("yyyy-MM-dd"))" required />
@@ -124,7 +119,7 @@
                         <th>Номер / материал</th>
                         <th>Объект</th>
                         <th class="num">Количество</th>
-                        <th class="num">Оценка, BYN</th>
+                        <th class="num">Согласовано, BYN</th>
                         <th>Срок</th>
                         <th>Статус</th>
                         <th>Снабженец</th>
@@ -153,7 +148,7 @@
                             </td>
                             <td>@m.ConstructionObject?.Name</td>
                             <td class="num">@m.Quantity.ToString("N3") @m.Unit</td>
-                            <td class="num">@((m.AgreedTotal ?? m.EstimatedTotal).ToString("N2"))</td>
+                            <td class="num">@((m.AgreedTotal ?? 0m).ToString("N2"))</td>
                             <td>@m.RequiredDate.ToString("dd.MM.yyyy")</td>
                             <td><span class="badge @mBadge">@RussianLabels.MaterialRequestStatusName(m.Status)</span></td>
                             <td>

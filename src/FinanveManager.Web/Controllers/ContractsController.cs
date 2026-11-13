@@ -56,8 +56,16 @@ public class ContractsController : Controller
                 .Include(r => r.ConstructionObject)
                 .Include(r => r.CostItem)
                 .Include(r => r.Contract)
+                .Include(r => r.Supplier)
+                .Include(r => r.SupplierOffer)
+                .Include(r => r.PaymentRequest)
                 .Where(r => !r.IsDeleted)
                 .OrderByDescending(r => r.CreatedAt)
+                .ToListAsync(ct),
+            Suppliers = await _db.Suppliers
+                .Include(s => s.Offers)
+                .Where(s => !s.IsDeleted)
+                .OrderBy(s => s.Name)
                 .ToListAsync(ct),
             ImportReportSummary = TempData["ImportReport"] as string
         };
@@ -68,7 +76,7 @@ public class ContractsController : Controller
     [Authorize(Roles = "ProcurementSpecialist")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateContract(
-        Guid projectId, string number, string counterparty, string counterpartyUnp,
+        string number, string counterparty, string counterpartyUnp,
         ContractDirection direction, decimal totalAmount, string currency, string? specificationNotes, CancellationToken ct)
     {
         if (!ModelState.IsValid)
@@ -79,18 +87,15 @@ public class ContractsController : Controller
 
         try
         {
-            if (projectId == Guid.Empty || !await _db.Projects.AnyAsync(p => p.Id == projectId && !p.IsDeleted, ct))
-                throw new DomainException("Выберите существующий проект для регистрации договора.");
             if (string.IsNullOrWhiteSpace(number) || string.IsNullOrWhiteSpace(counterparty) || totalAmount <= 0)
                 throw new DomainException("Укажите номер договора, контрагента и положительную сумму.");
 
             string normNum = number.Trim();
-            if (await _db.Contracts.AnyAsync(c => !c.IsDeleted && c.ProjectId == projectId && c.Number == normNum, ct))
-                throw new DuplicateEntityException($"Договор № {normNum} уже существует в выбранном проекте.");
+            if (await _db.Contracts.AnyAsync(c => !c.IsDeleted && c.Number == normNum, ct))
+                throw new DuplicateEntityException($"Договор № {normNum} уже зарегистрирован.");
 
             var contract = new Contract
             {
-                ProjectId = projectId,
                 Number = normNum,
                 Counterparty = counterparty.Trim(),
                 CounterpartyUnp = string.IsNullOrWhiteSpace(counterpartyUnp) ? "190000001" : counterpartyUnp.Trim(),
@@ -114,7 +119,92 @@ public class ContractsController : Controller
         }
         catch (DbUpdateException)
         {
-            TempData["Error"] = "Ошибка сохранения договора: проверьте уникальность номера в проекте.";
+            TempData["Error"] = "Ошибка сохранения договора: проверьте уникальность номера.";
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProcurementSpecialist")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateSupplier(
+        string name, string unp, string? contactPerson, string? phone, string? email, string? notes, CancellationToken ct)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                throw new DomainException("Укажите наименование поставщика.");
+            string normName = name.Trim();
+            if (await _db.Suppliers.AnyAsync(s => !s.IsDeleted && s.Name == normName, ct))
+                throw new DomainException($"Поставщик «{normName}» уже зарегистрирован.");
+
+            var supplier = new Supplier
+            {
+                Name = normName,
+                Unp = string.IsNullOrWhiteSpace(unp) ? "190000001" : unp.Trim(),
+                ContactPerson = contactPerson?.Trim(),
+                Phone = phone?.Trim(),
+                Email = email?.Trim(),
+                Notes = notes?.Trim(),
+                IsActive = true
+            };
+            await _db.Suppliers.AddAsync(supplier, ct);
+            var (uid, login) = CurrentUser();
+            await _audit.LogAsync(uid, login, nameof(Supplier), supplier.Name, "CREATE_SUPPLIER", null,
+                supplier.Unp, supplier.Notes, ct);
+            await _db.SaveChangesAsync(ct);
+            TempData["Success"] = $"Поставщик «{supplier.Name}» добавлен в реестр.";
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProcurementSpecialist")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateSupplierOffer(
+        Guid supplierId, string materialName, string unit, decimal unitPrice, int deliveryDays,
+        DateTime? validUntil, string? notes, CancellationToken ct)
+    {
+        try
+        {
+            if (supplierId == Guid.Empty || !await _db.Suppliers.AnyAsync(s => !s.IsDeleted && s.Id == supplierId, ct))
+                throw new DomainException("Выберите поставщика из реестра.");
+            if (string.IsNullOrWhiteSpace(materialName))
+                throw new DomainException("Укажите материал, который поставляет поставщик.");
+            if (unitPrice <= 0)
+                throw new DomainException("Цена предложения должна быть положительной.");
+
+            string normMaterial = materialName.Trim();
+            string normUnit = string.IsNullOrWhiteSpace(unit) ? "шт." : unit.Trim();
+            if (await _db.SupplierOffers.AnyAsync(o => !o.IsDeleted && o.SupplierId == supplierId
+                                                       && o.MaterialName == normMaterial && o.Unit == normUnit, ct))
+                throw new DomainException("У этого поставщика уже есть предложение по такому материалу и единице измерения.");
+
+            var offer = new SupplierOffer
+            {
+                SupplierId = supplierId,
+                MaterialName = normMaterial,
+                Unit = normUnit,
+                UnitPrice = unitPrice,
+                DeliveryDays = deliveryDays <= 0 ? 5 : deliveryDays,
+                ValidUntil = validUntil?.Date,
+                Notes = notes?.Trim(),
+                IsActive = true
+            };
+            await _db.SupplierOffers.AddAsync(offer, ct);
+            var (uid, login) = CurrentUser();
+            await _audit.LogAsync(uid, login, nameof(SupplierOffer), offer.MaterialName, "CREATE_SUPPLIER_OFFER",
+                null, $"{offer.UnitPrice:N2} BYN/{offer.Unit}", null, ct);
+            await _db.SaveChangesAsync(ct);
+            TempData["Success"] = $"Предложение по «{offer.MaterialName}» добавлено: {offer.UnitPrice:N2} BYN / {offer.Unit}.";
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
         }
         return RedirectToAction(nameof(Index));
     }
@@ -123,13 +213,13 @@ public class ContractsController : Controller
     [Authorize(Roles = "ProcurementSpecialist")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ApproveMaterial(
-        Guid id, Guid? contractId, string? supplierName, decimal? agreedUnitPrice, string? comment, CancellationToken ct)
+        Guid id, Guid? contractId, Guid? supplierOfferId, string? supplierName, decimal? agreedUnitPrice, string? comment, CancellationToken ct)
     {
         try
         {
             var (uid, login) = CurrentUser();
             var request = await _materialRequests.ApproveAsync(
-                id, new SupplyMaterialRequestDto(contractId, supplierName, agreedUnitPrice, comment), uid, login, ct);
+                id, new SupplyMaterialRequestDto(contractId, supplierName, agreedUnitPrice, comment, supplierOfferId), uid, login, ct);
             TempData["Success"] = $"Заявка {request.Number} согласована. Поставщик: {request.SupplierName}.";
         }
         catch (DomainException ex)
@@ -161,14 +251,32 @@ public class ContractsController : Controller
     [Authorize(Roles = "ProcurementSpecialist")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> OrderMaterial(
-        Guid id, Guid? contractId, string? supplierName, decimal? agreedUnitPrice, string? comment, CancellationToken ct)
+        Guid id, Guid? contractId, Guid? supplierOfferId, string? supplierName, decimal? agreedUnitPrice, string? comment, CancellationToken ct)
     {
         try
         {
             var (uid, login) = CurrentUser();
             var request = await _materialRequests.MarkOrderedAsync(
-                id, new SupplyMaterialRequestDto(contractId, supplierName, agreedUnitPrice, comment), uid, login, ct);
+                id, new SupplyMaterialRequestDto(contractId, supplierName, agreedUnitPrice, comment, supplierOfferId), uid, login, ct);
             TempData["Success"] = $"Заявка {request.Number} заказана у поставщика {request.SupplierName}.";
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProcurementSpecialist")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateMaterialPayment(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var (uid, login) = CurrentUser();
+            var request = await _materialRequests.CreatePaymentRequestAsync(id, uid, login, ct);
+            TempData["Success"] = $"По заявке {request.Number} сформирована платёжная заявка и передана финансовому менеджеру.";
         }
         catch (DomainException ex)
         {
@@ -295,8 +403,8 @@ public class ContractsController : Controller
 
         return new AccountingReportContext
         {
-            OrganizationName = org?.Name ?? "ООО «СтройФинРиск»",
-            OrganizationUnp = org?.Unp ?? "191234567",
+            OrganizationName = org?.Name ?? "ОАО «МАПИД»",
+            OrganizationUnp = org?.Unp ?? "100582333",
             ResponsiblePerson = "Громов А.Н., директор",
             ChiefAccountant = "Ковалёва И.П., главный бухгалтер",
             PeriodStart = new DateTime(DateTime.UtcNow.Year, 1, 1),

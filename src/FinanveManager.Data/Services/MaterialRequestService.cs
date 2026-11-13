@@ -11,7 +11,6 @@ public record CreateMaterialRequestDto(
     string MaterialName,
     string Unit,
     decimal Quantity,
-    decimal EstimatedUnitPrice,
     DateTime RequiredDate,
     string? Purpose,
     string? SpecificationNotes,
@@ -21,7 +20,8 @@ public record SupplyMaterialRequestDto(
     Guid? ContractId,
     string? SupplierName,
     decimal? AgreedUnitPrice,
-    string? Comment);
+    string? Comment,
+    Guid? SupplierOfferId = null);
 
 public interface IMaterialRequestService
 {
@@ -45,6 +45,9 @@ public interface IMaterialRequestService
 
     Task<MaterialRequest> MarkDeliveredAsync(
         Guid id, Guid userId, string login, CancellationToken ct = default);
+
+    Task<MaterialRequest> CreatePaymentRequestAsync(
+        Guid id, Guid userId, string login, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -55,11 +58,13 @@ public class MaterialRequestService : IMaterialRequestService
 {
     private readonly AppDbContext _db;
     private readonly IAuditService _audit;
+    private readonly IPaymentRequestService _paymentRequests;
 
-    public MaterialRequestService(AppDbContext db, IAuditService audit)
+    public MaterialRequestService(AppDbContext db, IAuditService audit, IPaymentRequestService paymentRequests)
     {
         _db = db;
         _audit = audit;
+        _paymentRequests = paymentRequests;
     }
 
     public async Task<MaterialRequest> CreateAsync(
@@ -85,7 +90,7 @@ public class MaterialRequestService : IMaterialRequestService
             MaterialName = dto.MaterialName.Trim(),
             Unit = string.IsNullOrWhiteSpace(dto.Unit) ? "шт." : dto.Unit.Trim(),
             Quantity = dto.Quantity,
-            EstimatedUnitPrice = Math.Max(0m, dto.EstimatedUnitPrice),
+            EstimatedUnitPrice = 0m,
             RequiredDate = dto.RequiredDate == default ? DateTime.UtcNow.Date.AddDays(7) : dto.RequiredDate.Date,
             Purpose = dto.Purpose?.Trim(),
             SpecificationNotes = dto.SpecificationNotes?.Trim(),
@@ -112,7 +117,6 @@ public class MaterialRequestService : IMaterialRequestService
         request.MaterialName = dto.MaterialName.Trim();
         request.Unit = string.IsNullOrWhiteSpace(dto.Unit) ? "шт." : dto.Unit.Trim();
         request.Quantity = dto.Quantity;
-        request.EstimatedUnitPrice = Math.Max(0m, dto.EstimatedUnitPrice);
         request.RequiredDate = dto.RequiredDate == default ? request.RequiredDate : dto.RequiredDate.Date;
         request.Purpose = dto.Purpose?.Trim();
         request.SpecificationNotes = dto.SpecificationNotes?.Trim();
@@ -221,32 +225,132 @@ public class MaterialRequestService : IMaterialRequestService
         return request;
     }
 
-    private async Task ApplySupplyAsync(MaterialRequest request, SupplyMaterialRequestDto dto, CancellationToken ct)
+    public async Task<MaterialRequest> CreatePaymentRequestAsync(
+        Guid id, Guid userId, string login, CancellationToken ct = default)
     {
-        if (dto.ContractId.HasValue && dto.ContractId.Value != Guid.Empty)
+        var request = await _db.MaterialRequests
+            .FirstOrDefaultAsync(r => !r.IsDeleted && r.Id == id, ct)
+            ?? throw new DomainException("Заявка на материал не найдена.");
+
+        if (request.Status is not (MaterialRequestStatus.Approved or MaterialRequestStatus.Ordered or MaterialRequestStatus.Delivered))
+            throw new DomainException("Платёжную заявку можно сформировать только после согласования заявки снабженцем.");
+        if (request.PaymentRequestId.HasValue)
+            throw new DomainException("По этой заявке платёжная заявка уже сформирована.");
+        if (!request.AgreedUnitPrice.HasValue || request.AgreedTotal is null || request.AgreedTotal.Value <= 0)
+            throw new DomainException("Сначала выберите предложение поставщика и согласуйте цену.");
+
+        Guid? contractId = request.ContractId;
+        if (!contractId.HasValue || contractId.Value == Guid.Empty)
         {
             var contract = await _db.Contracts
-                .FirstOrDefaultAsync(c => !c.IsDeleted && c.Id == dto.ContractId.Value, ct)
-                ?? throw new DomainException("Выбранный договор поставки не найден.");
-            request.ContractId = contract.Id;
-            request.SupplierName = string.IsNullOrWhiteSpace(dto.SupplierName)
-                ? contract.Counterparty
-                : dto.SupplierName.Trim();
+                .Where(c => !c.IsDeleted && c.Direction == ContractDirection.SupplierSubcontractorOutgoing)
+                .FirstOrDefaultAsync(c => c.Counterparty == request.SupplierName, ct);
+            contractId = contract?.Id;
         }
-        else if (!string.IsNullOrWhiteSpace(dto.SupplierName))
+        if (!contractId.HasValue || contractId.Value == Guid.Empty)
+            throw new DomainException("Для оплаты зарегистрируйте договор с выбранным поставщиком.");
+
+        Guid? costItemId = request.CostItemId;
+        if (!costItemId.HasValue)
         {
-            request.SupplierName = dto.SupplierName.Trim();
+            costItemId = await _db.CostItems
+                .Where(c => !c.IsDeleted)
+                .OrderBy(c => c.Code)
+                .Select(c => (Guid?)c.Id)
+                .FirstOrDefaultAsync(ct);
+        }
+        if (!costItemId.HasValue)
+            throw new DomainException("В справочнике нет статьи затрат для оплаты материала.");
+
+        var plannedDate = request.RequiredDate.Date < DateTime.UtcNow.Date
+            ? DateTime.UtcNow.Date
+            : request.RequiredDate.Date;
+
+        var dto = new CreatePaymentRequestDto(
+            request.ProjectId,
+            request.ConstructionObjectId,
+            contractId.Value,
+            costItemId.Value,
+            request.AgreedTotal.Value,
+            request.AgreedTotal.Value,
+            0m,
+            0m,
+            VatIncluded: true,
+            Currency: "BYN",
+            RequestType.CurrentPayment,
+            plannedDate,
+            $"Оплата материала «{request.MaterialName}» по заявке {request.Number} (поставщик: {request.SupplierName})",
+            DocumentType.Invoice,
+            $"МЗ-{request.Number}",
+            DateTime.UtcNow.Date,
+            null,
+            $"MATERIAL-{request.Id}",
+            SubmitImmediately: true);
+
+        var (payment, _) = await _paymentRequests.CreateAsync(dto, userId, login, ct);
+
+        request.PaymentRequestId = payment.Id;
+        request.UpdatedAt = DateTime.UtcNow;
+        await _audit.LogAsync(userId, login, nameof(MaterialRequest), request.Number,
+            "CREATE_PAYMENT_REQUEST_FROM_MATERIAL", null,
+            $"Payment={payment.Number}; Amount={payment.PayableAmount:N2}", null, ct);
+        await _db.SaveChangesAsync(ct);
+        return request;
+    }
+
+    private async Task ApplySupplyAsync(MaterialRequest request, SupplyMaterialRequestDto dto, CancellationToken ct)
+    {
+        if (dto.SupplierOfferId.HasValue && dto.SupplierOfferId.Value != Guid.Empty)
+        {
+            var offer = await _db.SupplierOffers
+                .Include(o => o.Supplier)
+                .FirstOrDefaultAsync(o => !o.IsDeleted && o.IsActive && o.Id == dto.SupplierOfferId.Value, ct)
+                ?? throw new DomainException("Выбранное предложение поставщика не найдено.");
+
+            request.SupplierOfferId = offer.Id;
+            request.SupplierId = offer.SupplierId;
+            request.SupplierName = offer.Supplier?.Name ?? dto.SupplierName?.Trim();
+            request.AgreedUnitPrice = offer.UnitPrice;
+        }
+        else
+        {
+            if (dto.ContractId.HasValue && dto.ContractId.Value != Guid.Empty)
+            {
+                var contract = await _db.Contracts
+                    .FirstOrDefaultAsync(c => !c.IsDeleted && c.Id == dto.ContractId.Value, ct)
+                    ?? throw new DomainException("Выбранный договор поставки не найден.");
+                request.ContractId = contract.Id;
+                request.SupplierName = string.IsNullOrWhiteSpace(dto.SupplierName)
+                    ? contract.Counterparty
+                    : dto.SupplierName.Trim();
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.SupplierName))
+            {
+                request.SupplierName = dto.SupplierName.Trim();
+            }
+
+            if (dto.AgreedUnitPrice.HasValue)
+            {
+                if (dto.AgreedUnitPrice.Value < 0)
+                    throw new DomainException("Согласованная цена не может быть отрицательной.");
+                request.AgreedUnitPrice = dto.AgreedUnitPrice.Value;
+            }
         }
 
         if (string.IsNullOrWhiteSpace(request.SupplierName))
-            throw new DomainException("Укажите поставщика или договор поставки.");
+            throw new DomainException("Выберите предложение поставщика или укажите поставщика вручную.");
 
-        if (dto.AgreedUnitPrice.HasValue)
+        // Если снабженец не выбрал договор, подбираем действующий договор с этим поставщиком.
+        if (!request.ContractId.HasValue && dto.ContractId.HasValue && dto.ContractId.Value != Guid.Empty)
+            request.ContractId = dto.ContractId.Value;
+        if (!request.ContractId.HasValue)
         {
-            if (dto.AgreedUnitPrice.Value < 0)
-                throw new DomainException("Согласованная цена не может быть отрицательной.");
-            request.AgreedUnitPrice = dto.AgreedUnitPrice.Value;
+            var supplierContract = await _db.Contracts
+                .Where(c => !c.IsDeleted && c.Direction == ContractDirection.SupplierSubcontractorOutgoing)
+                .FirstOrDefaultAsync(c => c.Counterparty == request.SupplierName, ct);
+            request.ContractId = supplierContract?.Id;
         }
+
         if (!string.IsNullOrWhiteSpace(dto.Comment))
             request.SupplyComment = dto.Comment.Trim();
 

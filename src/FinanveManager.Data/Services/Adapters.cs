@@ -638,7 +638,7 @@ public sealed class DataScope : IAsyncDisposable, IDisposable
             new EfRepository<Obligation>(db),
             wf, Audit, uow);
         Accounting = new AccountingAdapter();
-        MaterialRequests = new MaterialRequestService(db, Audit);
+        MaterialRequests = new MaterialRequestService(db, Audit, Requests);
     }
 
     public void Dispose() => Db.Dispose();

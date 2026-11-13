@@ -161,7 +161,27 @@ public sealed record MaterialRequestGridRow(
     string SupplierName,
     string SupplyComment,
     string Purpose,
-    string SpecificationNotes);
+    string SpecificationNotes,
+    Guid? SupplierOfferId,
+    string PaymentRequestNumber,
+    bool HasPaymentRequest);
+
+public sealed record SupplierGridRow(
+    Guid Id,
+    string Name,
+    string Unp,
+    string Contacts,
+    string Notes);
+
+public sealed record SupplierOfferGridRow(
+    Guid Id,
+    Guid SupplierId,
+    string SupplierName,
+    string MaterialName,
+    string Unit,
+    decimal UnitPrice,
+    int DeliveryDays,
+    string ValidUntil);
 
 public sealed record AdvanceGridRow(
     Guid Id,
@@ -302,6 +322,9 @@ public sealed class MainViewModel : ViewModelBase
         OrderMaterialCommand = new RelayCommand(async () => await OrderMaterialAsync());
         DeliverMaterialCommand = new RelayCommand(async () => await DeliverMaterialAsync());
         EditMaterialCommand = new RelayCommand(() => LoadMaterialForEdit());
+        CreateMaterialPaymentCommand = new RelayCommand(async () => await CreateMaterialPaymentAsync());
+        CreateSupplierCommand = new RelayCommand(async () => await CreateSupplierAsync());
+        CreateSupplierOfferCommand = new RelayCommand(async () => await CreateSupplierOfferAsync());
 
         // Risks
         RefreshRisksCommand = new RelayCommand(async () => await RefreshRisksAsync());
@@ -463,6 +486,10 @@ public sealed class MainViewModel : ViewModelBase
     public ObservableCollection<ContractGridRow> Contracts { get; } = new();
     public ObservableCollection<AdvanceGridRow> Advances { get; } = new();
     public ObservableCollection<MaterialRequestGridRow> MaterialRequests { get; } = new();
+    public ObservableCollection<SupplierGridRow> Suppliers { get; } = new();
+    public ObservableCollection<SupplierOfferGridRow> SupplierOffers { get; } = new();
+    public ObservableCollection<LookupItem> SupplierOfferLookups { get; } = new();
+    public ObservableCollection<LookupItem> SupplierLookups { get; } = new();
     public ObservableCollection<RiskGridRow> Risks { get; } = new();
     public ObservableCollection<RiskMatrixCellView> RiskMatrix { get; } = new();
     public ObservableCollection<SensitivityFactorResult> Sensitivity { get; } = new();
@@ -597,8 +624,6 @@ public sealed class MainViewModel : ViewModelBase
     public string RescheduleDateInput { get => _rescheduleDateInput; set => SetField(ref _rescheduleDateInput, value); }
 
     // Contracts & Statements Inputs
-    private LookupItem? _newContractProject;
-    public LookupItem? NewContractProject { get => _newContractProject; set => SetField(ref _newContractProject, value); }
     private string _newContractNumber = "ПД-2026/19";
     public string NewContractNumber { get => _newContractNumber; set => SetField(ref _newContractNumber, value); }
     private string _newContractCounterparty = "ООО БелСтройПоставка";
@@ -629,8 +654,11 @@ public sealed class MainViewModel : ViewModelBase
             if (SetField(ref _selectedMaterialRequest, value) && value != null)
             {
                 SupplySupplierName = value.SupplierName;
-                SupplyAgreedUnitPrice = (value.AgreedUnitPrice ?? value.EstimatedUnitPrice).ToString("0.00", CultureInfo.InvariantCulture);
+                SupplyAgreedUnitPrice = (value.AgreedUnitPrice ?? 0m).ToString("0.00", CultureInfo.InvariantCulture);
                 SupplyComment = value.SupplyComment;
+                SupplyOffer = value.SupplierOfferId.HasValue
+                    ? SupplierOfferLookups.FirstOrDefault(o => o.Id == value.SupplierOfferId.Value)
+                    : null;
             }
         }
     }
@@ -660,8 +688,6 @@ public sealed class MainViewModel : ViewModelBase
     public string NewMaterialUnit { get => _newMaterialUnit; set => SetField(ref _newMaterialUnit, value); }
     private string _newMaterialQty = "10";
     public string NewMaterialQty { get => _newMaterialQty; set => SetField(ref _newMaterialQty, value); }
-    private string _newMaterialPrice = "0.00";
-    public string NewMaterialPrice { get => _newMaterialPrice; set => SetField(ref _newMaterialPrice, value); }
     private string _newMaterialDate = "2026-11-20";
     public string NewMaterialDate { get => _newMaterialDate; set => SetField(ref _newMaterialDate, value); }
     private string _newMaterialPurpose = string.Empty;
@@ -681,6 +707,68 @@ public sealed class MainViewModel : ViewModelBase
     public string SupplyComment { get => _supplyComment; set => SetField(ref _supplyComment, value); }
     private string _supplyRejectReason = "Уточните марку и объём материала";
     public string SupplyRejectReason { get => _supplyRejectReason; set => SetField(ref _supplyRejectReason, value); }
+
+    private LookupItem? _supplyOffer;
+    public LookupItem? SupplyOffer
+    {
+        get => _supplyOffer;
+        set
+        {
+            if (!SetField(ref _supplyOffer, value)) return;
+
+            if (value != null && value.Id != Guid.Empty)
+            {
+                var offer = SupplierOffers.FirstOrDefault(o => o.Id == value.Id);
+                if (offer != null)
+                {
+                    SupplySupplierName = offer.SupplierName;
+                    SupplyAgreedUnitPrice = offer.UnitPrice.ToString("0.00", CultureInfo.InvariantCulture);
+                    // Договор подбирается по контрагенту; при отсутствии — оставляем пустым для автоподбора.
+                    SupplyContract = OutgoingContractLookups.FirstOrDefault(
+                        c => c.Display.Contains(offer.SupplierName, StringComparison.OrdinalIgnoreCase));
+                }
+            }
+
+            OnPropertyChanged(nameof(SupplyOfferSummary));
+        }
+    }
+
+    public string SupplyOfferSummary
+    {
+        get
+        {
+            var offer = SupplyOffer == null ? null : SupplierOffers.FirstOrDefault(o => o.Id == SupplyOffer.Id);
+            if (offer == null)
+                return "Выберите предложение поставщика из реестра — цена и срок подставятся автоматически.";
+
+            return $"{offer.SupplierName} · {offer.UnitPrice:N2} BYN / {offer.Unit} · срок {offer.DeliveryDays} дн.";
+        }
+    }
+
+    // Реестр поставщиков и предложений (ведёт снабженец)
+    private string _newSupplierName = string.Empty;
+    public string NewSupplierName { get => _newSupplierName; set => SetField(ref _newSupplierName, value); }
+    private string _newSupplierUnp = string.Empty;
+    public string NewSupplierUnp { get => _newSupplierUnp; set => SetField(ref _newSupplierUnp, value); }
+    private string _newSupplierContact = string.Empty;
+    public string NewSupplierContact { get => _newSupplierContact; set => SetField(ref _newSupplierContact, value); }
+    private string _newSupplierPhone = string.Empty;
+    public string NewSupplierPhone { get => _newSupplierPhone; set => SetField(ref _newSupplierPhone, value); }
+    private string _newSupplierNotes = string.Empty;
+    public string NewSupplierNotes { get => _newSupplierNotes; set => SetField(ref _newSupplierNotes, value); }
+
+    private LookupItem? _newOfferSupplier;
+    public LookupItem? NewOfferSupplier { get => _newOfferSupplier; set => SetField(ref _newOfferSupplier, value); }
+    private string _newOfferMaterial = string.Empty;
+    public string NewOfferMaterial { get => _newOfferMaterial; set => SetField(ref _newOfferMaterial, value); }
+    private string _newOfferUnit = "шт.";
+    public string NewOfferUnit { get => _newOfferUnit; set => SetField(ref _newOfferUnit, value); }
+    private string _newOfferPrice = "100.00";
+    public string NewOfferPrice { get => _newOfferPrice; set => SetField(ref _newOfferPrice, value); }
+    private string _newOfferDays = "5";
+    public string NewOfferDays { get => _newOfferDays; set => SetField(ref _newOfferDays, value); }
+    private string _newOfferNotes = string.Empty;
+    public string NewOfferNotes { get => _newOfferNotes; set => SetField(ref _newOfferNotes, value); }
 
     // Risks Inputs
     private LookupItem? _riskProject;
@@ -859,6 +947,9 @@ public sealed class MainViewModel : ViewModelBase
     public RelayCommand OrderMaterialCommand { get; }
     public RelayCommand DeliverMaterialCommand { get; }
     public RelayCommand EditMaterialCommand { get; }
+    public RelayCommand CreateMaterialPaymentCommand { get; }
+    public RelayCommand CreateSupplierCommand { get; }
+    public RelayCommand CreateSupplierOfferCommand { get; }
     public RelayCommand RefreshRisksCommand { get; }
     public RelayCommand UpdateRiskCommand { get; }
     public RelayCommand CreateRiskCommand { get; }
@@ -929,7 +1020,6 @@ public sealed class MainViewModel : ViewModelBase
         BudgetProject = ProjectLookups.FirstOrDefault(x => x.Id == prevBudgetPrj) ?? ProjectLookups.FirstOrDefault();
         RiskProject = ProjectLookups.FirstOrDefault(x => x.Id == prevRiskPrj) ?? ProjectLookups.FirstOrDefault();
         CalendarProject = CalendarProjectLookups.FirstOrDefault(x => x.Id == prevCalPrj) ?? CalendarProjectLookups.FirstOrDefault();
-        NewContractProject ??= ProjectLookups.FirstOrDefault();
         ObjectStageProject ??= ProjectLookups.FirstOrDefault();
         AssignProject ??= ProjectLookups.FirstOrDefault();
 
@@ -970,12 +1060,9 @@ public sealed class MainViewModel : ViewModelBase
             foreach (var u in activeUsers.Where(x => x.Role?.Code == "ProjectManager"))
                 ProjectManagerUserLookups.Add(new LookupItem(u.Id, $"{u.FullName} ({u.Login}) — Прораб / РП", true));
 
-            foreach (var u in activeUsers.Where(x => x.Role?.Code != "Admin"))
-            {
-                bool isPm = u.Role?.Code == "ProjectManager";
-                string roleLabel = isPm ? "Руководитель проекта (прораб)" : (u.Role?.Name ?? "Сотрудник");
-                AssignableUserLookups.Add(new LookupItem(u.Id, $"{u.FullName} ({u.Login}) — {roleLabel}", isPm));
-            }
+            // На проект назначаются только прорабы (роль ProjectManager).
+            foreach (var u in activeUsers.Where(x => x.Role?.Code == "ProjectManager"))
+                AssignableUserLookups.Add(new LookupItem(u.Id, $"{u.FullName} ({u.Login}) — Руководитель проекта (прораб)", true));
 
             SelectedNewProjectManager = ProjectManagerUserLookups.FirstOrDefault(x => x.Id == prevPm)
                 ?? ProjectManagerUserLookups.Skip(1).FirstOrDefault()
@@ -1145,6 +1232,8 @@ public sealed class MainViewModel : ViewModelBase
         var list = await scope.Db.MaterialRequests
             .Include(m => m.ConstructionObject)
             .Include(m => m.CostItem)
+            .Include(m => m.Supplier)
+            .Include(m => m.PaymentRequest)
             .Where(m => !m.IsDeleted)
             .OrderByDescending(m => m.CreatedAt)
             .ToListAsync();
@@ -1168,10 +1257,13 @@ public sealed class MainViewModel : ViewModelBase
                 m.RequiredDate,
                 m.Status,
                 RussianLabels.MaterialRequestStatusName(m.Status),
-                m.SupplierName ?? string.Empty,
+                m.SupplierName ?? m.Supplier?.Name ?? string.Empty,
                 m.SupplyComment ?? string.Empty,
                 m.Purpose ?? string.Empty,
-                m.SpecificationNotes ?? string.Empty));
+                m.SpecificationNotes ?? string.Empty,
+                m.SupplierOfferId,
+                m.PaymentRequest?.Number ?? string.Empty,
+                m.PaymentRequestId.HasValue));
         }
 
         SelectedMaterialRequest = MaterialRequests.FirstOrDefault(x => x.Id == prevId)
@@ -1295,7 +1387,55 @@ public sealed class MainViewModel : ViewModelBase
                 a.UtilizationPercent ?? 0m, a.DueDate, RussianLabels.AdvanceStatusName(a.Status, a.IsOverdueAt(refDate))));
         }
 
+        await LoadSuppliersAsync();
         await LoadMaterialRequestsAsync();
+    }
+
+    private async Task LoadSuppliersAsync()
+    {
+        using var scope = _dbFactory.CreateScope();
+        var suppliers = await scope.Db.Suppliers
+            .Include(s => s.Offers)
+            .Where(s => !s.IsDeleted)
+            .OrderBy(s => s.Name)
+            .ToListAsync();
+
+        var prevOffer = SupplyOffer?.Id;
+        var prevSupplier = NewOfferSupplier?.Id;
+
+        Suppliers.Clear();
+        SupplierOffers.Clear();
+        SupplierLookups.Clear();
+        SupplierOfferLookups.Clear();
+
+        foreach (var s in suppliers)
+        {
+            var offers = s.Offers
+                .Where(o => !o.IsDeleted && o.IsActive)
+                .OrderBy(o => o.MaterialName)
+                .ThenBy(o => o.UnitPrice)
+                .ToList();
+
+            string contacts = string.Join(" · ", new[] { s.ContactPerson, s.Phone }
+                .Where(x => !string.IsNullOrWhiteSpace(x)));
+            Suppliers.Add(new SupplierGridRow(s.Id, s.Name, s.Unp, contacts, s.Notes ?? string.Empty));
+            SupplierLookups.Add(new LookupItem(s.Id, s.Name));
+
+            foreach (var o in offers)
+            {
+                SupplierOffers.Add(new SupplierOfferGridRow(o.Id, s.Id, s.Name, o.MaterialName, o.Unit,
+                    o.UnitPrice, o.DeliveryDays, o.ValidUntil?.ToString("dd.MM.yyyy") ?? "бессрочно"));
+            }
+        }
+
+        // Предложения сортируются по цене: самое выгодное — первым.
+        foreach (var o in SupplierOffers.OrderBy(x => x.UnitPrice))
+            SupplierOfferLookups.Add(new LookupItem(o.Id,
+                $"{o.SupplierName} — {o.MaterialName} — {o.UnitPrice:N2} BYN / {o.Unit} ({o.DeliveryDays} дн.)"));
+
+        NewOfferSupplier = SupplierLookups.FirstOrDefault(x => x.Id == prevSupplier) ?? SupplierLookups.FirstOrDefault();
+        if (prevOffer.HasValue)
+            SupplyOffer = SupplierOfferLookups.FirstOrDefault(x => x.Id == prevOffer.Value);
     }
 
     private async Task RefreshRisksAsync()
@@ -1530,7 +1670,6 @@ public sealed class MainViewModel : ViewModelBase
                 BudgetProject = newPrjItem;
                 ObjectStageProject = newPrjItem;
                 AssignProject = newPrjItem;
-                NewContractProject = newPrjItem;
             }
             NewLimitObject = ObjectLookups.FirstOrDefault(x => x.Id == res.InitialObject.Id) ?? NewLimitObject;
             SelectedDraftVersionLookup = DraftVersionLookups.FirstOrDefault(x => x.Id == res.InitialBudgetVersion.Id) ?? SelectedDraftVersionLookup;
@@ -1777,7 +1916,7 @@ public sealed class MainViewModel : ViewModelBase
 
     private async Task CreateContractAsync()
     {
-        if (!CanCreateContract || NewContractProject == null) return;
+        if (!CanCreateContract) return;
         await RunSafeAsync(async () =>
         {
             if (string.IsNullOrWhiteSpace(NewContractNumber) || string.IsNullOrWhiteSpace(NewContractCounterparty))
@@ -1787,10 +1926,14 @@ public sealed class MainViewModel : ViewModelBase
                 throw new DomainException("Сумма договора должна быть положительной.");
 
             using var scope = _dbFactory.CreateScope();
+            string normNumber = NewContractNumber.Trim();
+            if (await scope.Db.Contracts.AnyAsync(c => !c.IsDeleted && c.Number == normNumber))
+                throw new DomainException($"Договор № {normNumber} уже зарегистрирован.");
+
             var contract = new Contract
             {
-                ProjectId = NewContractProject.Id,
-                Number = NewContractNumber.Trim(),
+                // Договор заключается с организацией-контрагентом и не привязывается к проекту/объекту.
+                Number = normNumber,
                 Counterparty = NewContractCounterparty.Trim(),
                 CounterpartyUnp = string.IsNullOrWhiteSpace(NewContractUnp) ? "190000001" : NewContractUnp.Trim(),
                 Direction = ContractDirection.SupplierSubcontractorOutgoing,
@@ -1848,7 +1991,6 @@ public sealed class MainViewModel : ViewModelBase
             if (string.IsNullOrWhiteSpace(NewMaterialName))
                 throw new DomainException("Укажите наименование материала.");
             decimal qty = ParseDecimal(NewMaterialQty, "количество");
-            decimal price = string.IsNullOrWhiteSpace(NewMaterialPrice) ? 0m : ParseDecimal(NewMaterialPrice, "ориентировочная цена");
             var requiredDate = ParseDate(NewMaterialDate, new DateTime(2026, 11, 20));
 
             using var scope = _dbFactory.CreateScope();
@@ -1860,7 +2002,6 @@ public sealed class MainViewModel : ViewModelBase
                 NewMaterialName.Trim(),
                 string.IsNullOrWhiteSpace(NewMaterialUnit) ? "шт." : NewMaterialUnit.Trim(),
                 qty,
-                price,
                 requiredDate,
                 string.IsNullOrWhiteSpace(NewMaterialPurpose) ? null : NewMaterialPurpose.Trim(),
                 string.IsNullOrWhiteSpace(NewMaterialNotes) ? null : NewMaterialNotes.Trim(),
@@ -1881,7 +2022,6 @@ public sealed class MainViewModel : ViewModelBase
             if (string.IsNullOrWhiteSpace(NewMaterialName))
                 throw new DomainException("Укажите наименование материала.");
             decimal qty = ParseDecimal(NewMaterialQty, "количество");
-            decimal price = string.IsNullOrWhiteSpace(NewMaterialPrice) ? 0m : ParseDecimal(NewMaterialPrice, "ориентировочная цена");
             var requiredDate = ParseDate(NewMaterialDate, new DateTime(2026, 11, 20));
 
             using var scope = _dbFactory.CreateScope();
@@ -1889,7 +2029,7 @@ public sealed class MainViewModel : ViewModelBase
             var dto = new CreateMaterialRequestDto(
                 obj.ProjectId, obj.Id, NewMaterialCostItem?.Id, NewMaterialName.Trim(),
                 string.IsNullOrWhiteSpace(NewMaterialUnit) ? "шт." : NewMaterialUnit.Trim(),
-                qty, price, requiredDate,
+                qty, requiredDate,
                 string.IsNullOrWhiteSpace(NewMaterialPurpose) ? null : NewMaterialPurpose.Trim(),
                 string.IsNullOrWhiteSpace(NewMaterialNotes) ? null : NewMaterialNotes.Trim(),
                 NewMaterialSubmitImmediately);
@@ -1963,6 +2103,99 @@ public sealed class MainViewModel : ViewModelBase
         });
     }
 
+    private async Task CreateMaterialPaymentAsync()
+    {
+        if (!CanSupplyMaterial || SelectedMaterialRequest == null) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            var m = await scope.MaterialRequests.CreatePaymentRequestAsync(
+                SelectedMaterialRequest.Id, _session.UserId, _session.Login);
+            await LoadMaterialRequestsAsync();
+            SetStatus($"По заявке {m.Number} сформирована платёжная заявка и передана финансовому менеджеру.", false);
+        });
+    }
+
+    private async Task CreateSupplierAsync()
+    {
+        if (!CanSupplyMaterial) return;
+        await RunSafeAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(NewSupplierName))
+                throw new DomainException("Укажите наименование поставщика.");
+
+            using var scope = _dbFactory.CreateScope();
+            string name = NewSupplierName.Trim();
+            if (await scope.Db.Suppliers.AnyAsync(s => !s.IsDeleted && s.Name == name))
+                throw new DomainException($"Поставщик «{name}» уже зарегистрирован.");
+
+            var supplier = new Supplier
+            {
+                Name = name,
+                Unp = string.IsNullOrWhiteSpace(NewSupplierUnp) ? "190000001" : NewSupplierUnp.Trim(),
+                ContactPerson = string.IsNullOrWhiteSpace(NewSupplierContact) ? null : NewSupplierContact.Trim(),
+                Phone = string.IsNullOrWhiteSpace(NewSupplierPhone) ? null : NewSupplierPhone.Trim(),
+                Notes = string.IsNullOrWhiteSpace(NewSupplierNotes) ? null : NewSupplierNotes.Trim(),
+                IsActive = true
+            };
+            await scope.Db.Suppliers.AddAsync(supplier);
+            await scope.Audit.LogAsync(_session.UserId, _session.Login, nameof(Supplier), supplier.Name,
+                "CREATE_SUPPLIER", null, supplier.Unp, supplier.Notes);
+            await scope.Db.SaveChangesAsync();
+
+            NewSupplierName = string.Empty;
+            NewSupplierUnp = string.Empty;
+            NewSupplierContact = string.Empty;
+            NewSupplierPhone = string.Empty;
+            NewSupplierNotes = string.Empty;
+
+            await LoadSuppliersAsync();
+            SetStatus($"Поставщик «{supplier.Name}» добавлен в реестр.", false);
+        });
+    }
+
+    private async Task CreateSupplierOfferAsync()
+    {
+        if (!CanSupplyMaterial || NewOfferSupplier == null) return;
+        await RunSafeAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(NewOfferMaterial))
+                throw new DomainException("Укажите материал, который поставляет выбранный поставщик.");
+            decimal price = ParseDecimal(NewOfferPrice, "цена предложения");
+            if (price <= 0)
+                throw new DomainException("Цена предложения должна быть положительной.");
+            int days = int.TryParse(NewOfferDays, out var parsedDays) && parsedDays > 0 ? parsedDays : 5;
+
+            using var scope = _dbFactory.CreateScope();
+            string material = NewOfferMaterial.Trim();
+            string unit = string.IsNullOrWhiteSpace(NewOfferUnit) ? "шт." : NewOfferUnit.Trim();
+            if (await scope.Db.SupplierOffers.AnyAsync(o => !o.IsDeleted && o.SupplierId == NewOfferSupplier.Id
+                                                           && o.MaterialName == material && o.Unit == unit))
+                throw new DomainException("У этого поставщика уже есть предложение по такому материалу и единице измерения.");
+
+            var offer = new SupplierOffer
+            {
+                SupplierId = NewOfferSupplier.Id,
+                MaterialName = material,
+                Unit = unit,
+                UnitPrice = price,
+                DeliveryDays = days,
+                Notes = string.IsNullOrWhiteSpace(NewOfferNotes) ? null : NewOfferNotes.Trim(),
+                IsActive = true
+            };
+            await scope.Db.SupplierOffers.AddAsync(offer);
+            await scope.Audit.LogAsync(_session.UserId, _session.Login, nameof(SupplierOffer), offer.MaterialName,
+                "CREATE_SUPPLIER_OFFER", null, $"{offer.UnitPrice:N2} BYN/{offer.Unit}", null);
+            await scope.Db.SaveChangesAsync();
+
+            NewOfferMaterial = string.Empty;
+            NewOfferNotes = string.Empty;
+
+            await LoadSuppliersAsync();
+            SetStatus($"Предложение по «{offer.MaterialName}» добавлено: {offer.UnitPrice:N2} BYN / {offer.Unit}.", false);
+        });
+    }
+
     private SupplyMaterialRequestDto BuildSupplyDto()
     {
         decimal? agreed = null;
@@ -1972,11 +2205,14 @@ public sealed class MainViewModel : ViewModelBase
             agreed = parsed;
         }
 
+        Guid? offerId = SupplyOffer != null && SupplyOffer.Id != Guid.Empty ? SupplyOffer.Id : null;
+
         return new SupplyMaterialRequestDto(
             SupplyContract?.Id,
             string.IsNullOrWhiteSpace(SupplySupplierName) ? null : SupplySupplierName.Trim(),
             agreed,
-            string.IsNullOrWhiteSpace(SupplyComment) ? null : SupplyComment.Trim());
+            string.IsNullOrWhiteSpace(SupplyComment) ? null : SupplyComment.Trim(),
+            offerId);
     }
 
     private void ResetMaterialForm()
@@ -1985,7 +2221,6 @@ public sealed class MainViewModel : ViewModelBase
         EditingMaterialNumber = string.Empty;
         NewMaterialName = string.Empty;
         NewMaterialQty = "10";
-        NewMaterialPrice = "0.00";
         NewMaterialPurpose = string.Empty;
         NewMaterialNotes = string.Empty;
         NewMaterialSubmitImmediately = true;
@@ -2143,7 +2378,6 @@ public sealed class MainViewModel : ViewModelBase
         NewMaterialName = m.MaterialName;
         NewMaterialUnit = m.Unit;
         NewMaterialQty = m.Quantity.ToString("0.###", CultureInfo.InvariantCulture);
-        NewMaterialPrice = m.EstimatedUnitPrice.ToString("0.00", CultureInfo.InvariantCulture);
         NewMaterialDate = m.RequiredDate.ToString("yyyy-MM-dd");
         NewMaterialPurpose = m.Purpose;
         NewMaterialNotes = m.SpecificationNotes;
@@ -2193,8 +2427,8 @@ public sealed class MainViewModel : ViewModelBase
 
         return new AccountingReportContext
         {
-            OrganizationName = org?.Name ?? "ООО «СтройФинРиск»",
-            OrganizationUnp = org?.Unp ?? "191234567",
+            OrganizationName = org?.Name ?? "ОАО «МАПИД»",
+            OrganizationUnp = org?.Unp ?? "100582333",
             ResponsiblePerson = "Громов А.Н., директор",
             ChiefAccountant = "Ковалёва И.П., главный бухгалтер",
             PeriodStart = new DateTime(DateTime.UtcNow.Year, 1, 1),
@@ -2273,7 +2507,7 @@ public sealed class MainViewModel : ViewModelBase
         var selIds = sel.Select(p => p.Id).ToHashSet();
 
         var contractIds = await scope.Db.Contracts
-            .Where(c => !c.IsDeleted && selIds.Contains(c.ProjectId))
+            .Where(c => !c.IsDeleted && c.ProjectId.HasValue && selIds.Contains(c.ProjectId.Value))
             .Select(c => c.Id).ToHashSetAsync();
 
         var schedule = await scope.Db.ContractScheduleItems

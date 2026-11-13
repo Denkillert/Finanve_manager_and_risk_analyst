@@ -20,7 +20,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _vm = new MainViewModel(dbFactory, session);
         DataContext = _vm;
-        Title = $"СтройФинРиск — {session.FullName} ({session.RoleName})";
+        Title = $"ОАО «МАПИД» — {session.FullName} ({session.RoleName})";
         _vm.PropertyChanged += ViewModel_OnPropertyChanged;
         Loaded += async (_, _) =>
         {

@@ -23,6 +23,8 @@ public class AppDbContext : DbContext
     public DbSet<Obligation> Obligations => Set<Obligation>();
     public DbSet<Advance> Advances => Set<Advance>();
     public DbSet<MaterialRequest> MaterialRequests => Set<MaterialRequest>();
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<SupplierOffer> SupplierOffers => Set<SupplierOffer>();
     public DbSet<PaymentRequest> PaymentRequests => Set<PaymentRequest>();
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<Payment> Payments => Set<Payment>();
@@ -56,7 +58,7 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<BudgetLimit>().ToTable("BudgetLimits", "finance");
         modelBuilder.Entity<Contract>().ToTable("Contracts", "finance")
-            .HasIndex(c => new { c.ProjectId, c.Number }).IsUnique();
+            .HasIndex(c => c.Number).IsUnique();
         modelBuilder.Entity<Contract>().Property(c => c.Direction).HasConversion<string>().HasMaxLength(40);
 
         modelBuilder.Entity<ContractSupplement>().ToTable("ContractSupplements", "finance")
@@ -71,6 +73,11 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<MaterialRequest>().ToTable("MaterialRequests", "finance")
             .HasIndex(r => r.Number).IsUnique();
         modelBuilder.Entity<MaterialRequest>().Property(r => r.Status).HasConversion<string>().HasMaxLength(30);
+
+        modelBuilder.Entity<Supplier>().ToTable("Suppliers", "finance")
+            .HasIndex(s => s.Name).IsUnique();
+        modelBuilder.Entity<SupplierOffer>().ToTable("SupplierOffers", "finance")
+            .HasIndex(o => new { o.SupplierId, o.MaterialName, o.Unit }).IsUnique();
 
         modelBuilder.Entity<PaymentRequest>().ToTable("PaymentRequests", "finance")
             .HasIndex(r => r.Number).IsUnique();

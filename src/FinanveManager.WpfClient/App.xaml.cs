@@ -53,7 +53,7 @@ public partial class App : System.Windows.Application
         {
             MessageBox.Show(
                 $"Ошибка подключения к базе данных MS SQL Server:\n{ex.Message}",
-                "СтройФинРиск — Ошибка БД",
+                "ОАО «МАПИД» — Ошибка БД",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error);
             Shutdown(1);

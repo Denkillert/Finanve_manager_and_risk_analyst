@@ -124,7 +124,8 @@ public class BudgetLimit : BaseEntity
 
 public class Contract : BaseEntity
 {
-    public Guid ProjectId { get; set; }
+    /// <summary>Договор заключается с организацией-контрагентом и не привязывается к объекту/проекту.</summary>
+    public Guid? ProjectId { get; set; }
     public Project? Project { get; set; }
     public string Number { get; set; } = string.Empty;
     public string Counterparty { get; set; } = string.Empty;
@@ -229,6 +230,33 @@ public class Advance : BaseEntity
     }
 }
 
+public class Supplier : BaseEntity
+{
+    public string Name { get; set; } = string.Empty;
+    public string Unp { get; set; } = string.Empty;
+    public string? ContactPerson { get; set; }
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+    public string? Notes { get; set; }
+    public bool IsActive { get; set; } = true;
+
+    public List<SupplierOffer> Offers { get; set; } = new();
+}
+
+/// <summary>Предложение поставщика: что поставляет, в каких единицах и по какой цене.</summary>
+public class SupplierOffer : BaseEntity
+{
+    public Guid SupplierId { get; set; }
+    public Supplier? Supplier { get; set; }
+    public string MaterialName { get; set; } = string.Empty;
+    public string Unit { get; set; } = "шт.";
+    public decimal UnitPrice { get; set; }
+    public int DeliveryDays { get; set; } = 5;
+    public DateTime? ValidUntil { get; set; }
+    public string? Notes { get; set; }
+    public bool IsActive { get; set; } = true;
+}
+
 public class MaterialRequest : BaseEntity
 {
     public Guid ProjectId { get; set; }
@@ -240,6 +268,12 @@ public class MaterialRequest : BaseEntity
     public CostItem? CostItem { get; set; }
     public Guid? ContractId { get; set; }
     public Contract? Contract { get; set; }
+    public Guid? SupplierId { get; set; }
+    public Supplier? Supplier { get; set; }
+    public Guid? SupplierOfferId { get; set; }
+    public SupplierOffer? SupplierOffer { get; set; }
+    public Guid? PaymentRequestId { get; set; }
+    public PaymentRequest? PaymentRequest { get; set; }
 
     public string Number { get; set; } = string.Empty;
     public string MaterialName { get; set; } = string.Empty;

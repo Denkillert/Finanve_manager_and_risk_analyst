@@ -58,7 +58,7 @@
                     <dl class="supply-meta">
                         <div><dt>Объект</dt><dd>@m.ConstructionObject?.Name</dd></div>
                         <div><dt>Количество</dt><dd>@m.Quantity.ToString("N3") @m.Unit</dd></div>
-                        <div><dt>Оценка</dt><dd>@m.EstimatedTotal.ToString("N2") BYN</dd></div>
+                        <div><dt>Согласовано</dt><dd>@((m.AgreedTotal ?? 0m).ToString("N2")) BYN</dd></div>
                         <div><dt>Статья</dt><dd>@(m.CostItem?.Code ?? "—")</dd></div>
                     </dl>
                     @if (!string.IsNullOrWhiteSpace(m.Purpose))
@@ -76,12 +76,35 @@
 
                     @if (m.Status is MaterialRequestStatus.Submitted or MaterialRequestStatus.Approved)
                     {
+                        var offers = Model.Suppliers
+                            .SelectMany(s => s.Offers
+                                .Where(o => !o.IsDeleted && o.IsActive)
+                                .Select(o => new { Offer = o, Supplier = s }))
+                            .OrderBy(x => x.Offer.UnitPrice)
+                            .ToList();
+                        var matching = offers
+                            .Where(x => x.Offer.MaterialName.Contains(m.MaterialName, StringComparison.OrdinalIgnoreCase)
+                                        || m.MaterialName.Contains(x.Offer.MaterialName, StringComparison.OrdinalIgnoreCase))
+                            .ToList();
+                        var visibleOffers = matching.Any() ? matching : offers;
                         <form method="post" asp-controller="Contracts" asp-action="@(m.Status == MaterialRequestStatus.Submitted ? "ApproveMaterial" : "OrderMaterial")" class="supply-form">
                             <input type="hidden" name="id" value="@m.Id" />
+                            <div class="field span-2">
+                                <label>Предложение поставщика (сортировка по выгодной цене)</label>
+                                <select name="supplierOfferId">
+                                    <option value="">— выбрать вручную —</option>
+                                    @foreach (var item in visibleOffers)
+                                    {
+                                        <option value="@item.Offer.Id" selected="@(m.SupplierOfferId == item.Offer.Id)">
+                                            @item.Supplier.Name — @item.Offer.MaterialName — @item.Offer.UnitPrice.ToString("N2") BYN / @item.Offer.Unit (@item.Offer.DeliveryDays дн.)
+                                        </option>
+                                    }
+                                </select>
+                            </div>
                             <div class="field">
-                                <label>Договор поставки</label>
+                                <label>Договор поставки (необязательно)</label>
                                 <select name="contractId">
-                                    <option value="">— без договора —</option>
+                                    <option value="">— подобрать по поставщику —</option>
                                     @foreach (var c in Model.Contracts.Where(c => c.Direction == ContractDirection.SupplierSubcontractorOutgoing))
                                     {
                                         <option value="@c.Id" selected="@(m.ContractId == c.Id)">@c.Number — @c.Counterparty</option>
@@ -89,13 +112,13 @@
                                 </select>
                             </div>
                             <div class="field">
-                                <label>Поставщик</label>
+                                <label>Поставщик вручную</label>
                                 <input name="supplierName" value="@m.SupplierName" placeholder="ООО «Поставщик»" />
                             </div>
                             <div class="field">
-                                <label>Согласованная цена за @m.Unit</label>
+                                <label>Цена вручную за @m.Unit</label>
                                 <input type="number" step="0.01" min="0" name="agreedUnitPrice"
-                                       value="@((m.AgreedUnitPrice ?? m.EstimatedUnitPrice).ToString(System.Globalization.CultureInfo.InvariantCulture))" />
+                                       value="@((m.AgreedUnitPrice ?? 0m).ToString(System.Globalization.CultureInfo.InvariantCulture))" />
                             </div>
                             <div class="field span-2">
                                 <label>Комментарий</label>
@@ -105,6 +128,21 @@
                                 <button type="submit" class="btn btn-sm">@(m.Status == MaterialRequestStatus.Submitted ? "Согласовать" : "Заказать у поставщика")</button>
                             </div>
                         </form>
+                    }
+
+                    @if (m.Status is MaterialRequestStatus.Approved or MaterialRequestStatus.Ordered or MaterialRequestStatus.Delivered)
+                    {
+                        if (m.PaymentRequestId.HasValue)
+                        {
+                            <p class="supply-supplier">Платёжная заявка: <strong>@(m.PaymentRequest?.Number ?? "сформирована")</strong>@(m.PaymentRequest != null ? $" · {m.PaymentRequest.PayableAmount:N2} BYN · {RussianLabels.RequestStatusName(m.PaymentRequest.Status)}" : "")</p>
+                        }
+                        else
+                        {
+                            <form method="post" asp-controller="Contracts" asp-action="CreateMaterialPayment" class="inline-form" style="margin-top:8px">
+                                <input type="hidden" name="id" value="@m.Id" />
+                                <button type="submit" class="btn btn-sm">Сформировать платёжную заявку</button>
+                            </form>
+                        }
                     }
 
                     @if (m.Status == MaterialRequestStatus.Ordered)
@@ -175,66 +213,175 @@
 {
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title">Регистрация договора с поставщиком</h3>
-            <span class="muted">Договоры оформляет снабженец</span>
+            <div>
+                <h3 class="card-title">Реестр поставщиков и их предложений</h3>
+                <p class="muted card-hint">Снабженец регистрирует, кто что поставляет и по каким ценам. При согласовании заявки выбирается предложение с наиболее выгодной ценой.</p>
+            </div>
         </div>
-        @if (!Model.Projects.Any())
-        {
-            <p class="muted">Проекты отсутствуют — добавьте проект перед регистрацией договора.</p>
-        }
-        else
-        {
-            <form method="post" asp-controller="Contracts" asp-action="CreateContract" class="form-grid">
-                <div class="field">
-                    <label>Проект</label>
-                    <select name="projectId">
-                        @foreach (var p in Model.Projects)
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Поставщик</th>
+                        <th>УНП / контакты</th>
+                        <th>Материал</th>
+                        <th class="num">Цена, BYN</th>
+                        <th>Срок поставки</th>
+                        <th>Действует до</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Suppliers.Any())
+                    {
+                        <tr><td colspan="6" class="muted">Поставщики ещё не зарегистрированы.</td></tr>
+                    }
+                    @foreach (var s in Model.Suppliers)
+                    {
+                        var supplierOffers = s.Offers.Where(o => !o.IsDeleted && o.IsActive).OrderBy(o => o.MaterialName).ThenBy(o => o.UnitPrice).ToList();
+                        if (!supplierOffers.Any())
                         {
-                            <option value="@p.Id">@p.Code — @p.Name</option>
+                            <tr>
+                                <td><strong>@s.Name</strong></td>
+                                <td>УНП @s.Unp<div class="muted">@s.ContactPerson @s.Phone</div></td>
+                                <td colspan="4" class="muted">Предложения не добавлены</td>
+                            </tr>
                         }
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Номер договора</label>
-                    <input name="number" value="ПД-2026/19" required />
-                </div>
-                <div class="field">
-                    <label>Контрагент</label>
-                    <input name="counterparty" value="ООО БелСтройПоставка" required />
+                        @foreach (var o in supplierOffers)
+                        {
+                            <tr>
+                                <td><strong>@s.Name</strong></td>
+                                <td>УНП @s.Unp<div class="muted">@s.ContactPerson @s.Phone</div></td>
+                                <td>@o.MaterialName<div class="muted">@o.Notes</div></td>
+                                <td class="num"><strong>@o.UnitPrice.ToString("N2")</strong> / @o.Unit</td>
+                                <td>@o.DeliveryDays дн.</td>
+                                <td>@(o.ValidUntil?.ToString("dd.MM.yyyy") ?? "бессрочно")</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="grid-2 grid-stack" style="margin-top:14px">
+            <form method="post" asp-controller="Contracts" asp-action="CreateSupplier" class="form-grid">
+                <h4 class="span-2" style="margin:0">Новый поставщик</h4>
+                <div class="field span-2">
+                    <label>Наименование организации</label>
+                    <input name="name" placeholder="ОАО «Белорусский цементный завод»" required />
                 </div>
                 <div class="field">
                     <label>УНП</label>
-                    <input name="counterpartyUnp" value="192345678" />
+                    <input name="unp" placeholder="700012345" />
                 </div>
                 <div class="field">
-                    <label>Направление</label>
-                    <select name="direction">
-                        <option value="SupplierSubcontractorOutgoing">Расходный (подряд / поставка)</option>
-                        <option value="CustomerIncoming">Доходный (заказчик / ДДУ)</option>
-                    </select>
+                    <label>Контактное лицо</label>
+                    <input name="contactPerson" placeholder="Иванов И.И." />
                 </div>
                 <div class="field">
-                    <label>Сумма договора</label>
-                    <input type="number" step="0.01" name="totalAmount" value="1500.00" required />
+                    <label>Телефон</label>
+                    <input name="phone" placeholder="+375 (17) 000-00-00" />
                 </div>
                 <div class="field">
-                    <label>Валюта</label>
-                    <select name="currency">
-                        <option value="BYN">BYN</option>
-                        <option value="USD">USD</option>
-                        <option value="EUR">EUR</option>
-                        <option value="RUB">RUB</option>
-                    </select>
+                    <label>E-mail</label>
+                    <input name="email" placeholder="supply@example.by" />
                 </div>
-                <div class="field">
-                    <label>Спецификация / предмет</label>
-                    <input name="specificationNotes" value="Поставка арматуры и ЖБИ по графику" />
+                <div class="field span-2">
+                    <label>Примечание</label>
+                    <input name="notes" placeholder="Условия работы, отсрочка" />
                 </div>
                 <div class="form-actions span-2">
-                    <button type="submit" class="btn">Зарегистрировать договор</button>
+                    <button type="submit" class="btn btn-sm">Добавить поставщика</button>
                 </div>
             </form>
-        }
+
+            <form method="post" asp-controller="Contracts" asp-action="CreateSupplierOffer" class="form-grid">
+                <h4 class="span-2" style="margin:0">Новое предложение поставщика</h4>
+                <div class="field span-2">
+                    <label>Поставщик</label>
+                    <select name="supplierId" required>
+                        @foreach (var s in Model.Suppliers)
+                        {
+                            <option value="@s.Id">@s.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="field span-2">
+                    <label>Материал</label>
+                    <input name="materialName" placeholder="Плиты перекрытия ПК 60-15-8" required />
+                </div>
+                <div class="field">
+                    <label>Единица измерения</label>
+                    <input name="unit" value="шт." required />
+                </div>
+                <div class="field">
+                    <label>Цена за единицу, BYN</label>
+                    <input type="number" step="0.01" min="0.01" name="unitPrice" value="100.00" required />
+                </div>
+                <div class="field">
+                    <label>Срок поставки, дней</label>
+                    <input type="number" min="1" name="deliveryDays" value="5" />
+                </div>
+                <div class="field">
+                    <label>Действует до</label>
+                    <input type="date" name="validUntil" />
+                </div>
+                <div class="field span-2">
+                    <label>Примечание</label>
+                    <input name="notes" placeholder="Условия доставки, скидка" />
+                </div>
+                <div class="form-actions span-2">
+                    <button type="submit" class="btn btn-sm">Добавить предложение</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Регистрация договора с поставщиком</h3>
+            <span class="muted">Договор заключается с организацией-контрагентом, без привязки к объекту</span>
+        </div>
+        <form method="post" asp-controller="Contracts" asp-action="CreateContract" class="form-grid">
+            <div class="field">
+                <label>Номер договора</label>
+                <input name="number" value="ПД-2026/19" required />
+            </div>
+            <div class="field">
+                <label>Контрагент</label>
+                <input name="counterparty" value="ООО БелСтройПоставка" required />
+            </div>
+            <div class="field">
+                <label>УНП</label>
+                <input name="counterpartyUnp" value="192345678" />
+            </div>
+            <div class="field">
+                <label>Направление</label>
+                <select name="direction">
+                    <option value="SupplierSubcontractorOutgoing">Расходный (подряд / поставка)</option>
+                    <option value="CustomerIncoming">Доходный (заказчик / ДДУ)</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Сумма договора</label>
+                <input type="number" step="0.01" name="totalAmount" value="1500.00" required />
+            </div>
+            <div class="field">
+                <label>Валюта</label>
+                <select name="currency">
+                    <option value="BYN">BYN</option>
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="RUB">RUB</option>
+                </select>
+            </div>
+            <div class="field span-2">
+                <label>Спецификация / предмет</label>
+                <input name="specificationNotes" value="Поставка арматуры и ЖБИ по графику" />
+            </div>
+            <div class="form-actions span-2">
+                <button type="submit" class="btn">Зарегистрировать договор</button>
+            </div>
+        </form>
     </div>
 }
 

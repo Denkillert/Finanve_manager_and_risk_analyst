@@ -93,8 +93,8 @@ public sealed class XlsxWorkbook
                "<cp:coreProperties xmlns:cp=\"http://schemas.openxmlformats.org/package/2006/metadata/core-properties\" " +
                "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" xmlns:dcterms=\"http://purl.org/dc/terms/\" " +
                "xmlns:dcmitype=\"http://purl.org/dc/dcmitype/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" +
-               "<dc:creator>СтройФинРиск</dc:creator>" +
-               "<cp:lastModifiedBy>СтройФинРиск</cp:lastModifiedBy>" +
+               "<dc:creator>ОАО «МАПИД»</dc:creator>" +
+               "<cp:lastModifiedBy>ОАО «МАПИД»</cp:lastModifiedBy>" +
                $"<dcterms:created xsi:type=\"dcterms:W3CDTF\">{now}</dcterms:created>" +
                $"<dcterms:modified xsi:type=\"dcterms:W3CDTF\">{now}</dcterms:modified>" +
                "</cp:coreProperties>";
@@ -104,8 +104,8 @@ public sealed class XlsxWorkbook
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>" +
         "<Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" " +
         "xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\">" +
-        "<Application>СтройФинРиск</Application><DocSecurity>0</DocSecurity><ScaleCrop>false</ScaleCrop>" +
-        "<Company>СтройФинРиск</Company><AppVersion>1.0</AppVersion></Properties>";
+        "<Application>FinanveManager</Application><DocSecurity>0</DocSecurity><ScaleCrop>false</ScaleCrop>" +
+        "<Company>ОАО «МАПИД»</Company><AppVersion>1.0</AppVersion></Properties>";
 
     private string BuildWorkbook()
     {

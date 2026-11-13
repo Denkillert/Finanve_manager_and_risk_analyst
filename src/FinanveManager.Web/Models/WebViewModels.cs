@@ -113,6 +113,7 @@ public class ContractsViewModel
     public List<Contract> Contracts { get; set; } = new();
     public List<Advance> Advances { get; set; } = new();
     public List<MaterialRequest> MaterialRequests { get; set; } = new();
+    public List<Supplier> Suppliers { get; set; } = new();
     public string? ImportReportSummary { get; set; }
 }
 

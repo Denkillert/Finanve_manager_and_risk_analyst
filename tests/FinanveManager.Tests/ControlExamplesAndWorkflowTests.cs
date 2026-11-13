@@ -211,6 +211,18 @@ public class ControlExamplesAndWorkflowTests
                 PersonalDataConsentGiven = true,
                 ConsentDate = DateTime.UtcNow
             });
+            await initScope.Db.Users.AddAsync(new User
+            {
+                Id = SeedIds.UserRisk,
+                RoleId = SeedIds.RoleRisk,
+                Login = "risk1",
+                PasswordHash = SeedIds.DefaultDemoPasswordHash,
+                FullName = "Волкова М.П. (Специалист по рискам)",
+                Email = "risk1@stroyfin.by",
+                IsActive = true,
+                PersonalDataConsentGiven = true,
+                ConsentDate = DateTime.UtcNow
+            });
             await initScope.Db.SaveChangesAsync();
         }
 
@@ -257,6 +269,12 @@ public class ControlExamplesAndWorkflowTests
             SeedIds.UserCeo, "director");
         Assert.False(reassigned.IsDeleted);
         Assert.True(reassigned.IsPrimaryManager);
+
+        // На проект можно назначить только прораба: другие роли отклоняются.
+        var wrongRole = await Assert.ThrowsAsync<DomainException>(() => scope.ProjectMgmt.AssignMemberAsync(
+            new AssignProjectMemberDto(created.Project.Id, SeedIds.UserRisk, "Специалист по рискам", false),
+            SeedIds.UserCeo, "director"));
+        Assert.Equal("INVALID_PROJECT_MANAGER_ROLE", wrongRole.ErrorCode);
     }
 
     [Fact]
@@ -300,7 +318,6 @@ public class ControlExamplesAndWorkflowTests
             "Керамическая плитка 600×600",
             "м²",
             120m,
-            32.5m,
             new DateTime(2026, 12, 1),
             "Отделка холлов 1–3 этажей",
             "ГОСТ 6787-2001",
@@ -309,7 +326,7 @@ public class ControlExamplesAndWorkflowTests
         // Прораб создаёт потребность в материале: поставщик и цена договора не выбираются.
         var created = await scope.MaterialRequests.CreateAsync(dto, SeedIds.UserPm, "pm");
         Assert.Equal(MaterialRequestStatus.Submitted, created.Status);
-        Assert.Equal(3900m, created.EstimatedTotal);
+        Assert.Equal(0m, created.EstimatedTotal);
         Assert.Null(created.SupplierName);
         Assert.Null(created.ContractId);
         Assert.Null(created.AgreedTotal);
@@ -328,17 +345,48 @@ public class ControlExamplesAndWorkflowTests
         Assert.Equal(MaterialRequestStatus.Submitted, updated.Status);
         Assert.Null(updated.RejectedAt);
 
-        // Снабженец подбирает договор поставки, поставщика и согласованную цену.
+        // Снабженец ведёт реестр поставщиков: у ООО «БелСтройПоставка» есть предложение по плитке.
+        var tileOffer = await scope.Db.SupplierOffers
+            .Include(o => o.Supplier)
+            .FirstAsync(o => o.MaterialName == "Керамическая плитка 600×600" && !o.IsDeleted);
+        Assert.Equal(31.5m, tileOffer.UnitPrice);
+
+        // Договор заключается с организацией-контрагентом, без привязки к проекту.
+        var supplierContract = new Contract
+        {
+            Number = "П-2026/15",
+            Counterparty = tileOffer.Supplier!.Name,
+            CounterpartyUnp = tileOffer.Supplier.Unp,
+            Direction = ContractDirection.SupplierSubcontractorOutgoing,
+            TotalAmount = 10000m,
+            Currency = "BYN",
+            StartDate = new DateTime(2026, 1, 1),
+            EndDate = new DateTime(2026, 12, 31)
+        };
+        await scope.Db.Contracts.AddAsync(supplierContract);
+        await scope.Db.SaveChangesAsync();
+        Assert.Null(supplierContract.ProjectId);
+
+        // Снабженец выбирает предложение с выгодной ценой — поставщик и цена подставляются автоматически.
         var approved = await scope.MaterialRequests.ApproveAsync(
             created.Id,
-            new SupplyMaterialRequestDto(SeedIds.ContractMat, null, 30m, "Поставка по договору П-2026/14"),
+            new SupplyMaterialRequestDto(null, null, null, "Поставка по договору П-2026/15", tileOffer.Id),
             SeedIds.UserProc,
             "supply");
         Assert.Equal(MaterialRequestStatus.Approved, approved.Status);
-        Assert.Equal(SeedIds.ContractMat, approved.ContractId);
-        Assert.False(string.IsNullOrWhiteSpace(approved.SupplierName));
-        Assert.Equal(30m, approved.AgreedUnitPrice);
-        Assert.Equal(3600m, approved.AgreedTotal);
+        Assert.Equal(supplierContract.Id, approved.ContractId);
+        Assert.Equal(tileOffer.Supplier.Name, approved.SupplierName);
+        Assert.Equal(tileOffer.Id, approved.SupplierOfferId);
+        Assert.Equal(31.5m, approved.AgreedUnitPrice);
+        Assert.Equal(3780m, approved.AgreedTotal);
+
+        // После обработки заявки снабженец формирует платёжную заявку.
+        var withPayment = await scope.MaterialRequests.CreatePaymentRequestAsync(created.Id, SeedIds.UserProc, "supply");
+        Assert.NotNull(withPayment.PaymentRequestId);
+        var payment = await scope.Db.PaymentRequests.FirstAsync(p => p.Id == withPayment.PaymentRequestId);
+        Assert.Equal(3780m, payment.PayableAmount);
+        Assert.Equal($"MATERIAL-{created.Id}", payment.IdempotencyKey);
+        Assert.Contains(created.Number, payment.Purpose);
 
         // После согласования прораб уже не может менять заявку.
         await Assert.ThrowsAsync<DomainException>(() => scope.MaterialRequests.UpdateAsync(
@@ -346,7 +394,7 @@ public class ControlExamplesAndWorkflowTests
 
         var ordered = await scope.MaterialRequests.MarkOrderedAsync(
             created.Id,
-            new SupplyMaterialRequestDto(SeedIds.ContractMat, null, 30m, null),
+            new SupplyMaterialRequestDto(null, null, null, null, tileOffer.Id),
             SeedIds.UserProc,
             "supply");
         Assert.Equal(MaterialRequestStatus.Ordered, ordered.Status);
@@ -358,6 +406,6 @@ public class ControlExamplesAndWorkflowTests
         await Assert.ThrowsAsync<DomainException>(() => scope.MaterialRequests.RejectAsync(
             created.Id, "Повторный возврат", SeedIds.UserProc, "supply"));
         await Assert.ThrowsAsync<DomainException>(() => scope.MaterialRequests.ApproveAsync(
-            created.Id, new SupplyMaterialRequestDto(SeedIds.ContractMat, null, 31m, null), SeedIds.UserProc, "supply"));
+            created.Id, new SupplyMaterialRequestDto(null, null, 31m, null, tileOffer.Id), SeedIds.UserProc, "supply"));
     }
 }

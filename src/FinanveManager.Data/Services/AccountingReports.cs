@@ -10,7 +10,7 @@ namespace FinanveManager.Data.Services;
 /// </summary>
 public sealed class AccountingReportContext
 {
-    public string OrganizationName { get; init; } = "ООО «СтройФинРиск»";
+    public string OrganizationName { get; init; } = "ОАО «МАПИД»";
     public string OrganizationUnp { get; init; } = "";
     public string ResponsiblePerson { get; init; } = "";
     public string ChiefAccountant { get; init; } = "";

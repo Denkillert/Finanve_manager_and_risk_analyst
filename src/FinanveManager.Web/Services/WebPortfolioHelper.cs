@@ -124,7 +124,7 @@ public static class WebPortfolioHelper
         var selectedIds = selectedProjects.Select(p => p.Id).ToHashSet();
 
         var contracts = await db.Contracts
-            .Where(c => !c.IsDeleted && selectedIds.Contains(c.ProjectId))
+            .Where(c => !c.IsDeleted && c.ProjectId.HasValue && selectedIds.Contains(c.ProjectId.Value))
             .ToListAsync(ct);
         var contractIds = contracts.Select(c => c.Id).ToHashSet();
 

@@ -66,7 +66,7 @@ public class RequestsController : Controller
         {
             projQuery = projQuery.Where(p => allowedIds.Contains(p.Id));
             objQuery = objQuery.Where(o => allowedIds.Contains(o.ProjectId));
-            conQuery = conQuery.Where(c => allowedIds.Contains(c.ProjectId));
+            conQuery = conQuery.Where(c => c.ProjectId.HasValue && allowedIds.Contains(c.ProjectId.Value));
         }
 
         var visibleObjIds = (await objQuery.Select(o => o.Id).ToListAsync(ct)).ToHashSet();
@@ -120,7 +120,7 @@ public class RequestsController : Controller
         if (allowedIds != null)
         {
             objQuery = objQuery.Where(o => allowedIds.Contains(o.ProjectId));
-            conQuery = conQuery.Where(c => allowedIds.Contains(c.ProjectId));
+            conQuery = conQuery.Where(c => c.ProjectId.HasValue && allowedIds.Contains(c.ProjectId.Value));
         }
 
         var objs = await objQuery.ToListAsync(ct);
@@ -225,7 +225,6 @@ public class RequestsController : Controller
         string materialName,
         string unit,
         decimal quantity,
-        decimal estimatedUnitPrice,
         DateTime requiredDate,
         string? purpose,
         string? specificationNotes,
@@ -244,7 +243,7 @@ public class RequestsController : Controller
                 throw new DomainException("Доступ запрещён: вы не назначены руководителем этого проекта.");
 
             var dto = new CreateMaterialRequestDto(
-                obj.ProjectId, obj.Id, costItemId, materialName, unit, quantity, estimatedUnitPrice,
+                obj.ProjectId, obj.Id, costItemId, materialName, unit, quantity,
                 requiredDate, purpose, specificationNotes, submitImmediately);
 
             var created = await _materialRequests.CreateAsync(dto, uid, login, ct);
@@ -268,7 +267,6 @@ public class RequestsController : Controller
         string materialName,
         string unit,
         decimal quantity,
-        decimal estimatedUnitPrice,
         DateTime requiredDate,
         string? purpose,
         string? specificationNotes,
@@ -283,7 +281,7 @@ public class RequestsController : Controller
 
             var dto = new CreateMaterialRequestDto(
                 existing.ProjectId, existing.ConstructionObjectId, costItemId, materialName, unit,
-                quantity, estimatedUnitPrice, requiredDate, purpose, specificationNotes, submitImmediately);
+                quantity, requiredDate, purpose, specificationNotes, submitImmediately);
 
             var updated = await _materialRequests.UpdateAsync(id, dto, uid, login, ct);
             TempData["Success"] = submitImmediately
@@ -343,7 +341,7 @@ public class RequestsController : Controller
 
         var allowedIds = await WebPortfolioHelper.GetVisibleProjectIdsAsync(_db, role, uid, ct);
         var objQuery = _db.ConstructionObjects.Where(o => !o.IsDeleted && o.ProjectId == request.ProjectId);
-        var conQuery = _db.Contracts.Where(c => !c.IsDeleted && c.ProjectId == request.ProjectId);
+        var conQuery = _db.Contracts.Where(c => !c.IsDeleted);
 
         var vm = new RequestEditViewModel
         {

@@ -1,7 +1,7 @@
 ﻿<Window x:Class="FinanveManager.WpfClient.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="СтройФинРиск — Финансы и риски строительных проектов"
+        Title="ОАО «МАПИД» — Финансы и риски строительных проектов"
         Width="1360"
         Height="840"
         MinWidth="1040"
@@ -35,7 +35,7 @@
                                   Stretch="Uniform" Margin="8"/>
                         </Border>
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="СтройФинРиск" Foreground="White" FontSize="17" FontWeight="Bold"/>
+                            <TextBlock Text="ОАО «МАПИД»" Foreground="White" FontSize="17" FontWeight="Bold"/>
                             <TextBlock Text="{Binding RoleName}" Foreground="#94A19E" FontSize="11" Margin="0,2,0,0"
                                        TextWrapping="Wrap" MaxWidth="150"/>
                         </StackPanel>
@@ -111,7 +111,7 @@
                         </Border>
                     </StackPanel>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="СТРОЙФИНРИСК · ФИНАНСОВЫЙ КОНТУР" FontSize="9.5" FontWeight="Bold"
+                        <TextBlock Text="ОАО «МАПИД» · ФИНАНСОВЫЙ КОНТУР" FontSize="9.5" FontWeight="Bold"
                                    Foreground="#0E7C66" Margin="0,0,0,2"/>
                         <TextBlock Text="{Binding SelectedSectionTitle}" FontSize="18" FontWeight="Bold" Foreground="#10201E"/>
                     </StackPanel>
@@ -344,12 +344,12 @@
                             <StackPanel>
                                 <TextBlock Text="Команда проекта и закреплённые руководители (прорабы)"
                                            FontSize="14" FontWeight="SemiBold" Margin="0,0,0,2"/>
-                                <TextBlock Text="Ответственным руководителем проекта можно назначить только сотрудника с ролью «Прораб / РП». Остальные сотрудники добавляются участниками."
+                                <TextBlock Text="На проект назначаются только прорабы (роль «Прораб / РП»). Сотрудники других ролей в списке отсутствуют и не могут быть назначены."
                                            FontSize="11.5" Foreground="#64706D" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 <WrapPanel Margin="0,0,0,10">
                                     <ComboBox ItemsSource="{Binding ProjectLookups}" SelectedItem="{Binding AssignProject}" DisplayMemberPath="Display" Width="250" Padding="6,5" Margin="0,0,8,6"/>
                                     <ComboBox ItemsSource="{Binding AssignableUserLookups}" SelectedItem="{Binding AssignUser}" DisplayMemberPath="Display" Width="310" Padding="6,5" Margin="0,0,8,6"/>
-                                    <TextBox Text="{Binding AssignRoleInput}" Width="210" Padding="6,5" Margin="0,0,8,6" ToolTip="Проектная роль"/>
+                                    <TextBox Text="{Binding AssignRoleInput}" Width="210" Padding="6,5" Margin="0,0,8,6" ToolTip="Проектная роль" IsReadOnly="True"/>
                                     <CheckBox IsChecked="{Binding AssignIsPrimaryManager}" Content="Ответственный прораб / РП" VerticalAlignment="Center" Margin="0,0,10,6"
                                               ToolTip="Доступно только для сотрудников с ролью ProjectManager"/>
                                     <Button Content="Назначить в проект" Command="{Binding AssignMemberCommand}" Style="{StaticResource SuccessButton}" Margin="0,0,8,6"/>
@@ -462,7 +462,7 @@
                                     <Run Text="Заявка на материал"/>
                                     <Run Text="{Binding EditingMaterialNumber, Mode=OneWay}" Foreground="#0E7C66"/>
                                 </TextBlock>
-                                <TextBlock Text="Прораб указывает материал, количество, срок и назначение. Поставщика и договор подбирает снабженец."
+                                <TextBlock Text="Прораб указывает материал, количество, срок и назначение. Поставщика, цену и договор подбирает снабженец."
                                            FontSize="11.5" Foreground="#64706D" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 <WrapPanel>
                                     <StackPanel Width="220" Margin="0,0,12,8">
@@ -484,10 +484,6 @@
                                     <StackPanel Width="95" Margin="0,0,12,8">
                                         <TextBlock Text="Количество" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewMaterialQty}" Padding="6,5"/>
-                                    </StackPanel>
-                                    <StackPanel Width="110" Margin="0,0,12,8">
-                                        <TextBlock Text="Цена за ед., BYN" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
-                                        <TextBox Text="{Binding NewMaterialPrice}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="125" Margin="0,0,12,8">
                                         <TextBlock Text="Срок поставки" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
@@ -524,7 +520,7 @@
                                         <DataGridTextColumn Header="Объект" Binding="{Binding ObjectName}" Width="180" ElementStyle="{StaticResource TrimmedCellText}"/>
                                         <DataGridTextColumn Header="Кол-во" Binding="{Binding Quantity, StringFormat=N3}" Width="75"/>
                                         <DataGridTextColumn Header="Ед." Binding="{Binding Unit}" Width="50"/>
-                                        <DataGridTextColumn Header="Оценка, BYN" Binding="{Binding EstimatedTotal, StringFormat=N2}" Width="100"/>
+                                        <DataGridTextColumn Header="Согласовано, BYN" Binding="{Binding AgreedTotal, StringFormat=N2}" Width="105"/>
                                         <DataGridTextColumn Header="Срок" Binding="{Binding RequiredDate, StringFormat=dd.MM.yyyy}" Width="88"/>
                                         <DataGridTextColumn Header="Статус" Binding="{Binding StatusText}" Width="170"/>
                                         <DataGridTextColumn Header="Поставщик" Binding="{Binding SupplierName}" Width="*" ElementStyle="{StaticResource TrimmedCellText}"/>
@@ -824,7 +820,7 @@
                                 Visibility="{Binding CanSupplyMaterial, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
                                 <TextBlock Text="Заявки прораба на материал" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,2"/>
-                                <TextBlock Text="Снабженец согласует потребность, подбирает поставщика, договор и согласованную цену."
+                                <TextBlock Text="Снабженец согласует потребность и выбирает предложение поставщика с наиболее выгодной ценой, затем формирует платёжную заявку."
                                            FontSize="11.5" Foreground="#64706D" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 <DataGrid ItemsSource="{Binding MaterialRequests}" SelectedItem="{Binding SelectedMaterialRequest}" MaxHeight="220">
                                     <DataGrid.Columns>
@@ -833,25 +829,26 @@
                                         <DataGridTextColumn Header="Объект" Binding="{Binding ObjectName}" Width="175" ElementStyle="{StaticResource TrimmedCellText}"/>
                                         <DataGridTextColumn Header="Кол-во" Binding="{Binding Quantity, StringFormat=N3}" Width="72"/>
                                         <DataGridTextColumn Header="Ед." Binding="{Binding Unit}" Width="48"/>
-                                        <DataGridTextColumn Header="Оценка" Binding="{Binding EstimatedTotal, StringFormat=N2}" Width="90"/>
+                                        <DataGridTextColumn Header="Согласовано" Binding="{Binding AgreedTotal, StringFormat=N2}" Width="95"/>
                                         <DataGridTextColumn Header="Срок" Binding="{Binding RequiredDate, StringFormat=dd.MM.yyyy}" Width="86"/>
                                         <DataGridTextColumn Header="Статус" Binding="{Binding StatusText}" Width="160"/>
                                         <DataGridTextColumn Header="Поставщик" Binding="{Binding SupplierName}" Width="*" ElementStyle="{StaticResource TrimmedCellText}"/>
+                                        <DataGridTextColumn Header="Платёжная заявка" Binding="{Binding PaymentRequestNumber}" Width="150"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
 
                                 <WrapPanel Margin="0,10,0,0">
+                                    <StackPanel Width="470" Margin="0,0,10,8">
+                                        <TextBlock Text="Предложение поставщика (сортировка по выгодной цене)" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <ComboBox ItemsSource="{Binding SupplierOfferLookups}" SelectedItem="{Binding SupplyOffer}" DisplayMemberPath="Display" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="250" Margin="0,0,10,8">
+                                        <TextBlock Text="Выбранное предложение" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBlock Text="{Binding SupplyOfferSummary}" FontSize="11.5" Foreground="#0E7C66" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                                    </StackPanel>
                                     <StackPanel Width="230" Margin="0,0,10,8">
-                                        <TextBlock Text="Договор поставки" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Договор поставки (необязательно)" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <ComboBox ItemsSource="{Binding OutgoingContractLookups}" SelectedItem="{Binding SupplyContract}" DisplayMemberPath="Display" Padding="6,5"/>
-                                    </StackPanel>
-                                    <StackPanel Width="200" Margin="0,0,10,8">
-                                        <TextBlock Text="Поставщик" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
-                                        <TextBox Text="{Binding SupplySupplierName}" Padding="6,5" ToolTip="ООО «Поставщик»"/>
-                                    </StackPanel>
-                                    <StackPanel Width="135" Margin="0,0,10,8">
-                                        <TextBlock Text="Цена за ед., BYN" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
-                                        <TextBox Text="{Binding SupplyAgreedUnitPrice}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="230" Margin="0,0,10,8">
                                         <TextBlock Text="Комментарий" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
@@ -866,7 +863,83 @@
                                     <Button Content="Согласовать" Command="{Binding ApproveMaterialCommand}" Style="{StaticResource SuccessButton}" Margin="0,0,8,6"/>
                                     <Button Content="Заказать у поставщика" Command="{Binding OrderMaterialCommand}" Style="{StaticResource PrimaryButton}" Margin="0,0,8,6"/>
                                     <Button Content="Подтвердить поставку" Command="{Binding DeliverMaterialCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,8,6"/>
+                                    <Button Content="Сформировать платёжную заявку" Command="{Binding CreateMaterialPaymentCommand}" Style="{StaticResource PrimaryButton}" Margin="0,0,8,6"/>
                                     <Button Content="Вернуть прорабу" Command="{Binding RejectMaterialCommand}" Style="{StaticResource DangerButton}" Margin="0,0,8,6"/>
+                                </WrapPanel>
+                                <TextBlock Text="Платёжная заявка формируется после согласования заявки и выбора предложения поставщика."
+                                           FontSize="11" Foreground="#64706D" Margin="0,4,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14"
+                                Visibility="{Binding CanSupplyMaterial, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="Реестр поставщиков и их предложений" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                <TextBlock Text="Снабженец регистрирует, кто что поставляет и по каким ценам. Самые выгодные предложения показываются первыми."
+                                           FontSize="11.5" Foreground="#64706D" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <DataGrid ItemsSource="{Binding SupplierOffers}" MaxHeight="190" IsReadOnly="True">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Поставщик" Binding="{Binding SupplierName}" Width="200" ElementStyle="{StaticResource TrimmedCellText}"/>
+                                        <DataGridTextColumn Header="Материал" Binding="{Binding MaterialName}" Width="*" ElementStyle="{StaticResource TrimmedCellText}"/>
+                                        <DataGridTextColumn Header="Ед." Binding="{Binding Unit}" Width="50"/>
+                                        <DataGridTextColumn Header="Цена, BYN" Binding="{Binding UnitPrice, StringFormat=N2}" Width="95"/>
+                                        <DataGridTextColumn Header="Срок, дн." Binding="{Binding DeliveryDays}" Width="80"/>
+                                        <DataGridTextColumn Header="Действует до" Binding="{Binding ValidUntil}" Width="105"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+
+                                <WrapPanel Margin="0,10,0,0">
+                                    <StackPanel Width="230" Margin="0,0,10,8">
+                                        <TextBlock Text="Поставщик" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewSupplierName}" Padding="6,5" ToolTip="Наименование организации"/>
+                                    </StackPanel>
+                                    <StackPanel Width="110" Margin="0,0,10,8">
+                                        <TextBlock Text="УНП" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewSupplierUnp}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="170" Margin="0,0,10,8">
+                                        <TextBlock Text="Контактное лицо" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewSupplierContact}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="150" Margin="0,0,10,8">
+                                        <TextBlock Text="Телефон" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewSupplierPhone}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="200" Margin="0,0,10,8">
+                                        <TextBlock Text="Примечание" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewSupplierNotes}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <Button Content="Добавить поставщика" Command="{Binding CreateSupplierCommand}"
+                                            Style="{StaticResource SecondaryButton}" VerticalAlignment="Bottom" Margin="0,0,8,8"/>
+                                </WrapPanel>
+
+                                <WrapPanel>
+                                    <StackPanel Width="200" Margin="0,0,10,8">
+                                        <TextBlock Text="Поставщик" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <ComboBox ItemsSource="{Binding SupplierLookups}" SelectedItem="{Binding NewOfferSupplier}" DisplayMemberPath="Display" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="230" Margin="0,0,10,8">
+                                        <TextBlock Text="Материал" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewOfferMaterial}" Padding="6,5" ToolTip="Например, плиты перекрытия ПК 60-15-8"/>
+                                    </StackPanel>
+                                    <StackPanel Width="70" Margin="0,0,10,8">
+                                        <TextBlock Text="Ед." FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewOfferUnit}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="110" Margin="0,0,10,8">
+                                        <TextBlock Text="Цена, BYN" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewOfferPrice}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="90" Margin="0,0,10,8">
+                                        <TextBlock Text="Срок, дн." FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewOfferDays}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="200" Margin="0,0,10,8">
+                                        <TextBlock Text="Примечание" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewOfferNotes}" Padding="6,5" ToolTip="Условия доставки, скидка"/>
+                                    </StackPanel>
+                                    <Button Content="Добавить предложение" Command="{Binding CreateSupplierOfferCommand}"
+                                            Style="{StaticResource SecondaryButton}" VerticalAlignment="Bottom" Margin="0,0,8,8"/>
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
@@ -874,9 +947,10 @@
                         <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14"
                                 Visibility="{Binding CanCreateContract, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
-                                <TextBlock Text="Регистрация нового договора (Специалист по снабжению)" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                <TextBlock Text="Регистрация договора с организацией-контрагентом" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                <TextBlock Text="Договор не привязывается к проекту или объекту строительства."
+                                           FontSize="11.5" Foreground="#64706D" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 <WrapPanel>
-                                    <ComboBox ItemsSource="{Binding ProjectLookups}" SelectedItem="{Binding NewContractProject}" DisplayMemberPath="Display" Width="210" Padding="6,5" Margin="0,0,8,8"/>
                                     <TextBox Text="{Binding NewContractNumber}" Width="115" Padding="6,5" Margin="0,0,8,8" ToolTip="Номер договора"/>
                                     <TextBox Text="{Binding NewContractCounterparty}" Width="190" Padding="6,5" Margin="0,0,8,8" ToolTip="Контрагент"/>
                                     <TextBox Text="{Binding NewContractUnp}" Width="95" Padding="6,5" Margin="0,0,8,8" ToolTip="УНП"/>

@@ -1,15 +1,141 @@
 @model ContractsViewModel
 @{
-    ViewData["Title"] = "Договоры и выписки";
-    ViewData["Subtitle"] = "Реестр договоров, контроль авансов и интеграции с банком и 1С";
+    ViewData["Title"] = "Договоры и снабжение";
+    ViewData["Subtitle"] = "Материальные заявки прораба, договоры с поставщиками, авансы и интеграции с банком и 1С";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
     var refDate = new DateTime(2026, 11, 10);
+    var isSupply = roleCode == "ProcurementSpecialist";
+    var isAccountant = roleCode == "Accountant";
+}
+
+<div class="page-intro">
+    <div>
+        <span class="eyebrow">Снабжение и расчёты</span>
+        <h2>Материальные заявки и договорной контур</h2>
+        <p>Снабженец обрабатывает потребности прораба, подбирает поставщика и оформляет договор. Бухгалтер ведёт выписки, авансы и выгрузки в 1С.</p>
+    </div>
+    <div class="intro-chips">
+        <span class="chip">Заявки на материал: @Model.MaterialRequests.Count</span>
+        <span class="chip">Договоры: @Model.Contracts.Count</span>
+        <span class="chip">Авансы: @Model.Advances.Count</span>
+    </div>
+</div>
+
+@if (isSupply)
+{
+    <div class="card">
+        <div class="card-header">
+            <div>
+                <h3 class="card-title">Заявки прораба на материал</h3>
+                <p class="muted card-hint">Снабженец согласует потребность, указывает поставщика, договор и согласованную цену.</p>
+            </div>
+        </div>
+
+        <div class="supply-grid">
+            @if (!Model.MaterialRequests.Any())
+            {
+                <p class="muted">Заявок на материал пока нет.</p>
+            }
+            @foreach (var m in Model.MaterialRequests)
+            {
+                var badge = m.Status switch
+                {
+                    MaterialRequestStatus.Rejected => "badge-danger",
+                    MaterialRequestStatus.Delivered => "badge-success",
+                    MaterialRequestStatus.Ordered => "badge-info",
+                    MaterialRequestStatus.Approved => "badge-success",
+                    _ => "badge-warn"
+                };
+                <article class="supply-card">
+                    <header>
+                        <div>
+                            <strong>@m.Number</strong>
+                            <span class="badge @badge">@RussianLabels.MaterialRequestStatusName(m.Status)</span>
+                        </div>
+                        <span class="muted">@m.RequiredDate.ToString("dd.MM.yyyy")</span>
+                    </header>
+                    <h4>@m.MaterialName</h4>
+                    <dl class="supply-meta">
+                        <div><dt>Объект</dt><dd>@m.ConstructionObject?.Name</dd></div>
+                        <div><dt>Количество</dt><dd>@m.Quantity.ToString("N3") @m.Unit</dd></div>
+                        <div><dt>Оценка</dt><dd>@m.EstimatedTotal.ToString("N2") BYN</dd></div>
+                        <div><dt>Статья</dt><dd>@(m.CostItem?.Code ?? "—")</dd></div>
+                    </dl>
+                    @if (!string.IsNullOrWhiteSpace(m.Purpose))
+                    {
+                        <p class="muted">@m.Purpose</p>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(m.SpecificationNotes))
+                    {
+                        <p class="muted">Требования: @m.SpecificationNotes</p>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(m.SupplierName))
+                    {
+                        <p class="supply-supplier">Поставщик: <strong>@m.SupplierName</strong>@(m.AgreedTotal.HasValue ? $" · {m.AgreedTotal.Value:N2} BYN" : "")</p>
+                    }
+
+                    @if (m.Status is MaterialRequestStatus.Submitted or MaterialRequestStatus.Approved)
+                    {
+                        <form method="post" asp-controller="Contracts" asp-action="@(m.Status == MaterialRequestStatus.Submitted ? "ApproveMaterial" : "OrderMaterial")" class="supply-form">
+                            <input type="hidden" name="id" value="@m.Id" />
+                            <div class="field">
+                                <label>Договор поставки</label>
+                                <select name="contractId">
+                                    <option value="">— без договора —</option>
+                                    @foreach (var c in Model.Contracts.Where(c => c.Direction == ContractDirection.SupplierSubcontractorOutgoing))
+                                    {
+                                        <option value="@c.Id" selected="@(m.ContractId == c.Id)">@c.Number — @c.Counterparty</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="field">
+                                <label>Поставщик</label>
+                                <input name="supplierName" value="@m.SupplierName" placeholder="ООО «Поставщик»" />
+                            </div>
+                            <div class="field">
+                                <label>Согласованная цена за @m.Unit</label>
+                                <input type="number" step="0.01" min="0" name="agreedUnitPrice"
+                                       value="@((m.AgreedUnitPrice ?? m.EstimatedUnitPrice).ToString(System.Globalization.CultureInfo.InvariantCulture))" />
+                            </div>
+                            <div class="field span-2">
+                                <label>Комментарий</label>
+                                <input name="comment" value="@m.SupplyComment" placeholder="Условия поставки, сроки" />
+                            </div>
+                            <div class="form-actions span-2">
+                                <button type="submit" class="btn btn-sm">@(m.Status == MaterialRequestStatus.Submitted ? "Согласовать" : "Заказать у поставщика")</button>
+                            </div>
+                        </form>
+                    }
+
+                    @if (m.Status == MaterialRequestStatus.Ordered)
+                    {
+                        <form method="post" asp-controller="Contracts" asp-action="DeliverMaterial" class="inline-form">
+                            <input type="hidden" name="id" value="@m.Id" />
+                            <button type="submit" class="btn btn-sm">Подтвердить поставку</button>
+                        </form>
+                    }
+
+                    @if (m.Status is MaterialRequestStatus.Submitted or MaterialRequestStatus.Approved)
+                    {
+                        <form method="post" asp-controller="Contracts" asp-action="RejectMaterial" class="inline-form supply-reject">
+                            <input type="hidden" name="id" value="@m.Id" />
+                            <input name="reason" placeholder="Причина возврата прорабу" value="Уточните марку и объём материала" />
+                            <button type="submit" class="btn btn-outline btn-sm">Вернуть прорабу</button>
+                        </form>
+                    }
+                </article>
+            }
+        </div>
+    </div>
 }
 
 <div class="card">
     <div class="card-header">
         <h3 class="card-title">Реестр договоров, доп. соглашений и обязательств</h3>
-        <a class="btn btn-outline btn-sm" asp-controller="Contracts" asp-action="Export1C">Выгрузить проводки для 1С (CSV)</a>
+        @if (roleCode is "Accountant" or "FinancialManager")
+        {
+            <a class="btn btn-outline btn-sm" asp-controller="Contracts" asp-action="Export1C">Выгрузка для 1С (1CClientBankExchange)</a>
+        }
     </div>
     <div class="table-wrap">
         <table>
@@ -45,75 +171,77 @@
     </div>
 </div>
 
-@if (roleCode is "FinancialManager" or "ProcurementSpecialist")
+@if (isSupply)
 {
     <div class="card">
         <div class="card-header">
-            <h3 class="card-title">Регистрация нового договора</h3>
+            <h3 class="card-title">Регистрация договора с поставщиком</h3>
+            <span class="muted">Договоры оформляет снабженец</span>
         </div>
         @if (!Model.Projects.Any())
         {
-            <p class="muted">Проекты отсутствуют — для создания договора добавьте проект в базе данных.</p>
+            <p class="muted">Проекты отсутствуют — добавьте проект перед регистрацией договора.</p>
         }
         else
         {
-        <form method="post" asp-controller="Contracts" asp-action="CreateContract" class="form-grid">
-            <div class="field">
-                <label>Проект</label>
-                <select name="projectId">
-                    @foreach (var p in Model.Projects)
-                    {
-                        <option value="@p.Id">@p.Code — @p.Name</option>
-                    }
-                </select>
-            </div>
-            <div class="field">
-                <label>Номер договора</label>
-                <input name="number" value="ПД-2026/19" required />
-            </div>
-            <div class="field">
-                <label>Контрагент</label>
-                <input name="counterparty" value="ООО БелСтройПоставка" required />
-            </div>
-            <div class="field">
-                <label>УНП</label>
-                <input name="counterpartyUnp" value="192345678" />
-            </div>
-            <div class="field">
-                <label>Направление</label>
-                <select name="direction">
-                    <option value="SupplierSubcontractorOutgoing">Расходный (подряд / поставка)</option>
-                    <option value="CustomerIncoming">Доходный (заказчик / ДДУ)</option>
-                </select>
-            </div>
-            <div class="field">
-                <label>Сумма договора (тыс. р.)</label>
-                <input type="number" step="0.01" name="totalAmount" value="1500.00" required />
-            </div>
-            <div class="field">
-                <label>Валюта</label>
-                <select name="currency">
-                    <option value="BYN">BYN</option>
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="RUB">RUB</option>
-                </select>
-            </div>
-            <div class="field">
-                <label>Спецификация / предмет</label>
-                <input name="specificationNotes" value="Поставка арматуры и ЖБИ по графику" />
-            </div>
-            <div>
-                <button type="submit" class="btn">Зарегистрировать договор</button>
-            </div>
-        </form>
+            <form method="post" asp-controller="Contracts" asp-action="CreateContract" class="form-grid">
+                <div class="field">
+                    <label>Проект</label>
+                    <select name="projectId">
+                        @foreach (var p in Model.Projects)
+                        {
+                            <option value="@p.Id">@p.Code — @p.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Номер договора</label>
+                    <input name="number" value="ПД-2026/19" required />
+                </div>
+                <div class="field">
+                    <label>Контрагент</label>
+                    <input name="counterparty" value="ООО БелСтройПоставка" required />
+                </div>
+                <div class="field">
+                    <label>УНП</label>
+                    <input name="counterpartyUnp" value="192345678" />
+                </div>
+                <div class="field">
+                    <label>Направление</label>
+                    <select name="direction">
+                        <option value="SupplierSubcontractorOutgoing">Расходный (подряд / поставка)</option>
+                        <option value="CustomerIncoming">Доходный (заказчик / ДДУ)</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Сумма договора</label>
+                    <input type="number" step="0.01" name="totalAmount" value="1500.00" required />
+                </div>
+                <div class="field">
+                    <label>Валюта</label>
+                    <select name="currency">
+                        <option value="BYN">BYN</option>
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                        <option value="RUB">RUB</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Спецификация / предмет</label>
+                    <input name="specificationNotes" value="Поставка арматуры и ЖБИ по графику" />
+                </div>
+                <div class="form-actions span-2">
+                    <button type="submit" class="btn">Зарегистрировать договор</button>
+                </div>
+            </form>
         }
     </div>
 }
 
 <div class="card">
     <div class="card-header">
-        <h3 class="card-title">Контроль выданных авансов (Aост = A − Aисп, Kисп = Aисп / A × 100 %)</h3>
+        <h3 class="card-title">Контроль выданных авансов</h3>
+        <span class="muted">Aост = A − Aисп, Kисп = Aисп / A × 100 %</span>
     </div>
     <div class="table-wrap">
         <table>
@@ -144,7 +272,7 @@
                             @a.DueDate.ToString("dd.MM.yyyy")
                             @if (overdue)
                             {
-                                <span class="badge badge-danger">Просрочен!</span>
+                                <span class="badge badge-danger">Просрочен</span>
                             }
                             else
                             {
@@ -172,11 +300,47 @@
     </div>
 </div>
 
-<div class="grid-2">
-    @if (roleCode == "Accountant")
-    {
+@if (isAccountant)
+{
+    <div class="card">
+        <div class="card-header">
+            <div>
+                <h3 class="card-title">Бухгалтерская отчётность и выгрузки</h3>
+                <p class="muted card-hint">Формы построены по Закону № 57-З, Постановлению Минфина № 102 и Постановлению МАиС № 29.</p>
+            </div>
+        </div>
+        <div class="report-links">
+            <a class="report-link" asp-controller="Contracts" asp-action="ExportAccounting" asp-route-report="balance">
+                <strong>Бухгалтерский баланс (форма 1)</strong>
+                <span>Активы, пассивы, ОСВ и движение денежных средств</span>
+            </a>
+            <a class="report-link" asp-controller="Contracts" asp-action="ExportAccounting" asp-route-report="pnl">
+                <strong>Отчёт о прибылях и убытках (форма 2)</strong>
+                <span>Выручка, себестоимость, налог на прибыль</span>
+            </a>
+            <a class="report-link" asp-controller="Contracts" asp-action="ExportAccounting" asp-route-report="vat">
+                <strong>Реестр НДС</strong>
+                <span>Обороты и суммы налога за период</span>
+            </a>
+            <a class="report-link" asp-controller="Contracts" asp-action="ExportAccounting" asp-route-report="documents">
+                <strong>Реестр первичных документов</strong>
+                <span>Акты С-2/С-3, счета, договоры (ст. 10 Закона № 57-З)</span>
+            </a>
+            <a class="report-link" asp-controller="Contracts" asp-action="ExportAccounting" asp-route-report="debts">
+                <strong>Дебиторская и кредиторская задолженность</strong>
+                <span>Инвентаризация расчётов и просроченные остатки</span>
+            </a>
+            <a class="report-link" asp-controller="Contracts" asp-action="Export1C">
+                <strong>Выгрузка в 1С</strong>
+                <span>Формат 1CClientBankExchange (.txt)</span>
+            </a>
+        </div>
+    </div>
+
+    <div class="grid-2">
         <div class="card">
-            <h3 class="card-title" style="margin-bottom:8px">Импорт банковской выписки CSV / MT940 (контроль дублей по BankOperationId)</h3>
+            <h3 class="card-title" style="margin-bottom:8px">Импорт банковской выписки</h3>
+            <p class="muted card-hint">CSV или MT940. Дубли отсекаются по BankOperationId.</p>
             @if (!string.IsNullOrEmpty(Model.ImportReportSummary))
             {
                 <div class="alert alert-info">@Model.ImportReportSummary</div>
@@ -187,41 +351,23 @@
                     <input name="fileName" value="bank_statement_2026_11_10.csv" />
                 </div>
                 <div class="field" style="margin-bottom:10px">
-                    <label>Строки выписки (с заголовком: OpId;Date;Amount;Currency;Counterparty;RequestNumber;Purpose;OrderNo)</label>
-                    <textarea name="content" rows="4">BankOperationId;Date;Amount;Currency;Counterparty;RequestNumber;Purpose;OrderNo
+                    <label>Содержимое выписки (с заголовком)</label>
+                    <textarea name="content" rows="5">BankOperationId;Date;Amount;Currency;Counterparty;RequestNumber;Purpose;OrderNo
 OP-2026-9001;2026-11-10;850.00;BYN;ОАО Белорусский цементный завод;ЗП-20261110-0003;Оплата по акту С-2 № 18;ПП-103</textarea>
                 </div>
                 <button type="submit" class="btn">Загрузить и сверить выписку</button>
             </form>
         </div>
-    }
 
-    <div class="card">
-        <h3 class="card-title" style="margin-bottom:8px">Импорт локальной сметы и маппинг статей затрат (≥ 95 %)</h3>
-        @if (!string.IsNullOrEmpty(Model.EstimateImportSummary))
-        {
-            <div class="alert alert-info">@Model.EstimateImportSummary</div>
-        }
-        @if (roleCode is "FinancialManager" or "ProjectManager" or "ProcurementSpecialist")
-        {
-            <form method="post" asp-controller="Contracts" asp-action="ImportEstimate">
-                <div class="field" style="margin-bottom:8px">
-                    <label>Имя сметного файла</label>
-                    <input name="fileName" value="smeta_zh32.csv" />
-                </div>
-                <div class="field" style="margin-bottom:10px">
-                    <label>Позиции сметы (с заголовком: КодСтатьи;Описание;Сумма)</label>
-                    <textarea name="content" rows="4">Code;Name;Amount
-ST-01;Строительные материалы, бетон и ЖБИ;6000.00
-ST-02;Субподрядные монтажные работы;3500.00
-ST-03;Инженерное оборудование;520.00</textarea>
-                </div>
-                <button type="submit" class="btn btn-outline">Выполнить маппинг сметы</button>
-            </form>
-        }
-        else
-        {
-            <p class="muted">Импорт смет доступен ролям <strong>FinancialManager</strong>, <strong>ProjectManager</strong>, <strong>ProcurementSpecialist</strong>.</p>
-        }
+        <div class="card">
+            <h3 class="card-title" style="margin-bottom:8px">Контрольная информация</h3>
+            <ul class="info-list">
+                <li><strong>Первичный документ</strong> должен содержать обязательные реквизиты по ст. 10 Закона № 57-З.</li>
+                <li><strong>Формы С-2 и С-3</strong> утверждены Постановлением МАиС от 20.07.2018 № 29.</li>
+                <li><strong>Отчётность</strong> составляется по ст. 14–15 Закона № 57-З и Постановлению Минфина № 102.</li>
+                <li><strong>Договоры строительного подряда</strong> — Постановление Совмина от 15.09.1998 № 1450.</li>
+                <li><strong>Выгрузка в 1С</strong> выполняется в формате 1CClientBankExchange с кодировкой UTF-8.</li>
+            </ul>
+        </div>
     </div>
-</div>
+}

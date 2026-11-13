@@ -1,0 +1,101 @@
+@model RequestEditViewModel
+@{
+    ViewData["Title"] = "Доработка заявки";
+    ViewData["Subtitle"] = "Исправьте данные возвращённой заявки и отправьте её повторно";
+    var r = Model.Request;
+}
+
+<div class="page-intro">
+    <div>
+        <span class="eyebrow">Возврат на доработку</span>
+        <h2>Заявка @r.Number</h2>
+        <p>Статус: <span class="badge badge-warn">@RussianLabels.RequestStatusName(r.Status)</span></p>
+    </div>
+    <a class="btn btn-outline" asp-controller="Requests" asp-action="Index">К реестру заявок</a>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(r.ReturnOrRejectReason))
+{
+    <div class="alert alert-danger">
+        <span class="alert-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg>
+        </span>
+        <span><strong>Причина возврата:</strong> @r.ReturnOrRejectReason</span>
+    </div>
+}
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title">Параметры заявки</h3>
+        <span class="muted">Договор: @r.Contract?.Number · Статья: @r.CostItem?.Code</span>
+    </div>
+
+    <form method="post" asp-controller="Requests" asp-action="Edit" class="form-grid">
+        <input type="hidden" name="id" value="@r.Id" />
+
+        <div class="field span-2">
+            <label>Объект строительства</label>
+            <select disabled>
+                @foreach (var o in Model.Objects)
+                {
+                    <option selected="@(o.Id == r.ConstructionObjectId)">@o.Name</option>
+                }
+            </select>
+            <div class="muted">Объект и договор изменяются только созданием новой заявки.</div>
+        </div>
+        <div class="field span-2">
+            <label>Договор</label>
+            <select disabled>
+                @foreach (var c in Model.Contracts)
+                {
+                    <option selected="@(c.Id == r.ContractId)">@c.Number — @c.Counterparty</option>
+                }
+            </select>
+        </div>
+
+        <div class="field">
+            <label>Сумма по акту / счёту</label>
+            <input type="number" step="0.01" min="0.01" name="actAmount"
+                   value="@r.ActAmount.ToString(System.Globalization.CultureInfo.InvariantCulture)" required />
+        </div>
+        <div class="field">
+            <label>Зачёт аванса</label>
+            <input type="number" step="0.01" min="0" name="advanceOffset"
+                   value="@r.AdvanceOffset.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+        </div>
+        <div class="field">
+            <label>Гарантийное удержание</label>
+            <input type="number" step="0.01" min="0" name="retentionAmount"
+                   value="@r.RetentionAmount.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+        </div>
+        <div class="field">
+            <label>Сумма заявки (для аванса)</label>
+            <input type="number" step="0.01" min="0" name="amount"
+                   value="@r.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)" />
+        </div>
+        <div class="field">
+            <label>Плановая дата оплаты</label>
+            <input type="date" name="plannedPaymentDate" value="@r.PlannedPaymentDate.ToString("yyyy-MM-dd")" required />
+        </div>
+        <div class="field">
+            <label>Номер документа</label>
+            <input name="documentNumber" value="@(r.Documents.FirstOrDefault()?.Number ?? "")" />
+        </div>
+        <div class="field span-2">
+            <label>Назначение платежа</label>
+            <input name="purpose" value="@r.Purpose" required />
+        </div>
+
+        <div class="field span-3">
+            <label class="check-line">
+                <input type="checkbox" name="resubmit" value="true" checked />
+                <span>Сразу отправить на повторную проверку после сохранения</span>
+            </label>
+        </div>
+
+        <div class="form-actions span-3">
+            <button type="submit" class="btn">Сохранить и отправить</button>
+            <a class="btn btn-outline" asp-controller="Requests" asp-action="Index">Отмена</a>
+        </div>
+    </form>
+</div>

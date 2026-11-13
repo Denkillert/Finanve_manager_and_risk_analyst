@@ -260,6 +260,62 @@ public static class DbInitializer
         SqlConnection.ClearAllPools();
     }
 
+    private static async Task EnsureMaterialRequestDemoDataAsync(AppDbContext db, CancellationToken ct)
+    {
+        // На чистой базе демо-данные загружает SeedIfEmptyAsync; здесь — только апгрейд существующей БД.
+        if (!await db.Users.AnyAsync(ct))
+            return;
+        if (await db.MaterialRequests.AnyAsync(ct))
+            return;
+        if (!await db.Projects.AnyAsync(p => p.Id == SeedIds.Project1, ct))
+            return;
+
+        var baseDate = new DateTime(2026, 11, 10, 9, 0, 0, DateTimeKind.Utc);
+        await db.MaterialRequests.AddRangeAsync(new List<MaterialRequest>
+        {
+            new()
+            {
+                Id = Guid.Parse("97000000-0000-0000-0000-000000000001"),
+                ProjectId = SeedIds.Project1, ConstructionObjectId = SeedIds.Obj1, AuthorUserId = SeedIds.UserPm,
+                CostItemId = SeedIds.ItemMat, ContractId = SeedIds.ContractMat,
+                Number = "МЗ-20261105-0001", MaterialName = "Плиты перекрытия ПК 60-15-8",
+                Unit = "шт.", Quantity = 24m, EstimatedUnitPrice = 1850m, EstimatedTotal = 44400m,
+                RequiredDate = new DateTime(2026, 11, 14), Purpose = "Монтаж перекрытий 4–6 этажей",
+                SpecificationNotes = "Серия 1.141-1, бетон B25, сертификат соответствия СТБ",
+                Status = MaterialRequestStatus.Ordered, SupplierName = "ОАО «Белорусский цементный завод»",
+                AgreedUnitPrice = 1820m, AgreedTotal = 43680m,
+                SupplyComment = "Договор поставки П-2026/14, доставка на объект включена",
+                SubmittedAt = baseDate, ApprovedAt = baseDate, OrderedAt = baseDate,
+                CreatedAt = baseDate, UpdatedAt = baseDate
+            },
+            new()
+            {
+                Id = Guid.Parse("97000000-0000-0000-0000-000000000002"),
+                ProjectId = SeedIds.Project1, ConstructionObjectId = SeedIds.Obj2, AuthorUserId = SeedIds.UserPm,
+                CostItemId = SeedIds.ItemMat,
+                Number = "МЗ-20261109-0002", MaterialName = "Арматура А500С Ø12 мм",
+                Unit = "т", Quantity = 12.5m, EstimatedUnitPrice = 2950m, EstimatedTotal = 36875m,
+                RequiredDate = new DateTime(2026, 11, 18), Purpose = "Армирование монолитных участков",
+                Status = MaterialRequestStatus.Submitted, SubmittedAt = baseDate,
+                CreatedAt = baseDate, UpdatedAt = baseDate
+            },
+            new()
+            {
+                Id = Guid.Parse("97000000-0000-0000-0000-000000000003"),
+                ProjectId = SeedIds.Project1, ConstructionObjectId = SeedIds.Obj1, AuthorUserId = SeedIds.UserPm,
+                CostItemId = SeedIds.ItemMat,
+                Number = "МЗ-20261110-0003", MaterialName = "Цемент ПЦ 500-Д0",
+                Unit = "т", Quantity = 8m, EstimatedUnitPrice = 480m, EstimatedTotal = 3840m,
+                RequiredDate = new DateTime(2026, 11, 21), Purpose = "Кладка внутренних перегородок",
+                Status = MaterialRequestStatus.Rejected, SupplyComment = "Уточните марку цемента и условия хранения на объекте",
+                SubmittedAt = baseDate, RejectedAt = baseDate,
+                CreatedAt = baseDate, UpdatedAt = baseDate
+            }
+        }, ct);
+
+        await db.SaveChangesAsync(ct);
+    }
+
     private static async Task EnsureSqlViewsAsync(AppDbContext db, CancellationToken ct)
     {
         const string upgradeTablesSql = """
@@ -280,9 +336,49 @@ public static class DbInitializer
                 );
                 CREATE UNIQUE INDEX IX_ProjectAssignments_ProjectId_UserId ON finance.ProjectAssignments (ProjectId, UserId);
             END
+
+            IF OBJECT_ID(N'finance.MaterialRequests', N'U') IS NULL
+            BEGIN
+                CREATE TABLE finance.MaterialRequests (
+                    Id UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_MaterialRequests PRIMARY KEY,
+                    ProjectId UNIQUEIDENTIFIER NOT NULL CONSTRAINT FK_MaterialRequests_Project FOREIGN KEY REFERENCES finance.Projects(Id),
+                    ConstructionObjectId UNIQUEIDENTIFIER NOT NULL CONSTRAINT FK_MaterialRequests_Object FOREIGN KEY REFERENCES finance.ConstructionObjects(Id),
+                    AuthorUserId UNIQUEIDENTIFIER NOT NULL,
+                    CostItemId UNIQUEIDENTIFIER NULL CONSTRAINT FK_MaterialRequests_CostItem FOREIGN KEY REFERENCES finance.CostItems(Id),
+                    ContractId UNIQUEIDENTIFIER NULL CONSTRAINT FK_MaterialRequests_Contract FOREIGN KEY REFERENCES finance.Contracts(Id),
+                    Number NVARCHAR(40) NOT NULL,
+                    MaterialName NVARCHAR(300) NOT NULL,
+                    Unit NVARCHAR(30) NOT NULL DEFAULT N'шт.',
+                    Quantity DECIMAL(18,3) NOT NULL DEFAULT 0,
+                    EstimatedUnitPrice DECIMAL(18,2) NOT NULL DEFAULT 0,
+                    EstimatedTotal DECIMAL(18,2) NOT NULL DEFAULT 0,
+                    RequiredDate DATETIME2(3) NOT NULL,
+                    Purpose NVARCHAR(1000) NULL,
+                    SpecificationNotes NVARCHAR(2000) NULL,
+                    Status NVARCHAR(30) NOT NULL DEFAULT N'Draft',
+                    SupplierName NVARCHAR(300) NULL,
+                    AgreedUnitPrice DECIMAL(18,2) NULL,
+                    AgreedTotal DECIMAL(18,2) NULL,
+                    SupplyComment NVARCHAR(1000) NULL,
+                    SubmittedAt DATETIME2(3) NULL,
+                    ApprovedAt DATETIME2(3) NULL,
+                    OrderedAt DATETIME2(3) NULL,
+                    DeliveredAt DATETIME2(3) NULL,
+                    RejectedAt DATETIME2(3) NULL,
+                    CreatedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+                    UpdatedAt DATETIME2(3) NOT NULL DEFAULT SYSUTCDATETIME(),
+                    IsDeleted BIT NOT NULL DEFAULT 0,
+                    RowVersion ROWVERSION NOT NULL
+                );
+                CREATE UNIQUE INDEX IX_MaterialRequests_Number ON finance.MaterialRequests (Number);
+            END
             """;
 
         await db.Database.ExecuteSqlRawAsync(upgradeTablesSql, ct);
+
+        // В уже существующей базе (с данными) таблица создаётся впервые — наполняем её
+        // демонстрационными заявками, чтобы интерфейс прораба и снабженца был не пустым.
+        await EnsureMaterialRequestDemoDataAsync(db, ct);
 
         const string createViewSql = """
             IF OBJECT_ID('finance.vFreeLimit', 'V') IS NULL
@@ -713,6 +809,48 @@ public static class DbInitializer
             Action = "SEED_DATABASE",
             NewValue = "Completed",
             Details = "Загружены контрольные примеры главы 1 и реестр 12 рисков"
+        }, ct);
+
+        await db.MaterialRequests.AddRangeAsync(new List<MaterialRequest>
+        {
+            new()
+            {
+                Id = Guid.Parse("97000000-0000-0000-0000-000000000001"),
+                ProjectId = SeedIds.Project1, ConstructionObjectId = SeedIds.Obj1, AuthorUserId = SeedIds.UserPm,
+                CostItemId = SeedIds.ItemMat, ContractId = SeedIds.ContractMat,
+                Number = "МЗ-20261105-0001", MaterialName = "Плиты перекрытия ПК 60-15-8",
+                Unit = "шт.", Quantity = 24m, EstimatedUnitPrice = 1850m, EstimatedTotal = 44400m,
+                RequiredDate = new DateTime(2026, 11, 14), Purpose = "Монтаж перекрытий 4–6 этажей",
+                SpecificationNotes = "Серия 1.141-1, бетон B25, сертификат соответствия СТБ",
+                Status = MaterialRequestStatus.Ordered, SupplierName = "ОАО «Белорусский цементный завод»",
+                AgreedUnitPrice = 1820m, AgreedTotal = 43680m,
+                SupplyComment = "Договор СП-2026/09, доставка на объект включена",
+                SubmittedAt = baseDate, ApprovedAt = baseDate, OrderedAt = baseDate,
+                CreatedAt = baseDate, UpdatedAt = baseDate
+            },
+            new()
+            {
+                Id = Guid.Parse("97000000-0000-0000-0000-000000000002"),
+                ProjectId = SeedIds.Project1, ConstructionObjectId = SeedIds.Obj2, AuthorUserId = SeedIds.UserPm,
+                CostItemId = SeedIds.ItemMat,
+                Number = "МЗ-20261109-0002", MaterialName = "Арматура А500С Ø12 мм",
+                Unit = "т", Quantity = 12.5m, EstimatedUnitPrice = 2950m, EstimatedTotal = 36875m,
+                RequiredDate = new DateTime(2026, 11, 18), Purpose = "Армирование монолитных участков",
+                Status = MaterialRequestStatus.Submitted, SubmittedAt = baseDate,
+                CreatedAt = baseDate, UpdatedAt = baseDate
+            },
+            new()
+            {
+                Id = Guid.Parse("97000000-0000-0000-0000-000000000003"),
+                ProjectId = SeedIds.Project1, ConstructionObjectId = SeedIds.Obj1, AuthorUserId = SeedIds.UserPm,
+                CostItemId = SeedIds.ItemMat,
+                Number = "МЗ-20261110-0003", MaterialName = "Цемент ПЦ 500-Д0",
+                Unit = "т", Quantity = 8m, EstimatedUnitPrice = 480m, EstimatedTotal = 3840m,
+                RequiredDate = new DateTime(2026, 11, 21), Purpose = "Кладка внутренних перегородок",
+                Status = MaterialRequestStatus.Rejected, SupplyComment = "Уточните марку цемента и условия хранения на объекте",
+                SubmittedAt = baseDate, RejectedAt = baseDate,
+                CreatedAt = baseDate, UpdatedAt = baseDate
+            }
         }, ct);
 
         await db.SaveChangesAsync(ct);

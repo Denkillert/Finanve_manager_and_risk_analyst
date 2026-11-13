@@ -11,10 +11,7 @@ namespace FinanveManager.Data.Services;
 
 public partial class BankAdapter : IBankAdapter
 {
-    private static readonly string[] LineSeparators = ["\r\n", "\n"];
-
-    [GeneratedRegex(@":61:(\d{6})([CD])([\d,\.]+)N\w+//([^\r\n]+)(?:\r?\n:86:([^\r\n:]+))?")]
-    private static partial Regex Mt940OperationRegex();
+    private static readonly string[] LineSeparators = ["\r\n", "\n", "\r"];
 
     [GeneratedRegex(@"(ЗП-\d+-[A-Z0-9]+)")]
     private static partial Regex RequestNumberRegex();
@@ -24,59 +21,421 @@ public partial class BankAdapter : IBankAdapter
         if (string.IsNullOrWhiteSpace(content))
             return [];
 
-        if (fileName.EndsWith(".mt940", StringComparison.OrdinalIgnoreCase) || content.Contains(":61:"))
+        content = content.TrimStart('\uFEFF', '\u200B', ' ', '\t');
+        if (fileName.EndsWith(".mt940", StringComparison.OrdinalIgnoreCase)
+            || content.Contains(":61:", StringComparison.Ordinal))
             return ParseMt940(content);
 
         return ParseCsv(content);
     }
 
+    // ---------------------------------------------------------------- CSV
+
     private static List<BankStatementOperationDto> ParseCsv(string content)
     {
         var result = new List<BankStatementOperationDto>();
-        var lines = content.Split(LineSeparators, StringSplitOptions.RemoveEmptyEntries);
-        foreach (var rawLine in lines.Skip(1))
-        {
-            var sep = rawLine.Contains(';') ? ';' : ',';
-            var cols = rawLine.Split(sep);
-            if (cols.Length < 4) continue;
+        var lines = content.Split(LineSeparators, StringSplitOptions.None)
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .ToList();
+        if (lines.Count == 0)
+            return result;
 
-            if (!DateTime.TryParse(cols[1].Trim(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var opDate))
-                opDate = DateTime.UtcNow.Date;
-            if (!decimal.TryParse(cols[2].Trim().Replace(" ", "").Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out var amount))
+        char delimiter = DetectDelimiter(lines[0]);
+        var header = SplitLine(lines[0], delimiter);
+
+        var map = BuildColumnMap(header);
+        int start = map.IsHeader ? 1 : 0;
+        if (!map.IsHeader)
+            map = ColumnMap.Positional;
+
+        for (int i = start; i < lines.Count; i++)
+        {
+            var cols = SplitLine(lines[i], delimiter);
+            if (cols.Count < 3)
                 continue;
 
+            string opId = map.Get(cols, ColumnKind.OperationId);
+            if (string.IsNullOrWhiteSpace(opId))
+                opId = $"OP-{i:D4}";
+
+            var opDate = ParseDate(map.Get(cols, ColumnKind.Date));
+            var rawAmount = map.Get(cols, ColumnKind.Amount);
+            if (!TryParseAmount(rawAmount, out var amount))
+                continue;
+            if (amount == 0m)
+                continue;
+
+            string currency = map.Get(cols, ColumnKind.Currency);
+            if (string.IsNullOrWhiteSpace(currency))
+                currency = "BYN";
+            currency = NormalizeCurrency(currency);
+
+            string counterparty = map.Get(cols, ColumnKind.Counterparty);
+            string purpose = map.Get(cols, ColumnKind.Purpose);
+            string? requestNumber = NullIfBlank(map.Get(cols, ColumnKind.RequestNumber));
+            string? order = NullIfBlank(map.Get(cols, ColumnKind.Order));
+
+            if (requestNumber == null && !string.IsNullOrWhiteSpace(purpose))
+            {
+                var match = RequestNumberRegex().Match(purpose);
+                if (match.Success)
+                    requestNumber = match.Groups[1].Value;
+            }
+
             result.Add(new BankStatementOperationDto(
-                cols[0].Trim(),
+                opId.Trim(),
                 opDate,
-                amount,
-                cols.Length > 3 && !string.IsNullOrWhiteSpace(cols[3]) ? cols[3].Trim().ToUpperInvariant() : "BYN",
-                cols.Length > 4 ? cols[4].Trim() : string.Empty,
-                cols.Length > 5 && !string.IsNullOrWhiteSpace(cols[5]) ? cols[5].Trim() : null,
-                cols.Length > 6 ? cols[6].Trim() : string.Empty,
-                cols.Length > 7 ? cols[7].Trim() : null));
+                Math.Abs(amount),
+                currency,
+                counterparty.Trim(),
+                requestNumber,
+                purpose.Trim(),
+                order));
         }
         return result;
     }
+
+    private static char DetectDelimiter(string firstLine)
+    {
+        char[] candidates = [';', '\t', '|', ','];
+        char best = ';';
+        int bestCount = -1;
+        foreach (var candidate in candidates)
+        {
+            int count = CountOutsideQuotes(firstLine, candidate);
+            if (count > bestCount)
+            {
+                bestCount = count;
+                best = candidate;
+            }
+        }
+        return best;
+    }
+
+    private static int CountOutsideQuotes(string line, char delimiter)
+    {
+        int count = 0;
+        bool inQuotes = false;
+        foreach (char c in line)
+        {
+            if (c == '"') inQuotes = !inQuotes;
+            else if (c == delimiter && !inQuotes) count++;
+        }
+        return count;
+    }
+
+    private static List<string> SplitLine(string line, char delimiter)
+    {
+        var values = new List<string>();
+        var current = new System.Text.StringBuilder();
+        bool inQuotes = false;
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+            if (c == '"')
+            {
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    current.Append('"');
+                    i++;
+                }
+                else
+                {
+                    inQuotes = !inQuotes;
+                }
+            }
+            else if (c == delimiter && !inQuotes)
+            {
+                values.Add(current.ToString());
+                current.Clear();
+            }
+            else
+            {
+                current.Append(c);
+            }
+        }
+        values.Add(current.ToString());
+        return values;
+    }
+
+    private enum ColumnKind
+    {
+        OperationId,
+        Date,
+        Amount,
+        Currency,
+        Counterparty,
+        RequestNumber,
+        Purpose,
+        Order
+    }
+
+    private sealed class ColumnMap
+    {
+        public bool IsHeader { get; init; }
+        public Dictionary<ColumnKind, int> Indexes { get; init; } = new();
+
+        public static ColumnMap Positional => new()
+        {
+            IsHeader = false,
+            Indexes =
+            {
+                [ColumnKind.OperationId] = 0,
+                [ColumnKind.Date] = 1,
+                [ColumnKind.Amount] = 2,
+                [ColumnKind.Currency] = 3,
+                [ColumnKind.Counterparty] = 4,
+                [ColumnKind.RequestNumber] = 5,
+                [ColumnKind.Purpose] = 6,
+                [ColumnKind.Order] = 7
+            }
+        };
+
+        public string Get(IReadOnlyList<string> cols, ColumnKind kind)
+        {
+            if (!Indexes.TryGetValue(kind, out var index) || index < 0 || index >= cols.Count)
+                return string.Empty;
+            return cols[index];
+        }
+    }
+
+    private static ColumnMap BuildColumnMap(IReadOnlyList<string> header)
+    {
+        var map = new ColumnMap { IsHeader = false };
+        for (int i = 0; i < header.Count; i++)
+        {
+            var key = NormalizeHeader(header[i]);
+            if (key.Length == 0) continue;
+
+            ColumnKind? kind = key switch
+            {
+                var k when k.Contains("bankoperationid") || k == "operationid" || k == "id"
+                    || k.Contains("номероперации") || k.Contains("номердокумента") => ColumnKind.OperationId,
+                var k when k == "date" || k.Contains("дата") || k.Contains("operationdate") => ColumnKind.Date,
+                var k when k.Contains("amount") || k.Contains("сумма") || k.Contains("summa")
+                    || k.Contains("оборот") => ColumnKind.Amount,
+                var k when k.Contains("currency") || k.Contains("валюта") => ColumnKind.Currency,
+                var k when k.Contains("counterparty") || k.Contains("контрагент")
+                    || k.Contains("плательщик") || k.Contains("получатель") => ColumnKind.Counterparty,
+                var k when k.Contains("requestnumber") || k.Contains("номерзаявки")
+                    || k == "заявка" => ColumnKind.RequestNumber,
+                var k when k.Contains("purpose") || k.Contains("назначение") => ColumnKind.Purpose,
+                var k when k == "order" || k.Contains("paymentorder") || k.Contains("orderno")
+                    || k.Contains("номерпп") => ColumnKind.Order,
+                _ => (ColumnKind?)null
+            };
+
+            if (kind.HasValue && !map.Indexes.ContainsKey(kind.Value))
+                map.Indexes[kind.Value] = i;
+        }
+
+        // Заголовок считаем распознанным, если найдены хотя бы дата и сумма.
+        bool isHeader = map.Indexes.ContainsKey(ColumnKind.Date) && map.Indexes.ContainsKey(ColumnKind.Amount);
+        if (!isHeader)
+            return ColumnMap.Positional;
+
+        if (!map.Indexes.ContainsKey(ColumnKind.OperationId)) map.Indexes[ColumnKind.OperationId] = 0;
+        return new ColumnMap { IsHeader = true, Indexes = map.Indexes };
+    }
+
+    private static string NormalizeHeader(string value) =>
+        new string(value.Trim().Trim('"').ToLowerInvariant()
+            .Where(char.IsLetterOrDigit).ToArray());
+
+    private static string NormalizeCurrency(string value)
+    {
+        string cleaned = new string(value.Where(char.IsLetter).ToArray()).ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(cleaned) ? "BYN" : cleaned;
+    }
+
+    private static DateTime ParseDate(string value)
+    {
+        value = value.Trim().Trim('"');
+        string[] formats =
+        [
+            "yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-ddTHH:mm:ss",
+            "dd.MM.yyyy", "d.M.yyyy", "dd.MM.yyyy HH:mm:ss",
+            "dd/MM/yyyy", "d/M/yyyy", "yyyyMMdd", "yyyy/MM/dd",
+            "MM/dd/yyyy"
+        ];
+        if (DateTime.TryParseExact(value, formats, CultureInfo.InvariantCulture,
+                DateTimeStyles.AllowWhiteSpaces, out var date))
+            return date.Date;
+        if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out date))
+            return date.Date;
+        return DateTime.UtcNow.Date;
+    }
+
+    private static bool TryParseAmount(string value, out decimal amount)
+    {
+        amount = 0m;
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        string cleaned = value.Trim().Trim('"')
+            .Replace("\u00A0", string.Empty)
+            .Replace(" ", string.Empty)
+            .Replace("BYN", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("RUB", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("USD", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("EUR", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("р.", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("руб", string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        if (cleaned.Length == 0)
+            return false;
+
+        bool negative = cleaned.StartsWith('(') && cleaned.EndsWith(')');
+        cleaned = cleaned.Trim('(', ')');
+
+        if (cleaned.Contains(',') && cleaned.Contains('.'))
+        {
+            // 1.234,56 → 1234.56 ; 1,234.56 → 1234.56
+            int lastComma = cleaned.LastIndexOf(',');
+            int lastDot = cleaned.LastIndexOf('.');
+            if (lastComma > lastDot)
+                cleaned = cleaned.Replace(".", string.Empty).Replace(',', '.');
+            else
+                cleaned = cleaned.Replace(",", string.Empty);
+        }
+        else if (cleaned.Contains(','))
+        {
+            cleaned = cleaned.Replace(',', '.');
+        }
+
+        if (!decimal.TryParse(cleaned, NumberStyles.Any, CultureInfo.InvariantCulture, out amount))
+            return false;
+
+        if (negative) amount = -amount;
+        return true;
+    }
+
+    private static string? NullIfBlank(string value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    // -------------------------------------------------------------- MT940
 
     private static List<BankStatementOperationDto> ParseMt940(string content)
     {
         var result = new List<BankStatementOperationDto>();
-        foreach (Match m in Mt940OperationRegex().Matches(content))
-        {
-            var date = DateTime.ParseExact("20" + m.Groups[1].Value, "yyyyMMdd", CultureInfo.InvariantCulture);
-            decimal amount = decimal.Parse(m.Groups[3].Value.Replace(',', '.'), CultureInfo.InvariantCulture);
-            string opId = m.Groups[4].Value.Trim();
-            string purpose = m.Groups[5].Success ? m.Groups[5].Value.Trim() : string.Empty;
-            var reqMatch = RequestNumberRegex().Match(purpose);
+        var lines = content.Split(LineSeparators, StringSplitOptions.None);
 
-            result.Add(new BankStatementOperationDto(
-                opId, date, amount, "BYN", string.Empty,
-                reqMatch.Success ? reqMatch.Groups[1].Value : null,
-                purpose, opId));
+        string? current61 = null;
+        var current86 = new System.Text.StringBuilder();
+
+        void Flush()
+        {
+            if (current61 == null)
+                return;
+
+            string line61 = current61.Trim();
+            string rest = line61.StartsWith(":61:", StringComparison.Ordinal)
+                ? line61[4..].Trim()
+                : line61;
+
+            // Формат: YYMMDD[MMDD]C/D[REV]AmountN...//reference
+            if (rest.Length < 8)
+            {
+                current61 = null;
+                current86.Clear();
+                return;
+            }
+
+            string datePart = rest[..6];
+            DateTime date;
+            if (!DateTime.TryParseExact("20" + datePart, "yyyyMMdd", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out date))
+                date = DateTime.UtcNow.Date;
+
+            int idx = 6;
+            // Необязательная дата валютирования MMDD
+            if (rest.Length > 10 && rest[6..10].All(char.IsDigit))
+                idx = 10;
+
+            bool negative = false;
+            if (idx < rest.Length && (rest[idx] == 'C' || rest[idx] == 'D'))
+            {
+                negative = rest[idx] == 'D';
+                idx++;
+            }
+            if (idx + 1 < rest.Length && rest[idx] == 'R' && rest[idx + 1] == 'D')
+            {
+                negative = !negative;
+                idx += 2;
+            }
+
+            int amountStart = idx;
+            while (idx < rest.Length && (char.IsDigit(rest[idx]) || rest[idx] is ',' or '.'))
+                idx++;
+            string amountText = rest[amountStart..idx];
+
+            string reference = string.Empty;
+            int refIndex = rest.IndexOf("//", idx, StringComparison.Ordinal);
+            if (refIndex >= 0)
+            {
+                reference = rest[(refIndex + 2)..].Trim();
+                int nextTag = reference.IndexOf(':');
+                if (nextTag > 0) reference = reference[..nextTag].Trim();
+            }
+
+            decimal amount = 0m;
+            if (TryParseAmount(amountText, out var parsed))
+                amount = negative ? -parsed : parsed;
+
+            string purpose = current86.ToString().Trim().Replace("\r", " ").Replace("\n", " ");
+            if (purpose.Length == 0)
+            {
+                int purposeIndex = rest.IndexOf("//", idx, StringComparison.Ordinal);
+                if (purposeIndex >= 0)
+                    purpose = rest[(purposeIndex + 2)..].Trim();
+            }
+
+            var reqMatch = RequestNumberRegex().Match(purpose);
+            string opId = string.IsNullOrWhiteSpace(reference) ? $"MT940-{result.Count + 1:D4}" : reference;
+
+            if (amount != 0m)
+            {
+                result.Add(new BankStatementOperationDto(
+                    opId,
+                    date,
+                    Math.Abs(amount),
+                    "BYN",
+                    string.Empty,
+                    reqMatch.Success ? reqMatch.Groups[1].Value : null,
+                    purpose,
+                    reference.Length == 0 ? null : reference));
+            }
+
+            current61 = null;
+            current86.Clear();
         }
+
+        foreach (var raw in lines)
+        {
+            string line = raw.TrimEnd('\r');
+            if (line.StartsWith(":61:", StringComparison.Ordinal))
+            {
+                Flush();
+                current61 = line;
+            }
+            else if (line.StartsWith(":86:", StringComparison.Ordinal))
+            {
+                current86.Append(line.Length > 4 ? line[4..] : string.Empty).Append(' ');
+            }
+            else if (line.StartsWith(':'))
+            {
+                Flush();
+            }
+            else if (current86.Length > 0)
+            {
+                current86.Append(line.Trim()).Append(' ');
+            }
+        }
+        Flush();
         return result;
     }
 }
+
 
 public class AccountingAdapter : IAccountingAdapter
 {
@@ -98,50 +457,36 @@ public class AccountingAdapter : IAccountingAdapter
         }
         return sb.ToString();
     }
-}
 
-public class EstimateImporter : IEstimateImporter
-{
-    public EstimateImportResultDto ImportFromExcelOrXml(string content, string fileName, IReadOnlyList<CostItem> catalog)
+    public byte[] ExportEntriesXlsx(IEnumerable<Payment> payments)
     {
-        var lines = new List<EstimateImportLineDto>();
-        if (fileName.EndsWith(".xml", StringComparison.OrdinalIgnoreCase) || content.TrimStart().StartsWith("<"))
+        var list = payments.ToList();
+        var ctx = new AccountingReportContext
         {
-            var doc = XDocument.Parse(content);
-            foreach (var elem in doc.Descendants("Item"))
-            {
-                string code = elem.Attribute("Code")?.Value ?? elem.Element("Code")?.Value ?? "";
-                string desc = elem.Attribute("Name")?.Value ?? elem.Element("Name")?.Value ?? "";
-                decimal.TryParse(elem.Attribute("Amount")?.Value ?? elem.Element("Amount")?.Value ?? "0",
-                    NumberStyles.Any, CultureInfo.InvariantCulture, out var amt);
-
-                bool matched = catalog.Any(c =>
-                    c.Code.Equals(code, StringComparison.OrdinalIgnoreCase)
-                    || desc.Contains(c.Category, StringComparison.OrdinalIgnoreCase));
-                lines.Add(new EstimateImportLineDto(code, desc, amt, matched));
-            }
-        }
-        else
-        {
-            string[] separators = ["\r\n", "\n"];
-            foreach (var r in content.Split(separators, StringSplitOptions.RemoveEmptyEntries).Skip(1))
-            {
-                var cols = r.Split(r.Contains(';') ? ';' : ',');
-                if (cols.Length < 3) continue;
-                string code = cols[0].Trim();
-                string desc = cols[1].Trim();
-                decimal.TryParse(cols[2].Trim().Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out var amt);
-                bool matched = catalog.Any(c =>
-                    c.Code.Equals(code, StringComparison.OrdinalIgnoreCase)
-                    || desc.Contains(c.Category, StringComparison.OrdinalIgnoreCase));
-                lines.Add(new EstimateImportLineDto(code, desc, amt, matched));
-            }
-        }
-
-        int matchedCount = lines.Count(l => l.Matched);
-        decimal pct = lines.Count == 0 ? 0m : Math.Round((decimal)matchedCount / lines.Count * 100m, 1);
-        return new EstimateImportResultDto(lines.Count, matchedCount, pct, lines);
+            PeriodStart = list.Count == 0 ? DateTime.UtcNow.Date.AddMonths(-1) : list.Min(p => p.PaymentDate),
+            PeriodEnd = list.Count == 0 ? DateTime.UtcNow.Date : list.Max(p => p.PaymentDate),
+            Payments = list
+        };
+        return AccountingReports.BuildPaymentsRegister(ctx);
     }
+
+    public byte[] ExportBalanceSheet(AccountingReportContext context) =>
+        AccountingReports.BuildBalanceSheet(context);
+
+    public byte[] ExportProfitAndLoss(AccountingReportContext context) =>
+        AccountingReports.BuildProfitAndLoss(context);
+
+    public byte[] ExportVatRegister(AccountingReportContext context) =>
+        AccountingReports.BuildVatRegister(context);
+
+    public byte[] ExportPrimaryDocumentsRegister(AccountingReportContext context) =>
+        AccountingReports.BuildPrimaryDocumentsRegister(context);
+
+    public byte[] ExportReceivablesPayables(AccountingReportContext context) =>
+        AccountingReports.BuildReceivablesPayables(context);
+
+    public byte[] Export1CClientBankExchange(AccountingReportContext context) =>
+        AccountingReports.Build1CClientBankExchange(context);
 }
 
 public class MockEdsSignatureService : IEdsSignatureService
@@ -224,7 +569,6 @@ public static class DataServiceCollectionExtensions
         services.AddScoped<IEdsSignatureService, MockEdsSignatureService>();
         services.AddScoped<IBankAdapter, BankAdapter>();
         services.AddScoped<IAccountingAdapter, AccountingAdapter>();
-        services.AddScoped<IEstimateImporter, EstimateImporter>();
         services.AddScoped<IReserveStrategy, P80ReserveStrategy>();
         services.AddScoped<IWorkflowEngine, WorkflowEngine>();
         services.AddScoped<IAdvancePolicy, AdvancePolicy>();
@@ -232,6 +576,7 @@ public static class DataServiceCollectionExtensions
         services.AddScoped<IPaymentRequestService, PaymentRequestService>();
         services.AddScoped<IRiskService, RiskService>();
         services.AddScoped<IProjectManagementService, ProjectManagementService>();
+        services.AddScoped<IMaterialRequestService, MaterialRequestService>();
         services.AddScoped<StatementImportService>();
         services.AddScoped<AuthService>();
         return services;
@@ -251,7 +596,7 @@ public sealed class DataScope : IAsyncDisposable, IDisposable
     public IProjectManagementService ProjectMgmt { get; }
     public StatementImportService StatementImport { get; }
     public IAccountingAdapter Accounting { get; }
-    public IEstimateImporter EstimateImporter { get; }
+    public IMaterialRequestService MaterialRequests { get; }
 
     public DataScope(AppDbContext db)
     {
@@ -293,7 +638,7 @@ public sealed class DataScope : IAsyncDisposable, IDisposable
             new EfRepository<Obligation>(db),
             wf, Audit, uow);
         Accounting = new AccountingAdapter();
-        EstimateImporter = new EstimateImporter();
+        MaterialRequests = new MaterialRequestService(db, Audit);
     }
 
     public void Dispose() => Db.Dispose();

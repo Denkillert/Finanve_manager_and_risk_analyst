@@ -15,13 +15,22 @@ public class RequestsController : Controller
 {
     private readonly AppDbContext _db;
     private readonly IPaymentRequestService _requestService;
+    private readonly IMaterialRequestService _materialRequests;
     private readonly IAuditService _audit;
+    private readonly IWebHostEnvironment _env;
 
-    public RequestsController(AppDbContext db, IPaymentRequestService requestService, IAuditService audit)
+    public RequestsController(
+        AppDbContext db,
+        IPaymentRequestService requestService,
+        IMaterialRequestService materialRequests,
+        IAuditService audit,
+        IWebHostEnvironment env)
     {
         _db = db;
         _requestService = requestService;
+        _materialRequests = materialRequests;
         _audit = audit;
+        _env = env;
     }
 
     private (Guid UserId, string Login) CurrentUser() =>
@@ -33,7 +42,7 @@ public class RequestsController : Controller
 
     [HttpGet]
     [Authorize(Roles = "CEO,FinancialManager,Accountant,ProcurementSpecialist,ProjectManager")]
-    public async Task<IActionResult> Index(string? status = null, CancellationToken ct = default)
+    public async Task<IActionResult> Index(string? status = null, Guid? editMaterial = null, CancellationToken ct = default)
     {
         var (uid, _) = CurrentUser();
         var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
@@ -62,6 +71,15 @@ public class RequestsController : Controller
 
         var visibleObjIds = (await objQuery.Select(o => o.Id).ToListAsync(ct)).ToHashSet();
 
+        var materialQuery = _db.MaterialRequests
+            .Include(r => r.Project)
+            .Include(r => r.ConstructionObject)
+            .Include(r => r.CostItem)
+            .Include(r => r.Contract)
+            .Where(r => !r.IsDeleted);
+        if (allowedIds != null)
+            materialQuery = materialQuery.Where(r => allowedIds.Contains(r.ProjectId));
+
         var vm = new PaymentRequestsViewModel
         {
             StatusFilter = status,
@@ -70,12 +88,22 @@ public class RequestsController : Controller
             Objects = await objQuery.ToListAsync(ct),
             Contracts = await conQuery.ToListAsync(ct),
             CostItems = await _db.CostItems.Where(c => !c.IsDeleted).OrderBy(c => c.Code).ToListAsync(ct),
+            MaterialRequests = await materialQuery.OrderByDescending(r => r.CreatedAt).ToListAsync(ct),
             Acts = await _db.Documents
                 .Where(d => !d.IsDeleted && (d.Type == DocumentType.ActS2 || d.Type == DocumentType.CertificateS3)
                             && (allowedIds == null || (d.ConstructionObjectId.HasValue && visibleObjIds.Contains(d.ConstructionObjectId.Value))))
                 .OrderByDescending(d => d.Date)
                 .ToListAsync(ct)
         };
+
+        if (editMaterial.HasValue)
+        {
+            var (editUid, _) = CurrentUser();
+            vm.EditingMaterial = vm.MaterialRequests.FirstOrDefault(r => r.Id == editMaterial.Value);
+            if (vm.EditingMaterial != null && vm.EditingMaterial.AuthorUserId != editUid)
+                vm.EditingMaterial = null;
+        }
+
         return View(vm);
     }
 
@@ -113,7 +141,7 @@ public class RequestsController : Controller
     }
 
     [HttpPost]
-    [Authorize(Roles = "ProjectManager,ProcurementSpecialist,FinancialManager,CEO")]
+    [Authorize(Roles = "ProcurementSpecialist,FinancialManager,CEO")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Create(
         Guid constructionObjectId,
@@ -186,6 +214,260 @@ public class RequestsController : Controller
             TempData["Error"] = "Не удалось создать заявку: проверьте уникальность номера документа и корректность данных.";
         }
         return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProjectManager")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateMaterial(
+        Guid constructionObjectId,
+        Guid? costItemId,
+        string materialName,
+        string unit,
+        decimal quantity,
+        decimal estimatedUnitPrice,
+        DateTime requiredDate,
+        string? purpose,
+        string? specificationNotes,
+        bool submitImmediately = true,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var (uid, login) = CurrentUser();
+            var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+            var allowedIds = await WebPortfolioHelper.GetVisibleProjectIdsAsync(_db, role, uid, ct);
+
+            var obj = await _db.ConstructionObjects.FirstOrDefaultAsync(o => o.Id == constructionObjectId && !o.IsDeleted, ct)
+                ?? throw new DomainException("Объект строительства не найден.");
+            if (allowedIds != null && !allowedIds.Contains(obj.ProjectId))
+                throw new DomainException("Доступ запрещён: вы не назначены руководителем этого проекта.");
+
+            var dto = new CreateMaterialRequestDto(
+                obj.ProjectId, obj.Id, costItemId, materialName, unit, quantity, estimatedUnitPrice,
+                requiredDate, purpose, specificationNotes, submitImmediately);
+
+            var created = await _materialRequests.CreateAsync(dto, uid, login, ct);
+            TempData["Success"] = submitImmediately
+                ? $"Заявка на материал {created.Number} передана снабженцу."
+                : $"Черновик заявки на материал {created.Number} сохранён.";
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProjectManager")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> EditMaterial(
+        Guid id,
+        Guid? costItemId,
+        string materialName,
+        string unit,
+        decimal quantity,
+        decimal estimatedUnitPrice,
+        DateTime requiredDate,
+        string? purpose,
+        string? specificationNotes,
+        bool submitImmediately = true,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var (uid, login) = CurrentUser();
+            var existing = await _db.MaterialRequests.FirstOrDefaultAsync(r => !r.IsDeleted && r.Id == id, ct)
+                ?? throw new DomainException("Заявка на материал не найдена.");
+
+            var dto = new CreateMaterialRequestDto(
+                existing.ProjectId, existing.ConstructionObjectId, costItemId, materialName, unit,
+                quantity, estimatedUnitPrice, requiredDate, purpose, specificationNotes, submitImmediately);
+
+            var updated = await _materialRequests.UpdateAsync(id, dto, uid, login, ct);
+            TempData["Success"] = submitImmediately
+                ? $"Заявка {updated.Number} доработана и повторно передана снабженцу."
+                : $"Изменения по заявке {updated.Number} сохранены.";
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProjectManager")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SubmitMaterial(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var (uid, login) = CurrentUser();
+            var req = await _materialRequests.SubmitAsync(id, uid, login, ct);
+            TempData["Success"] = $"Заявка на материал {req.Number} передана снабженцу.";
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpGet]
+    [Authorize(Roles = "ProjectManager,ProcurementSpecialist,FinancialManager,CEO")]
+    public async Task<IActionResult> Edit(Guid id, CancellationToken ct)
+    {
+        var (uid, _) = CurrentUser();
+        var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+
+        var request = await _db.PaymentRequests
+            .Include(r => r.Contract)
+            .Include(r => r.CostItem)
+            .FirstOrDefaultAsync(r => !r.IsDeleted && r.Id == id, ct);
+        if (request == null)
+            return NotFound();
+
+        if (request.Status is not (RequestStatus.Returned or RequestStatus.Draft))
+        {
+            TempData["Error"] = "Доработка доступна только для заявок в статусе «Возвращена на доработку» или «Черновик».";
+            return RedirectToAction(nameof(Index));
+        }
+
+        if (request.AuthorUserId != uid && role is not ("FinancialManager" or "CEO"))
+        {
+            TempData["Error"] = "Дорабатывать заявку может её автор, финансовый менеджер или руководитель организации.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var allowedIds = await WebPortfolioHelper.GetVisibleProjectIdsAsync(_db, role, uid, ct);
+        var objQuery = _db.ConstructionObjects.Where(o => !o.IsDeleted && o.ProjectId == request.ProjectId);
+        var conQuery = _db.Contracts.Where(c => !c.IsDeleted && c.ProjectId == request.ProjectId);
+
+        var vm = new RequestEditViewModel
+        {
+            Request = request,
+            Objects = await objQuery.ToListAsync(ct),
+            Contracts = await conQuery.ToListAsync(ct),
+            CostItems = await _db.CostItems.Where(c => !c.IsDeleted).OrderBy(c => c.Code).ToListAsync(ct),
+            CanEdit = allowedIds == null || allowedIds.Contains(request.ProjectId)
+        };
+        return View(vm);
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProjectManager,ProcurementSpecialist,FinancialManager,CEO")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(
+        Guid id,
+        decimal actAmount,
+        decimal advanceOffset,
+        decimal retentionAmount,
+        decimal amount,
+        DateTime plannedPaymentDate,
+        string purpose,
+        string documentNumber,
+        bool resubmit = true,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            var (uid, login) = CurrentUser();
+            var role = User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+
+            var request = await _db.PaymentRequests.FirstOrDefaultAsync(r => !r.IsDeleted && r.Id == id, ct)
+                ?? throw new DomainException("Заявка не найдена.");
+
+            if (request.Status is not (RequestStatus.Returned or RequestStatus.Draft))
+                throw new DomainException("Доработка доступна только для возвращённых заявок и черновиков.");
+            if (request.AuthorUserId != uid && role is not ("FinancialManager" or "CEO"))
+                throw new DomainException("Дорабатывать заявку может её автор, финансовый менеджер или руководитель организации.");
+
+            decimal effectiveAmount = request.Type == RequestType.CurrentPayment && actAmount > 0 ? actAmount : amount;
+            if (effectiveAmount <= 0)
+                throw new DomainException("Сумма заявки должна быть положительной.");
+
+            var calc = FinancialCalculator.CalculateActPayable(effectiveAmount, advanceOffset, retentionAmount);
+            request.Amount = effectiveAmount;
+            request.ActAmount = actAmount;
+            request.AdvanceOffset = advanceOffset;
+            request.RetentionAmount = retentionAmount;
+            request.PayableAmount = calc.PayableAmount;
+            request.PlannedPaymentDate = plannedPaymentDate == default ? request.PlannedPaymentDate : plannedPaymentDate;
+            request.Purpose = string.IsNullOrWhiteSpace(purpose) ? request.Purpose : purpose.Trim();
+            request.ReturnOrRejectReason = null;
+            request.UpdatedAt = DateTime.UtcNow;
+
+            var doc = await _db.Documents.FirstOrDefaultAsync(d => !d.IsDeleted && d.PaymentRequestId == request.Id, ct);
+            if (doc != null && !string.IsNullOrWhiteSpace(documentNumber))
+            {
+                doc.Number = documentNumber.Trim();
+                doc.GrossAmount = effectiveAmount;
+                doc.AdvanceOffset = advanceOffset;
+                doc.RetentionAmount = retentionAmount;
+                doc.NetAmount = calc.PayableAmount;
+            }
+
+            await _audit.LogAsync(uid, login, nameof(PaymentRequest), request.Id.ToString(), "EDIT_RETURNED_REQUEST",
+                request.Status.ToString(), $"Amount={effectiveAmount:N2}", purpose, ct);
+            await _db.SaveChangesAsync(ct);
+
+            if (resubmit)
+            {
+                var (req, checks) = await _requestService.SubmitAsync(id, Array.Empty<byte>(), uid, login, ct);
+                var msg = $"Заявка {req.Number} доработана и отправлена повторно: статус «{RussianLabels.RequestStatusName(req.Status)}». "
+                          + string.Join(" | ", checks.Messages);
+                if (req.Status == RequestStatus.Blocked)
+                    TempData["Error"] = msg;
+                else
+                    TempData["Success"] = msg;
+            }
+            else
+            {
+                TempData["Success"] = $"Изменения по заявке {request.Number} сохранены без отправки.";
+            }
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        catch (DbUpdateException)
+        {
+            TempData["Error"] = "Не удалось сохранить изменения: проверьте уникальность номера документа.";
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProjectManager,Accountant,ProcurementSpecialist")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UploadPhoto(IFormFile? photo, CancellationToken ct)
+    {
+        if (photo == null || photo.Length == 0)
+            return BadRequest(new { error = "Файл не выбран." });
+        if (photo.Length > 15 * 1024 * 1024)
+            return BadRequest(new { error = "Размер файла не должен превышать 15 МБ." });
+
+        string ext = Path.GetExtension(photo.FileName).ToLowerInvariant();
+        if (ext is not (".jpg" or ".jpeg" or ".png" or ".webp" or ".heic"))
+            return BadRequest(new { error = "Поддерживаются форматы JPG, PNG, WEBP, HEIC." });
+
+        string root = string.IsNullOrWhiteSpace(_env.WebRootPath)
+            ? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot")
+            : _env.WebRootPath;
+        string dir = Path.Combine(root, "uploads", "acts");
+        Directory.CreateDirectory(dir);
+
+        string fileName = $"{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}{ext}";
+        await using (var stream = System.IO.File.Create(Path.Combine(dir, fileName)))
+            await photo.CopyToAsync(stream, ct);
+
+        string relative = $"/uploads/acts/{fileName}";
+        var (uid, login) = CurrentUser();
+        await _audit.LogAsync(uid, login, "PhotoEvidence", fileName, "UPLOAD_PHOTO", null, relative, null, ct);
+        await _db.SaveChangesAsync(ct);
+        return Json(new { path = relative });
     }
 
     [HttpPost]

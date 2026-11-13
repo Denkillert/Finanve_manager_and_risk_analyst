@@ -1,7 +1,7 @@
 @model ReportGridModel
 @{
     ViewData["Title"] = "Отчёты";
-    ViewData["Subtitle"] = "Регламентные формы, печать и экспорт в CSV";
+    ViewData["Subtitle"] = "Регламентные формы, печать и выгрузка в Excel";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
     var reports = roleCode == "RiskSpecialist"
         ? new (string Key, string Name)[]
@@ -11,17 +11,21 @@
         : roleCode == "FinancialManager"
         ? new (string Key, string Name)[]
         {
-            ("budget-plan-fact", "1. План-факт исполнения бюджета (vFreeLimit)"),
-            ("contracts-advances", "2. Договоры и контроль выданных авансов"),
-            ("payment-requests-violations", "3. Реестр заявок и нарушений лимитов")
+            ("cash-flow-forecast", "1. Прогноз движения денежных средств"),
+            ("budget-plan-fact", "2. План-факт исполнения бюджета"),
+            ("contracts-advances", "3. Договоры и контроль выданных авансов"),
+            ("payment-requests-violations", "4. Реестр заявок и нарушений лимитов")
         }
         : new (string Key, string Name)[]
         {
-            ("budget-plan-fact", "1. План-факт исполнения бюджета (vFreeLimit)"),
-            ("project-evm-forecast", "2. Прогноз стоимости проектов (EVM + P80)"),
-            ("risks-reserve-p80", "3. Реестр рисков и расчёт резерва P80"),
-            ("contracts-advances", "4. Договоры и контроль выданных авансов"),
-            ("payment-requests-violations", "5. Реестр заявок и нарушений лимитов")
+            ("ceo-portfolio-dashboard", "1. Сводный отчёт по портфелю"),
+            ("ceo-liquidity", "2. Ликвидность и покрытие обязательств"),
+            ("ceo-critical-risks", "3. Критические риски"),
+            ("cash-flow-forecast", "4. Прогноз движения денежных средств"),
+            ("budget-plan-fact", "5. План-факт исполнения бюджета"),
+            ("project-evm-forecast", "6. Прогноз стоимости проектов (EVM + P80)"),
+            ("contracts-advances", "7. Договоры и контроль выданных авансов"),
+            ("payment-requests-violations", "8. Реестр заявок и нарушений лимитов")
         };
 }
 
@@ -35,7 +39,8 @@
             }
         </div>
         <div class="inline-form">
-            <a class="btn btn-success btn-sm" asp-controller="Reports" asp-action="ExportCsv" asp-route-reportType="@Model.ReportType">Скачать CSV (Excel UTF-8)</a>
+            <a class="btn btn-success btn-sm" asp-controller="Reports" asp-action="ExportXlsx" asp-route-reportType="@Model.ReportType">Скачать Excel (.xlsx)</a>
+            <a class="btn btn-outline btn-sm" asp-controller="Reports" asp-action="ExportCsv" asp-route-reportType="@Model.ReportType">CSV для обмена</a>
             <a class="btn btn-outline btn-sm" target="_blank" asp-controller="Reports" asp-action="Print" asp-route-reportType="@Model.ReportType">Печать / PDF</a>
         </div>
     </div>

@@ -74,6 +74,8 @@ public class PaymentRequestsViewModel
     public List<Contract> Contracts { get; set; } = new();
     public List<CostItem> CostItems { get; set; } = new();
     public List<Document> Acts { get; set; } = new();
+    public List<MaterialRequest> MaterialRequests { get; set; } = new();
+    public MaterialRequest? EditingMaterial { get; set; }
 }
 
 public class SiteActsViewModel
@@ -97,13 +99,21 @@ public class CalendarViewModel
     public List<ContractScheduleItem> OverdueCustomerItems { get; set; } = new();
 }
 
-public class ContractsViewModel
+public class RequestEditViewModel
 {
-    public List<Project> Projects { get; set; } = new();
+    public PaymentRequest Request { get; set; } = null!;
+    public List<ConstructionObject> Objects { get; set; } = new();
+    public List<Contract> Contracts { get; set; } = new();
+    public List<CostItem> CostItems { get; set; } = new();
+    public bool CanEdit { get; set; }
+}
+
+public class ContractsViewModel
+{    public List<Project> Projects { get; set; } = new();
     public List<Contract> Contracts { get; set; } = new();
     public List<Advance> Advances { get; set; } = new();
+    public List<MaterialRequest> MaterialRequests { get; set; } = new();
     public string? ImportReportSummary { get; set; }
-    public string? EstimateImportSummary { get; set; }
 }
 
 public class RisksViewModel

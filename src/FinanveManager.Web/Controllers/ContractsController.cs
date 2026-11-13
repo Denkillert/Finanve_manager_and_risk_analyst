@@ -15,21 +15,21 @@ public class ContractsController : Controller
 {
     private readonly AppDbContext _db;
     private readonly StatementImportService _statementService;
-    private readonly IEstimateImporter _estimateImporter;
     private readonly IAccountingAdapter _accountingAdapter;
+    private readonly IMaterialRequestService _materialRequests;
     private readonly IAuditService _audit;
 
     public ContractsController(
         AppDbContext db,
         StatementImportService statementService,
-        IEstimateImporter estimateImporter,
         IAccountingAdapter accountingAdapter,
+        IMaterialRequestService materialRequests,
         IAuditService audit)
     {
         _db = db;
         _statementService = statementService;
-        _estimateImporter = estimateImporter;
         _accountingAdapter = accountingAdapter;
+        _materialRequests = materialRequests;
         _audit = audit;
     }
 
@@ -51,14 +51,21 @@ public class ContractsController : Controller
                 .OrderBy(c => c.Number)
                 .ToListAsync(ct),
             Advances = await _db.Advances.Include(a => a.Contract).Where(a => !a.IsDeleted).OrderBy(a => a.DueDate).ToListAsync(ct),
-            ImportReportSummary = TempData["ImportReport"] as string,
-            EstimateImportSummary = TempData["EstimateReport"] as string
+            MaterialRequests = await _db.MaterialRequests
+                .Include(r => r.Project)
+                .Include(r => r.ConstructionObject)
+                .Include(r => r.CostItem)
+                .Include(r => r.Contract)
+                .Where(r => !r.IsDeleted)
+                .OrderByDescending(r => r.CreatedAt)
+                .ToListAsync(ct),
+            ImportReportSummary = TempData["ImportReport"] as string
         };
         return View(vm);
     }
 
     [HttpPost]
-    [Authorize(Roles = "FinancialManager,ProcurementSpecialist")]
+    [Authorize(Roles = "ProcurementSpecialist")]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> CreateContract(
         Guid projectId, string number, string counterparty, string counterpartyUnp,
@@ -99,7 +106,7 @@ public class ContractsController : Controller
             await _audit.LogAsync(uid, login, nameof(Contract), contract.Number, "CREATE_CONTRACT", null,
                 $"{contract.TotalAmount:N2} {contract.Currency}", contract.Counterparty, ct);
             await _db.SaveChangesAsync(ct);
-            TempData["Success"] = $"Договор {contract.Number} зарегистрирован.";
+            TempData["Success"] = $"Договор {contract.Number} зарегистрирован снабженцем.";
         }
         catch (DomainException ex)
         {
@@ -108,6 +115,82 @@ public class ContractsController : Controller
         catch (DbUpdateException)
         {
             TempData["Error"] = "Ошибка сохранения договора: проверьте уникальность номера в проекте.";
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProcurementSpecialist")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApproveMaterial(
+        Guid id, Guid? contractId, string? supplierName, decimal? agreedUnitPrice, string? comment, CancellationToken ct)
+    {
+        try
+        {
+            var (uid, login) = CurrentUser();
+            var request = await _materialRequests.ApproveAsync(
+                id, new SupplyMaterialRequestDto(contractId, supplierName, agreedUnitPrice, comment), uid, login, ct);
+            TempData["Success"] = $"Заявка {request.Number} согласована. Поставщик: {request.SupplierName}.";
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProcurementSpecialist")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> RejectMaterial(Guid id, string reason, CancellationToken ct)
+    {
+        try
+        {
+            var (uid, login) = CurrentUser();
+            var request = await _materialRequests.RejectAsync(id, reason, uid, login, ct);
+            TempData["Success"] = $"Заявка {request.Number} возвращена прорабу на уточнение.";
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProcurementSpecialist")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> OrderMaterial(
+        Guid id, Guid? contractId, string? supplierName, decimal? agreedUnitPrice, string? comment, CancellationToken ct)
+    {
+        try
+        {
+            var (uid, login) = CurrentUser();
+            var request = await _materialRequests.MarkOrderedAsync(
+                id, new SupplyMaterialRequestDto(contractId, supplierName, agreedUnitPrice, comment), uid, login, ct);
+            TempData["Success"] = $"Заявка {request.Number} заказана у поставщика {request.SupplierName}.";
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "ProcurementSpecialist")]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeliverMaterial(Guid id, CancellationToken ct)
+    {
+        try
+        {
+            var (uid, login) = CurrentUser();
+            var request = await _materialRequests.MarkDeliveredAsync(id, uid, login, ct);
+            TempData["Success"] = $"Поставка по заявке {request.Number} подтверждена.";
+        }
+        catch (DomainException ex)
+        {
+            TempData["Error"] = ex.Message;
         }
         return RedirectToAction(nameof(Index));
     }
@@ -167,32 +250,63 @@ public class ContractsController : Controller
         return RedirectToAction(nameof(Index));
     }
 
-    [HttpPost]
-    [Authorize(Roles = "FinancialManager,ProcurementSpecialist")]
-    [ValidateAntiForgeryToken]
-    public async Task<IActionResult> ImportEstimate(string fileName, string content, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            TempData["Error"] = "Введите строки сметы (КодСтатьи;Наименование;Сумма).";
-            return RedirectToAction(nameof(Index));
-        }
-
-        var catalog = await _db.CostItems.Where(c => !c.IsDeleted).ToListAsync(ct);
-        var res = _estimateImporter.ImportFromExcelOrXml(content, string.IsNullOrWhiteSpace(fileName) ? "smeta.csv" : fileName, catalog);
-        TempData["EstimateReport"] =
-            $"Строк в смете: {res.TotalLines}, сопоставлено со справочником статей: {res.MatchedLines} ({res.MatchPercent:N1} %).";
-        TempData["Success"] = "Импорт сметы выполнен.";
-        return RedirectToAction(nameof(Index));
-    }
-
     [HttpGet]
     [Authorize(Roles = "Accountant,FinancialManager")]
     public async Task<IActionResult> Export1C(CancellationToken ct)
     {
-        var payments = await _db.Payments.Where(p => !p.IsDeleted).ToListAsync(ct);
-        var csv = _accountingAdapter.ExportEntriesCsv(payments);
-        var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray();
-        return File(bytes, "text/csv; charset=utf-8", "1c-accounting-export.csv");
+        var context = await BuildAccountingContextAsync(ct);
+        var bytes = _accountingAdapter.Export1CClientBankExchange(context);
+        return File(bytes, "text/plain; charset=utf-8", $"1c-client-bank-exchange-{DateTime.Now:yyyyMMdd}.txt");
+    }
+
+    [HttpGet]
+    [Authorize(Roles = "Accountant,FinancialManager")]
+    public async Task<IActionResult> ExportAccounting(string report = "balance", CancellationToken ct = default)
+    {
+        var context = await BuildAccountingContextAsync(ct);
+        var (bytes, fileName) = report switch
+        {
+            "pnl" => (_accountingAdapter.ExportProfitAndLoss(context), "forma-2.xlsx"),
+            "vat" => (_accountingAdapter.ExportVatRegister(context), "reestr-nds.xlsx"),
+            "documents" => (_accountingAdapter.ExportPrimaryDocumentsRegister(context), "reestr-pervichnyh-dokumentov.xlsx"),
+            "debts" => (_accountingAdapter.ExportReceivablesPayables(context), "debitorka-kreditorka.xlsx"),
+            _ => (_accountingAdapter.ExportBalanceSheet(context), "buhgalterskiy-balans.xlsx")
+        };
+        return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+    }
+
+    private async Task<AccountingReportContext> BuildAccountingContextAsync(CancellationToken ct)
+    {
+        var org = await _db.Organizations.FirstOrDefaultAsync(o => !o.IsDeleted, ct);
+        var requests = await _db.PaymentRequests
+            .Include(r => r.Contract)
+            .Include(r => r.CostItem)
+            .Where(r => !r.IsDeleted)
+            .ToListAsync(ct);
+        var payments = await _db.Payments
+            .Include(p => p.PaymentRequest)
+            .Where(p => !p.IsDeleted)
+            .ToListAsync(ct);
+        var contracts = await _db.Contracts
+            .Include(c => c.Obligations)
+            .Include(c => c.Advances)
+            .Where(c => !c.IsDeleted)
+            .ToListAsync(ct);
+
+        return new AccountingReportContext
+        {
+            OrganizationName = org?.Name ?? "ООО «СтройФинРиск»",
+            OrganizationUnp = org?.Unp ?? "191234567",
+            ResponsiblePerson = "Громов А.Н., директор",
+            ChiefAccountant = "Ковалёва И.П., главный бухгалтер",
+            PeriodStart = new DateTime(DateTime.UtcNow.Year, 1, 1),
+            PeriodEnd = DateTime.UtcNow.Date,
+            Projects = await _db.Projects.Where(p => !p.IsDeleted).ToListAsync(ct),
+            Contracts = contracts,
+            Requests = requests,
+            Payments = payments,
+            Documents = await _db.Documents.Where(d => !d.IsDeleted).ToListAsync(ct),
+            MaterialRequests = await _db.MaterialRequests.Where(m => !m.IsDeleted).ToListAsync(ct)
+        };
     }
 }

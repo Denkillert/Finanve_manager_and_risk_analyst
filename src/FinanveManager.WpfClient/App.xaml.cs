@@ -1,4 +1,5 @@
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Windows;
 using FinanveManager.Data.Persistence;
@@ -40,6 +41,8 @@ public partial class App : System.Windows.Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // Кодировка Windows-1251 для банковских выписок и файлов 1С.
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         try
         {
             _dbFactory = new AppDatabaseFactory(ResolveConnectionString());

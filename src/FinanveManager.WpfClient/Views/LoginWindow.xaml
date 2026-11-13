@@ -2,16 +2,16 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Авторизация — СтройФинРиск"
-        Width="520"
+        Width="540"
         SizeToContent="Height"
         WindowStartupLocation="CenterScreen"
         ResizeMode="NoResize"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
-        Background="#F4F6FB">
-    <Border Margin="22" CornerRadius="22" Background="White" BorderBrush="#E5EAF2" BorderThickness="1">
+        Background="#F5F7F6">
+    <Border Margin="22" CornerRadius="22" Background="White" BorderBrush="#E2EAE7" BorderThickness="1">
         <Border.Effect>
-            <DropShadowEffect BlurRadius="34" ShadowDepth="6" Opacity="0.14" Color="#0F172A"/>
+            <DropShadowEffect BlurRadius="34" ShadowDepth="6" Opacity="0.14" Color="#10201E"/>
         </Border.Effect>
         <Grid>
             <Grid.RowDefinitions>
@@ -23,8 +23,8 @@
             <Border Grid.Row="0" CornerRadius="21,21,0,0" Padding="26,24">
                 <Border.Background>
                     <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                        <GradientStop Color="#0B1224" Offset="0"/>
-                        <GradientStop Color="#1B2B52" Offset="1"/>
+                        <GradientStop Color="#0E2A28" Offset="0"/>
+                        <GradientStop Color="#123B36" Offset="1"/>
                     </LinearGradientBrush>
                 </Border.Background>
                 <StackPanel Orientation="Horizontal">
@@ -37,7 +37,7 @@
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="СтройФинРиск" FontSize="22" FontWeight="Bold" Foreground="White"/>
                         <TextBlock Text="Управление финансами и рисками строительных проектов"
-                                   FontSize="11.5" Foreground="#A9B8D0" Margin="0,3,0,0" TextWrapping="Wrap" MaxWidth="330"/>
+                                   FontSize="11.5" Foreground="#B9D4CC" Margin="0,3,0,0" TextWrapping="Wrap" MaxWidth="340"/>
                     </StackPanel>
                 </StackPanel>
             </Border>
@@ -45,8 +45,8 @@
             <!-- Форма -->
             <StackPanel Grid.Row="1" Margin="26,22,26,24">
                 <Border x:Name="EmptyDbBanner"
-                        Background="#EFF6FF"
-                        BorderBrush="#D5E5FF"
+                        Background="#E6F5F1"
+                        BorderBrush="#C7E8DF"
                         BorderThickness="1"
                         CornerRadius="11"
                         Padding="12,10"
@@ -54,7 +54,7 @@
                         Visibility="Collapsed">
                     <StackPanel>
                         <TextBlock Text="База данных пуста (структура таблиц создана, учётные записи отсутствуют). Выполните database/02_seed_data.sql в SSMS или выберите инициализацию:"
-                                   Foreground="#1E3A8A" TextWrapping="Wrap" FontSize="11.5" Margin="0,0,0,9"/>
+                                   Foreground="#0A5F4F" TextWrapping="Wrap" FontSize="11.5" Margin="0,0,0,9"/>
                         <Button x:Name="InitRolesAdminButton"
                                 Content="Создать 7 ролей (табл. 1.8), admin и director (CEO)"
                                 Style="{StaticResource SecondaryButton}"
@@ -67,31 +67,31 @@
                     </StackPanel>
                 </Border>
 
-                <TextBlock Text="Быстрый вход" FontSize="12" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,5"/>
+                <TextBlock Text="Быстрый вход" FontSize="12" FontWeight="SemiBold" Foreground="#43574F" Margin="0,0,0,5"/>
                 <ComboBox x:Name="DemoUsersCombo"
                           DisplayMemberPath="Display"
                           SelectionChanged="DemoUsersCombo_OnSelectionChanged"
                           Margin="0,0,0,16"/>
 
-                <TextBlock Text="Логин" FontSize="12" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,5"/>
+                <TextBlock Text="Логин" FontSize="12" FontWeight="SemiBold" Foreground="#43574F" Margin="0,0,0,5"/>
                 <TextBox x:Name="LoginTextBox" Margin="0,0,0,12"/>
 
-                <TextBlock Text="Пароль" FontSize="12" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,5"/>
+                <TextBlock Text="Пароль" FontSize="12" FontWeight="SemiBold" Foreground="#43574F" Margin="0,0,0,5"/>
                 <PasswordBox x:Name="PasswordBox" Margin="0,0,0,12"/>
 
                 <TextBlock Text="Код 2FA (обязателен для роли Администратор: 246810)"
-                           FontSize="11.5" Foreground="#64748B" Margin="0,0,0,5"/>
+                           FontSize="11.5" Foreground="#64706D" Margin="0,0,0,5"/>
                 <TextBox x:Name="TwoFactorTextBox" Margin="0,0,0,14"/>
 
                 <Border x:Name="ErrorBanner"
-                        Background="#FEF1F1"
-                        BorderBrush="#FBD5D5"
+                        Background="#FBEEED"
+                        BorderBrush="#F2D3D1"
                         BorderThickness="1"
                         CornerRadius="11"
                         Padding="12,9"
                         Margin="0,0,0,14"
                         Visibility="Collapsed">
-                    <TextBlock x:Name="ErrorText" Foreground="#991B1B" TextWrapping="Wrap" FontSize="12"/>
+                    <TextBlock x:Name="ErrorText" Foreground="#8F2A25" TextWrapping="Wrap" FontSize="12"/>
                 </Border>
 
                 <Button x:Name="LoginButton"
@@ -103,7 +103,7 @@
                         Click="LoginButton_OnClick"/>
 
                 <TextBlock Text="Пароль: StroyFin2026! · Веб-роли (finmanager, pm, risk) работают в браузере"
-                           FontSize="11" Foreground="#94A3B8" Margin="0,14,0,0"
+                           FontSize="11" Foreground="#94A19E" Margin="0,14,0,0"
                            HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"/>
             </StackPanel>
         </Grid>

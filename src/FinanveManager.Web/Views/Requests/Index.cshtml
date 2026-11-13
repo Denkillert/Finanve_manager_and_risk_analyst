@@ -1,16 +1,205 @@
 @model PaymentRequestsViewModel
 @{
-    ViewData["Title"] = "Платёжные заявки";
-    ViewData["Subtitle"] = "Маршрут согласования, контроль лимитов и акты С-2 / С-3";
+    ViewData["Title"] = "Заявки и материальное снабжение";
+    ViewData["Subtitle"] = "Материальные заявки прораба, маршрут согласования платежей и акты С-2 / С-3";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
     var statuses = Enum.GetValues<RequestStatus>();
+    var isPm = roleCode == "ProjectManager";
+    var canSeePaymentForm = roleCode is "ProcurementSpecialist" or "FinancialManager" or "CEO";
+    var canCreateMaterial = isPm;
+    var edit = Model.EditingMaterial;
+}
+
+<div class="page-intro">
+    <div>
+        <span class="eyebrow">Производственный контур</span>
+        <h2>Заявки, материалы и первичные документы</h2>
+        <p>Прораб фиксирует потребность в материалах и фотофиксацию работ. Снабженец подбирает поставщика и договор. Финансовый менеджер контролирует лимиты и платежи.</p>
+    </div>
+    <div class="intro-chips">
+        <span class="chip">Материальные заявки: @Model.MaterialRequests.Count</span>
+        <span class="chip">Платёжные заявки: @Model.Requests.Count</span>
+        <span class="chip">Акты: @Model.Acts.Count</span>
+    </div>
+</div>
+
+@if (canCreateMaterial)
+{
+    <div class="card" id="material-form-card">
+        <div class="card-header">
+            <div>
+                <h3 class="card-title">@(edit == null ? "Новая заявка на материал" : $"Доработка заявки {edit.Number}")</h3>
+                <p class="muted card-hint">Прораб указывает только потребность: материал, количество, срок и назначение. Поставщика и договор подбирает снабженец.</p>
+            </div>
+            @if (edit != null)
+            {
+                <a class="btn btn-outline btn-sm" asp-controller="Requests" asp-action="Index">Отменить доработку</a>
+            }
+        </div>
+
+        @if (!Model.Objects.Any())
+        {
+            <p class="muted">Нет доступных объектов строительства. Обратитесь к руководителю проекта.</p>
+        }
+        else
+        {
+            <form method="post" asp-controller="Requests"
+                  asp-action="@(edit == null ? "CreateMaterial" : "EditMaterial")" class="form-grid">
+                @if (edit != null)
+                {
+                    <input type="hidden" name="id" value="@edit.Id" />
+                }
+                <div class="field span-2">
+                    <label>Объект строительства</label>
+                    <select name="constructionObjectId" required>
+                        @foreach (var o in Model.Objects)
+                        {
+                            <option value="@o.Id" selected="@(edit != null && edit.ConstructionObjectId == o.Id)">@o.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label>Статья затрат</label>
+                    <select name="costItemId">
+                        <option value="">— не указана —</option>
+                        @foreach (var ci in Model.CostItems)
+                        {
+                            <option value="@ci.Id" selected="@(edit != null && edit.CostItemId == ci.Id)">@ci.Code — @ci.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="field span-2">
+                    <label>Наименование материала</label>
+                    <input name="materialName" value="@(edit?.MaterialName ?? "")" placeholder="Например, плиты перекрытия ПК 60-15-8" required />
+                </div>
+                <div class="field">
+                    <label>Единица измерения</label>
+                    <input name="unit" value="@(edit?.Unit ?? "шт.")" required />
+                </div>
+                <div class="field">
+                    <label>Количество</label>
+                    <input type="number" step="0.001" min="0.001" name="quantity"
+                           value="@((edit?.Quantity ?? 1m).ToString(System.Globalization.CultureInfo.InvariantCulture))" required />
+                </div>
+                <div class="field">
+                    <label>Ориентировочная цена за единицу, BYN</label>
+                    <input type="number" step="0.01" min="0" name="estimatedUnitPrice"
+                           value="@((edit?.EstimatedUnitPrice ?? 0m).ToString(System.Globalization.CultureInfo.InvariantCulture))" />
+                </div>
+                <div class="field">
+                    <label>Требуемая дата поставки</label>
+                    <input type="date" name="requiredDate"
+                           value="@((edit?.RequiredDate ?? DateTime.UtcNow.Date.AddDays(7)).ToString("yyyy-MM-dd"))" required />
+                </div>
+                <div class="field span-2">
+                    <label>Назначение / участок работ</label>
+                    <input name="purpose" value="@(edit?.Purpose ?? "")" placeholder="Монтаж перекрытий 4–6 этажей" />
+                </div>
+                <div class="field span-3">
+                    <label>Технические требования и примечания</label>
+                    <textarea name="specificationNotes" rows="2" placeholder="Марка, ГОСТ/СТБ, сертификаты, условия разгрузки">@(edit?.SpecificationNotes ?? "")</textarea>
+                </div>
+                <div class="field span-3">
+                    <label class="check-line">
+                        <input type="checkbox" name="submitImmediately" value="true" checked="@(edit == null || edit.Status != MaterialRequestStatus.Draft)" />
+                        <span>Сразу передать снабженцу</span>
+                    </label>
+                </div>
+                <div class="form-actions span-3">
+                    <button type="submit" class="btn">@(edit == null ? "Создать заявку на материал" : "Сохранить и передать снабженцу")</button>
+                </div>
+            </form>
+        }
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Мои заявки на материал</h3>
+            <span class="muted">@Model.MaterialRequests.Count записей</span>
+        </div>
+        <div class="table-wrap">
+            <table class="table-material-requests">
+                <thead>
+                    <tr>
+                        <th>Номер / материал</th>
+                        <th>Объект</th>
+                        <th class="num">Количество</th>
+                        <th class="num">Оценка, BYN</th>
+                        <th>Срок</th>
+                        <th>Статус</th>
+                        <th>Снабженец</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.MaterialRequests.Any())
+                    {
+                        <tr><td colspan="8" class="muted">Заявок на материал пока нет.</td></tr>
+                    }
+                    @foreach (var m in Model.MaterialRequests)
+                    {
+                        var mBadge = m.Status switch
+                        {
+                            MaterialRequestStatus.Rejected => "badge-danger",
+                            MaterialRequestStatus.Delivered => "badge-success",
+                            MaterialRequestStatus.Ordered => "badge-info",
+                            MaterialRequestStatus.Approved => "badge-success",
+                            _ => "badge-warn"
+                        };
+                        <tr>
+                            <td>
+                                <strong>@m.Number</strong>
+                                <div class="muted">@m.MaterialName</div>
+                            </td>
+                            <td>@m.ConstructionObject?.Name</td>
+                            <td class="num">@m.Quantity.ToString("N3") @m.Unit</td>
+                            <td class="num">@((m.AgreedTotal ?? m.EstimatedTotal).ToString("N2"))</td>
+                            <td>@m.RequiredDate.ToString("dd.MM.yyyy")</td>
+                            <td><span class="badge @mBadge">@RussianLabels.MaterialRequestStatusName(m.Status)</span></td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(m.SupplierName))
+                                {
+                                    <strong>@m.SupplierName</strong>
+                                    @if (m.AgreedUnitPrice.HasValue)
+                                    {
+                                        <div class="muted">@m.AgreedUnitPrice.Value.ToString("N2") BYN / @m.Unit</div>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="muted">Ожидает подбора</span>
+                                }
+                            </td>
+                            <td>
+                                @if (m.Status is MaterialRequestStatus.Draft or MaterialRequestStatus.Rejected)
+                                {
+                                    <a class="btn btn-outline btn-sm" asp-controller="Requests" asp-action="Index" asp-route-editMaterial="@m.Id">Доработать</a>
+                                }
+                                @if (m.Status == MaterialRequestStatus.Draft)
+                                {
+                                    <form method="post" asp-controller="Requests" asp-action="SubmitMaterial" class="inline-form">
+                                        <input type="hidden" name="id" value="@m.Id" />
+                                        <button type="submit" class="btn btn-sm">Передать</button>
+                                    </form>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(m.SupplyComment))
+                                {
+                                    <div class="muted comment-note">@m.SupplyComment</div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
 }
 
 <div class="card">
     <div class="card-header">
-        <h3 class="card-title">Фильтр реестра заявок</h3>
+        <h3 class="card-title">@(isPm ? "Платёжные заявки по моим проектам" : "Реестр платёжных заявок")</h3>
         <div class="inline-form">
-            <a class="btn btn-sm @(string.IsNullOrEmpty(Model.StatusFilter) ? "" : "btn-outline")" asp-controller="Requests" asp-action="Index">Все (@Model.Requests.Count)</a>
+            <a class="btn btn-sm @(string.IsNullOrEmpty(Model.StatusFilter) ? "" : "btn-outline")" asp-controller="Requests" asp-action="Index">Все</a>
             @foreach (var st in statuses)
             {
                 var stName = st.ToString();
@@ -20,7 +209,7 @@
     </div>
 
     <div class="table-wrap">
-        <table>
+        <table class="table-payments">
             <thead>
                 <tr>
                     <th>Номер</th>
@@ -30,15 +219,20 @@
                     <th>Дата</th>
                     <th>Статус</th>
                     <th>Контроль / ЭЦП</th>
-                    <th>Действия по маршруту</th>
+                    <th>Действия</th>
                 </tr>
             </thead>
             <tbody>
+                @if (!Model.Requests.Any())
+                {
+                    <tr><td colspan="8" class="muted">Заявок по выбранному фильтру нет.</td></tr>
+                }
                 @foreach (var r in Model.Requests)
                 {
                     var badge = r.Status == RequestStatus.Blocked || r.Status == RequestStatus.Rejected ? "badge-danger"
                         : r.Status == RequestStatus.Approved || r.Status == RequestStatus.Executed || r.Status == RequestStatus.Closed ? "badge-success"
-                        : "badge-warn";
+                        : r.Status == RequestStatus.Returned ? "badge-warn"
+                        : "badge-info";
                     <tr>
                         <td><strong>@r.Number</strong><div class="muted">@r.Purpose</div></td>
                         <td>@RussianLabels.RequestTypeName(r.Type)<div class="muted">@r.Contract?.Number</div></td>
@@ -49,12 +243,10 @@
                             <span class="badge @badge">@RussianLabels.RequestStatusName(r.Status)</span>
                             @if (r.HasOverdueAdvanceWarning)
                             {
-                                <div class="badge badge-warn" style="margin-top:4px">Просрочен аванс!</div>
+                                <div class="badge badge-warn" style="margin-top:4px">Просрочен аванс</div>
                             }
                         </td>
-                        <td class="muted">
-                            @(r.BlockReason ?? r.ReturnOrRejectReason ?? r.EdsSignatureThumbprint ?? "—")
-                        </td>
+                        <td class="muted">@(r.BlockReason ?? r.ReturnOrRejectReason ?? r.EdsSignatureThumbprint ?? "—")</td>
                         <td>
                             @if (r.Status == RequestStatus.Blocked && roleCode == "CEO")
                             {
@@ -62,7 +254,7 @@
                                     <input type="hidden" name="id" value="@r.Id" />
                                     <input type="hidden" name="approve" value="true" />
                                     <input type="hidden" name="rowVersionBase64" value="@Convert.ToBase64String(r.RowVersion)" />
-                                    <input name="reason" placeholder="Обоснование перерасхода" value="Согласовано руководителем" style="width:155px;padding:4px 6px" />
+                                    <input name="reason" placeholder="Обоснование" value="Согласовано руководителем" style="width:150px;padding:4px 6px" />
                                     <button type="submit" class="btn btn-warn btn-sm">Согласовать перерасход</button>
                                 </form>
                                 <form method="post" asp-controller="Requests" asp-action="ApproveOverrun" class="inline-form">
@@ -73,25 +265,10 @@
                                     <button type="submit" class="btn btn-danger btn-sm">Отклонить</button>
                                 </form>
                             }
-                            @if (r.Status == RequestStatus.Blocked && roleCode == "FinancialManager")
-                            {
-                                <div class="muted" style="margin-bottom:4px">Перерасход UC04 решается Руководителем (WPF)</div>
-                                <form method="post" asp-controller="Requests" asp-action="ReturnOrReject" class="inline-form">
-                                    <input type="hidden" name="id" value="@r.Id" />
-                                    <input type="hidden" name="rejectPermanently" value="true" />
-                                    <input type="hidden" name="rowVersionBase64" value="@Convert.ToBase64String(r.RowVersion)" />
-                                    <input type="hidden" name="reason" value="Отклонено: превышен свободный лимит" />
-                                    <button type="submit" class="btn btn-danger btn-sm">Отклонить</button>
-                                </form>
-                            }
                             @if (r.Status is RequestStatus.Returned or RequestStatus.Draft
                                  && roleCode is "ProjectManager" or "ProcurementSpecialist" or "FinancialManager" or "CEO")
                             {
-                                <form method="post" asp-controller="Requests" asp-action="Resubmit" class="inline-form">
-                                    <input type="hidden" name="id" value="@r.Id" />
-                                    <input type="hidden" name="rowVersionBase64" value="@Convert.ToBase64String(r.RowVersion)" />
-                                    <button type="submit" class="btn btn-sm">Отправить повторно</button>
-                                </form>
+                                <a class="btn btn-sm" asp-controller="Requests" asp-action="Edit" asp-route-id="@r.Id">Доработать</a>
                             }
                             @if ((r.Status == RequestStatus.PendingApproval || r.Status == RequestStatus.ApprovedByManagement)
                                  && roleCode is "FinancialManager" or "CEO")
@@ -99,8 +276,8 @@
                                 <form method="post" asp-controller="Requests" asp-action="Approve" class="inline-form" style="margin-bottom:4px">
                                     <input type="hidden" name="id" value="@r.Id" />
                                     <input type="hidden" name="rowVersionBase64" value="@Convert.ToBase64String(r.RowVersion)" />
-                                    <input name="edsThumbprint" value="EDS-2026-BY-DEMO" style="width:130px;padding:4px 6px" />
-                                    <button type="submit" class="btn btn-success btn-sm">Согласовать (ЭЦП)</button>
+                                    <input name="edsThumbprint" value="EDS-2026-BY-DEMO" style="width:125px;padding:4px 6px" />
+                                    <button type="submit" class="btn btn-success btn-sm">Согласовать</button>
                                 </form>
                                 <form method="post" asp-controller="Requests" asp-action="ReturnOrReject" class="inline-form">
                                     <input type="hidden" name="id" value="@r.Id" />
@@ -116,7 +293,7 @@
                                     <input type="hidden" name="id" value="@r.Id" />
                                     <input type="hidden" name="rowVersionBase64" value="@Convert.ToBase64String(r.RowVersion)" />
                                     <input name="paymentOrderNumber" placeholder="№ ПП" value="ПП-@DateTime.Now.ToString("HHmm")" style="width:95px;padding:4px 6px" />
-                                    <button type="submit" class="btn btn-sm">Исполнить платёж</button>
+                                    <button type="submit" class="btn btn-sm">Исполнить</button>
                                 </form>
                             }
                         </td>
@@ -128,162 +305,185 @@
 </div>
 
 <div class="grid-2 grid-stack">
-    @if (roleCode is "ProjectManager" or "ProcurementSpecialist" or "FinancialManager" or "CEO")
+    @if (canSeePaymentForm)
     {
         <div class="card">
-            <h3 class="card-title" style="margin-bottom:10px">Новая платёжная заявка (проверка лимита, авансов и календаря)</h3>
+            <h3 class="card-title" style="margin-bottom:6px">Новая платёжная заявка</h3>
+            <p class="muted card-hint">Проверка свободного лимита, авансов и платёжного календаря выполняется автоматически.</p>
             @if (!Model.Objects.Any() || !Model.Contracts.Any() || !Model.CostItems.Any())
             {
-                <p class="muted">Для создания заявки добавьте хотя бы один проект, объект, договор и статью затрат в базе данных.</p>
+                <p class="muted">Для создания заявки добавьте проект, объект, договор и статью затрат.</p>
             }
             else
             {
-            <form method="post" asp-controller="Requests" asp-action="Create" class="form-grid">
-                <div class="field">
-                    <label>Объект строительства</label>
-                    <select name="constructionObjectId">
-                        @foreach (var o in Model.Objects)
-                        {
-                            <option value="@o.Id">@o.Name</option>
-                        }
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Договор подрядчика/поставщика</label>
-                    <select name="contractId">
-                        @foreach (var c in Model.Contracts)
-                        {
-                            <option value="@c.Id">@c.Number — @c.Counterparty</option>
-                        }
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Статья затрат</label>
-                    <select name="costItemId">
-                        @foreach (var ci in Model.CostItems)
-                        {
-                            <option value="@ci.Id">@ci.Code — @ci.Name</option>
-                        }
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Тип заявки</label>
-                    <select name="type">
-                        <option value="CurrentPayment">Текущий платёж (CurrentPayment)</option>
-                        <option value="Advance">Новый аванс (Advance)</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Сумма по акту / счёту (тыс. р.)</label>
-                    <input type="number" step="0.01" name="actAmount" value="320.00" required />
-                </div>
-                <div class="field">
-                    <label>Зачёт аванса (тыс. р.)</label>
-                    <input type="number" step="0.01" name="advanceOffset" value="0.00" />
-                </div>
-                <div class="field">
-                    <label>Гарант. удержание (тыс. р.)</label>
-                    <input type="number" step="0.01" name="retentionAmount" value="0.00" />
-                </div>
-                <div class="field">
-                    <label>Сумма аванса (если Advance)</label>
-                    <input type="number" step="0.01" name="amount" value="320.00" />
-                </div>
-                <div class="field">
-                    <label>Валюта</label>
-                    <select name="currency">
-                        <option value="BYN">BYN</option>
-                        <option value="USD">USD</option>
-                        <option value="EUR">EUR</option>
-                        <option value="RUB">RUB</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Плановая дата оплаты</label>
-                    <input type="date" name="plannedPaymentDate" value="2026-11-15" required />
-                </div>
-                <div class="field">
-                    <label>Номер документа (С-2 / Счёт)</label>
-                    <input name="documentNumber" value="С-2/341" required />
-                </div>
-                <div class="field">
-                    <label>Назначение платежа</label>
-                    <input name="purpose" value="Оплата монолитных и фасадных работ" required />
-                </div>
-                <div>
-                    <button type="submit" class="btn">Создать и отправить на проверку</button>
-                </div>
-            </form>
+                <form method="post" asp-controller="Requests" asp-action="Create" class="form-grid">
+                    <div class="field span-2">
+                        <label>Объект строительства</label>
+                        <select name="constructionObjectId">
+                            @foreach (var o in Model.Objects)
+                            {
+                                <option value="@o.Id">@o.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field span-2">
+                        <label>Договор подрядчика / поставщика</label>
+                        <select name="contractId">
+                            @foreach (var c in Model.Contracts)
+                            {
+                                <option value="@c.Id">@c.Number — @c.Counterparty</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Статья затрат</label>
+                        <select name="costItemId">
+                            @foreach (var ci in Model.CostItems)
+                            {
+                                <option value="@ci.Id">@ci.Code — @ci.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Тип заявки</label>
+                        <select name="type">
+                            <option value="CurrentPayment">Текущий платёж</option>
+                            <option value="Advance">Новый аванс</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Сумма по акту / счёту</label>
+                        <input type="number" step="0.01" name="actAmount" value="320.00" required />
+                    </div>
+                    <div class="field">
+                        <label>Зачёт аванса</label>
+                        <input type="number" step="0.01" name="advanceOffset" value="0.00" />
+                    </div>
+                    <div class="field">
+                        <label>Гарантийное удержание</label>
+                        <input type="number" step="0.01" name="retentionAmount" value="0.00" />
+                    </div>
+                    <div class="field">
+                        <label>Сумма аванса</label>
+                        <input type="number" step="0.01" name="amount" value="320.00" />
+                    </div>
+                    <div class="field">
+                        <label>Валюта</label>
+                        <select name="currency">
+                            <option value="BYN">BYN</option>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="RUB">RUB</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Плановая дата оплаты</label>
+                        <input type="date" name="plannedPaymentDate" value="2026-11-15" required />
+                    </div>
+                    <div class="field">
+                        <label>Номер документа</label>
+                        <input name="documentNumber" value="С-2/341" required />
+                    </div>
+                    <div class="field span-2">
+                        <label>Назначение платежа</label>
+                        <input name="purpose" value="Оплата монолитных и фасадных работ" required />
+                    </div>
+                    <div class="form-actions span-2">
+                        <button type="submit" class="btn">Создать и отправить на проверку</button>
+                    </div>
+                </form>
             }
         </div>
     }
 
     <div class="card">
-        <h3 class="card-title" style="margin-bottom:10px">Реестр актов С-2 и справок С-3 (Sк_опл = Sакт − Aзач − Uудерж)</h3>
+        <div class="card-header">
+            <div>
+                <h3 class="card-title">Акты С-2 и справки С-3</h3>
+                <p class="muted card-hint">Sк_опл = Sакт − Aзач − Uудерж. Фотофиксация обязательна по Постановлению МАиС № 29.</p>
+            </div>
+        </div>
         @if (roleCode is "ProjectManager" or "Accountant" or "ProcurementSpecialist")
         {
             @if (!Model.Objects.Any() || !Model.Contracts.Any())
             {
-                <p class="muted" style="margin-bottom:12px">Для регистрации акта С-2/С-3 требуются объект строительства и расходный договор.</p>
+                <p class="muted" style="margin-bottom:12px">Для регистрации акта требуются объект строительства и расходный договор.</p>
             }
             else
             {
-            <form method="post" asp-controller="Requests" asp-action="CreateAct" class="form-grid" style="margin-bottom:14px">
-                <div class="field">
-                    <label>Договор</label>
-                    <select name="contractId">
-                        @foreach (var c in Model.Contracts)
-                        {
-                            <option value="@c.Id">@c.Number</option>
-                        }
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Объект</label>
-                    <select name="constructionObjectId">
-                        @foreach (var o in Model.Objects)
-                        {
-                            <option value="@o.Id">@o.Name</option>
-                        }
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Вид документа</label>
-                    <select name="documentType">
-                        <option value="ActS2">Акт С-2</option>
-                        <option value="CertificateS3">Справка С-3</option>
-                    </select>
-                </div>
-                <div class="field">
-                    <label>Номер документа</label>
-                    <input name="number" value="С-2/129" required />
-                </div>
-                <div class="field">
-                    <label>Сумма акта (Sакт)</label>
-                    <input type="number" step="0.01" name="grossAmount" value="420.00" required />
-                </div>
-                <div class="field">
-                    <label>Зачёт аванса (Aзач)</label>
-                    <input type="number" step="0.01" name="advanceOffset" value="84.00" />
-                </div>
-                <div class="field">
-                    <label>Удержание (Uудерж)</label>
-                    <input type="number" step="0.01" name="retentionAmount" value="21.00" />
-                </div>
-                <div class="field">
-                    <label>Фотофиксация (путь)</label>
-                    <input name="photoEvidencePaths" placeholder="photos/obj1_act.jpg" />
-                </div>
-                <div class="field">
-                    <label>Описание выполненных работ</label>
-                    <input name="actWorkDescription" value="Кирпичная кладка и монтаж перекрытий" />
-                </div>
-                <div>
-                    <button type="submit" class="btn btn-outline">Зафиксировать акт С-2</button>
-                </div>
-            </form>
+                <form method="post" asp-controller="Requests" asp-action="CreateAct" class="form-grid" id="actForm" style="margin-bottom:14px">
+                    <div class="field">
+                        <label>Договор</label>
+                        <select name="contractId">
+                            @foreach (var c in Model.Contracts)
+                            {
+                                <option value="@c.Id">@c.Number</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Объект</label>
+                        <select name="constructionObjectId">
+                            @foreach (var o in Model.Objects)
+                            {
+                                <option value="@o.Id">@o.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Вид документа</label>
+                        <select name="documentType">
+                            <option value="ActS2">Акт С-2</option>
+                            <option value="CertificateS3">Справка С-3</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Номер документа</label>
+                        <input name="number" value="С-2/129" required />
+                    </div>
+                    <div class="field">
+                        <label>Сумма акта (Sакт)</label>
+                        <input type="number" step="0.01" name="grossAmount" value="420.00" required />
+                    </div>
+                    <div class="field">
+                        <label>Зачёт аванса (Aзач)</label>
+                        <input type="number" step="0.01" name="advanceOffset" value="84.00" />
+                    </div>
+                    <div class="field">
+                        <label>Удержание (Uудерж)</label>
+                        <input type="number" step="0.01" name="retentionAmount" value="21.00" />
+                    </div>
+                    <div class="field span-2">
+                        <label>Описание выполненных работ</label>
+                        <input name="actWorkDescription" value="Кирпичная кладка и монтаж перекрытий" />
+                    </div>
+
+                    <div class="field span-3">
+                        <label>Фотофиксация объекта</label>
+                        <div class="photo-tools">
+                            <button type="button" class="btn btn-outline btn-sm" id="btnCamera">Сделать фото</button>
+                            <label class="btn btn-outline btn-sm file-btn">
+                                Загрузить из галереи
+                                <input type="file" id="photoGallery" accept="image/*" multiple hidden />
+                            </label>
+                            <span class="muted" id="photoStatus">Камера или файл: JPG, PNG, WEBP</span>
+                        </div>
+                        <video id="cameraPreview" autoplay playsinline hidden></video>
+                        <div class="photo-actions" id="cameraActions" hidden>
+                            <button type="button" class="btn btn-sm" id="btnCapture">Зафиксировать кадр</button>
+                            <button type="button" class="btn btn-outline btn-sm" id="btnStopCamera">Остановить камеру</button>
+                        </div>
+                        <div class="photo-strip" id="photoStrip"></div>
+                        <input type="hidden" name="photoEvidencePaths" id="photoEvidencePaths" />
+                    </div>
+
+                    <div class="form-actions span-3">
+                        <button type="submit" class="btn">Зарегистрировать акт</button>
+                    </div>
+                </form>
             }
         }
+
         <div class="table-wrap">
             <table>
                 <thead>
@@ -291,19 +491,43 @@
                         <th>Номер</th>
                         <th class="num">Sакт</th>
                         <th class="num">Зачёт / Удерж.</th>
-                        <th class="num">К оплате Sк_опл</th>
-                        <th>Инстр. 53</th>
+                        <th class="num">К оплате</th>
+                        <th>Проверка</th>
+                        <th>Фото</th>
                     </tr>
                 </thead>
                 <tbody>
+                    @if (!Model.Acts.Any())
+                    {
+                        <tr><td colspan="6" class="muted">Акты ещё не зарегистрированы.</td></tr>
+                    }
                     @foreach (var a in Model.Acts)
                     {
+                        var photos = (a.PhotoEvidencePaths ?? "")
+                            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                         <tr>
                             <td><strong>@a.Number</strong><div class="muted">@a.ActWorkDescription</div></td>
                             <td class="num">@a.GrossAmount.ToString("N2")</td>
                             <td class="num">@a.AdvanceOffset.ToString("N2") / @a.RetentionAmount.ToString("N2")</td>
                             <td class="num"><strong>@a.NetAmount.ToString("N2")</strong></td>
                             <td>@(a.IsVerifiedByInstruction53 ? "Проверен" : "Нет")</td>
+                            <td>
+                                @if (photos.Length == 0)
+                                {
+                                    <span class="muted">—</span>
+                                }
+                                else
+                                {
+                                    <div class="photo-thumbs">
+                                        @foreach (var p in photos)
+                                        {
+                                            <a href="@p" target="_blank" rel="noopener">
+                                                <img src="@p" alt="Фото акта @a.Number" loading="lazy" />
+                                            </a>
+                                        }
+                                    </div>
+                                }
+                            </td>
                         </tr>
                     }
                 </tbody>
@@ -311,3 +535,123 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+<script>
+(function () {
+    const form = document.getElementById('actForm');
+    if (!form) return;
+
+    const tokenInput = form.querySelector('input[name="__RequestVerificationToken"]');
+    const token = tokenInput ? tokenInput.value : '';
+    const hidden = document.getElementById('photoEvidencePaths');
+    const strip = document.getElementById('photoStrip');
+    const status = document.getElementById('photoStatus');
+    const video = document.getElementById('cameraPreview');
+    const cameraActions = document.getElementById('cameraActions');
+    const btnCamera = document.getElementById('btnCamera');
+    const btnCapture = document.getElementById('btnCapture');
+    const btnStop = document.getElementById('btnStopCamera');
+    const gallery = document.getElementById('photoGallery');
+    let stream = null;
+
+    function addPath(path) {
+        const existing = hidden.value ? hidden.value.split(';').filter(Boolean) : [];
+        existing.push(path);
+        hidden.value = existing.join(';');
+
+        const link = document.createElement('a');
+        link.href = path;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        const img = document.createElement('img');
+        img.src = path;
+        img.alt = 'Фотофиксация';
+        link.appendChild(img);
+        strip.appendChild(link);
+    }
+
+    async function uploadBlob(blob, name) {
+        const data = new FormData();
+        data.append('photo', blob, name);
+        const res = await fetch('@Url.Action("UploadPhoto", "Requests")', {
+            method: 'POST',
+            headers: token ? { 'RequestVerificationToken': token } : {},
+            body: data
+        });
+        if (!res.ok) {
+            let message = 'Не удалось загрузить фото.';
+            try { const j = await res.json(); message = j.error || message; } catch (_) {}
+            throw new Error(message);
+        }
+        const json = await res.json();
+        addPath(json.path);
+    }
+
+    async function startCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            status.textContent = 'Браузер не поддерживает камеру. Загрузите фото из галереи.';
+            return;
+        }
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' }, width: { ideal: 1600 }, height: { ideal: 1200 } },
+                audio: false
+            });
+            video.srcObject = stream;
+            video.hidden = false;
+            cameraActions.hidden = false;
+            status.textContent = 'Камера включена. Наведите на объект и нажмите «Зафиксировать кадр».';
+        } catch (err) {
+            status.textContent = 'Доступ к камере не получен: ' + (err.message || err.name) + '. Используйте загрузку из галереи.';
+        }
+    }
+
+    function stopCamera() {
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
+        }
+        video.srcObject = null;
+        video.hidden = true;
+        cameraActions.hidden = true;
+    }
+
+    btnCamera?.addEventListener('click', startCamera);
+    btnStop?.addEventListener('click', stopCamera);
+
+    btnCapture?.addEventListener('click', async () => {
+        if (!stream || !video.videoWidth) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        canvas.toBlob(async (blob) => {
+            if (!blob) return;
+            try {
+                status.textContent = 'Загрузка кадра…';
+                await uploadBlob(blob, 'camera-' + Date.now() + '.jpg');
+                status.textContent = 'Кадр сохранён. Можно сделать ещё фото.';
+            } catch (e) {
+                status.textContent = e.message;
+            }
+        }, 'image/jpeg', 0.9);
+    });
+
+    gallery?.addEventListener('change', async () => {
+        for (const file of gallery.files) {
+            try {
+                status.textContent = 'Загрузка файла ' + file.name + '…';
+                await uploadBlob(file, file.name);
+            } catch (e) {
+                status.textContent = e.message;
+            }
+        }
+        status.textContent = 'Файлы загружены.';
+        gallery.value = '';
+    });
+
+    window.addEventListener('beforeunload', stopCamera);
+})();
+</script>
+}

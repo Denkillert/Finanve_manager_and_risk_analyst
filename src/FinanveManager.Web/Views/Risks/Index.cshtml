@@ -16,6 +16,7 @@
                 }
             </select>
             <button type="submit" class="btn btn-sm">Показать проект</button>
+            <a class="btn btn-success btn-sm" asp-controller="Risks" asp-action="ExportXlsx" asp-route-projectId="@Model.SelectedProjectId">Экспорт в Excel</a>
         </form>
     </div>
 

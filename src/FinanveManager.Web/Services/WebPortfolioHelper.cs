@@ -273,6 +273,164 @@ public static class WebPortfolioHelper
                 };
             }
 
+            case "cash-flow-forecast":
+            {
+                var projects = await db.Projects.Where(p => !p.IsDeleted).ToListAsync(ct);
+                var contractIds = await db.Contracts.Where(c => !c.IsDeleted).Select(c => c.Id).ToListAsync(ct);
+                var schedules = await db.ContractScheduleItems
+                    .Where(s => !s.IsDeleted && contractIds.Contains(s.ContractId))
+                    .ToListAsync(ct);
+                var requests = await db.PaymentRequests
+                    .Where(r => !r.IsDeleted && r.Status != RequestStatus.Rejected && r.Status != RequestStatus.Closed)
+                    .ToListAsync(ct);
+
+                var months = Enumerable.Range(0, 6)
+                    .Select(i => new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1).AddMonths(i))
+                    .ToList();
+
+                decimal openingCash = projects.Sum(p => p.InitialCash);
+                decimal running = openingCash;
+                var rows = new List<List<string>>();
+                foreach (var month in months)
+                {
+                    var monthEnd = month.AddMonths(1);
+                    decimal inflow = schedules
+                        .Where(s => s.IsIncoming && s.PlannedDate >= month && s.PlannedDate < monthEnd)
+                        .Sum(s => s.Amount);
+                    decimal outflow = schedules
+                        .Where(s => !s.IsIncoming && s.PlannedDate >= month && s.PlannedDate < monthEnd)
+                        .Sum(s => s.Amount)
+                        + requests
+                            .Where(r => r.PlannedPaymentDate >= month && r.PlannedPaymentDate < monthEnd)
+                            .Sum(r => r.PayableAmount);
+                    decimal net = inflow - outflow;
+                    running += net;
+                    decimal minCash = projects.Sum(p => p.MinCashBalance);
+                    string status = running < minCash ? "Кассовый разрыв" : running < minCash + 100m ? "На границе" : "Устойчиво";
+                    rows.Add(new List<string>
+                    {
+                        month.ToString("MM.yyyy"),
+                        inflow.ToString("N2"),
+                        outflow.ToString("N2"),
+                        net.ToString("N2"),
+                        running.ToString("N2"),
+                        status
+                    });
+                }
+
+                return new ReportGridModel
+                {
+                    ReportType = reportType,
+                    Title = "Прогноз движения денежных средств на 6 месяцев",
+                    Subtitle = $"Начальный остаток {openingCash:N2} тыс. р.; минимальный остаток по портфелю {projects.Sum(p => p.MinCashBalance):N2} тыс. р.",
+                    Headers = ["Месяц", "Поступления", "Платежи", "Чистый поток", "Остаток на конец", "Оценка ликвидности"],
+                    Rows = rows
+                };
+            }
+
+            case "ceo-portfolio-dashboard":
+            {
+                var forecasts = await BuildForecastsAsync(db, ct);
+                decimal contractValue = forecasts.Sum(f => f.Project.ContractValue);
+                decimal bac = forecasts.Sum(f => f.Forecast.Bac);
+                decimal ac = forecasts.Sum(f => f.Forecast.Ac);
+                decimal eac = forecasts.Sum(f => f.Forecast.Eac);
+                decimal reserve = forecasts.Sum(f => f.Forecast.ReserveP80);
+                decimal result = forecasts.Sum(f => f.Forecast.FinancialResultWithReserve);
+                decimal risky = forecasts.Sum(f => f.RiskSummary.ReserveP80);
+
+                return new ReportGridModel
+                {
+                    ReportType = reportType,
+                    Title = "Сводный отчёт руководителя организации по портфелю",
+                    Subtitle = $"Портфель: {forecasts.Count} проектов; контрактная стоимость {contractValue:N2} тыс. р.; BAC {bac:N2} тыс. р.; AC {ac:N2} тыс. р.; резерв P80 {reserve:N2} тыс. р.",
+                    Headers = ["Код", "Проект", "Цена / BAC", "Освоено EV / AC", "EAC", "Фин. результат с P80", "Риск-резерв P80"],
+                    Rows = forecasts.Select(f => new List<string>
+                    {
+                        f.Project.Code,
+                        f.Project.Name,
+                        $"{f.Project.ContractValue:N2} / {f.Forecast.Bac:N2}",
+                        $"{f.Forecast.Ev:N2} / {f.Forecast.Ac:N2}",
+                        f.Forecast.Eac.ToString("N2"),
+                        f.Forecast.FinancialResultWithReserve.ToString("N2"),
+                        f.RiskSummary.ReserveP80.ToString("N2")
+                    }).Concat(new[]
+                    {
+                        new List<string>
+                        {
+                            "ИТОГО", "Портфель", $"{contractValue:N2} / {bac:N2}", $"— / {ac:N2}",
+                            eac.ToString("N2"), result.ToString("N2"), risky.ToString("N2")
+                        }
+                    }).ToList()
+                };
+            }
+
+            case "ceo-liquidity":
+            {
+                var projects = await db.Projects.Where(p => !p.IsDeleted).OrderBy(p => p.Code).ToListAsync(ct);
+                var payments = await db.Payments.Where(p => !p.IsDeleted).ToListAsync(ct);
+                var requests = await db.PaymentRequests
+                    .Where(r => !r.IsDeleted && r.Status == RequestStatus.Approved)
+                    .ToListAsync(ct);
+
+                var rows = new List<List<string>>();
+                decimal totalCash = 0, totalObligations = 0;
+                foreach (var p in projects)
+                {
+                    decimal spent = payments.Where(x => x.PaymentRequest != null && x.PaymentRequest.ProjectId == p.Id).Sum(x => x.AmountInByn);
+                    if (spent == 0)
+                        spent = requests.Where(r => r.ProjectId == p.Id).Sum(r => r.PayableAmount);
+                    decimal cash = Math.Max(0m, p.InitialCash - spent);
+                    decimal obligations = requests.Where(r => r.ProjectId == p.Id).Sum(r => r.PayableAmount);
+                    decimal coverage = obligations == 0 ? 100m : Math.Round(cash / obligations * 100m, 1);
+                    totalCash += cash;
+                    totalObligations += obligations;
+                    rows.Add(new List<string>
+                    {
+                        p.Code, p.Name, p.InitialCash.ToString("N2"), spent.ToString("N2"),
+                        cash.ToString("N2"), obligations.ToString("N2"), $"{coverage:N1} %"
+                    });
+                }
+                rows.Add(new List<string>
+                {
+                    "ИТОГО", "Портфель", projects.Sum(p => p.InitialCash).ToString("N2"), "—",
+                    totalCash.ToString("N2"), totalObligations.ToString("N2"),
+                    $"{(totalObligations == 0 ? 100m : Math.Round(totalCash / totalObligations * 100m, 1)):N1} %"
+                });
+
+                return new ReportGridModel
+                {
+                    ReportType = reportType,
+                    Title = "Ликвидность и покрытие обязательств по проектам",
+                    Subtitle = "Остаток денежных средств, непокрытые обязательства и коэффициент покрытия",
+                    Headers = ["Код", "Проект", "Начальный остаток", "Израсходовано", "Доступно", "Обязательства", "Покрытие"],
+                    Rows = rows
+                };
+            }
+
+            case "ceo-critical-risks":
+            {
+                var risks = await db.Risks.Where(r => !r.IsDeleted).ToListAsync(ct);
+                var summary = RiskCalculator.CalculatePortfolioSummary(risks);
+                var critical = risks
+                    .Where(r => r.IntegralScore >= 12 || r.TriggerFired || r.Status == RiskStatus.Realized)
+                    .OrderByDescending(r => r.Emv)
+                    .ToList();
+
+                return new ReportGridModel
+                {
+                    ReportType = reportType,
+                    Title = "Критические риски, требующие решения руководителя",
+                    Subtitle = $"Критических рисков: {critical.Count}; ΣEMV = {summary.TotalEmv:N2} тыс. р.; резерв P80 = {summary.ReserveP80:N2} тыс. р.",
+                    Headers = ["Код", "Событие", "Причина", "Интеграл", "EMV", "Владелец", "Статус"],
+                    Rows = critical.Select(r => new List<string>
+                    {
+                        r.Code, r.Event, r.Cause, $"{r.IntegralScore} ({RiskCalculator.GetRiskZone(r.IntegralScore)})",
+                        r.Emv.ToString("N2"), r.OwnerRole, RussianLabels.RiskStatusName(r.Status)
+                    }).ToList()
+                };
+            }
+
             default:
             {
                 var limits = await BuildFreeLimitsAsync(db, budgetService, ct);

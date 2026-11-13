@@ -22,6 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<ContractScheduleItem> ContractScheduleItems => Set<ContractScheduleItem>();
     public DbSet<Obligation> Obligations => Set<Obligation>();
     public DbSet<Advance> Advances => Set<Advance>();
+    public DbSet<MaterialRequest> MaterialRequests => Set<MaterialRequest>();
     public DbSet<PaymentRequest> PaymentRequests => Set<PaymentRequest>();
     public DbSet<Document> Documents => Set<Document>();
     public DbSet<Payment> Payments => Set<Payment>();
@@ -66,6 +67,10 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<Advance>().ToTable("Advances", "finance");
         modelBuilder.Entity<Advance>().Property(a => a.Status).HasConversion<string>().HasMaxLength(30);
+
+        modelBuilder.Entity<MaterialRequest>().ToTable("MaterialRequests", "finance")
+            .HasIndex(r => r.Number).IsUnique();
+        modelBuilder.Entity<MaterialRequest>().Property(r => r.Status).HasConversion<string>().HasMaxLength(30);
 
         modelBuilder.Entity<PaymentRequest>().ToTable("PaymentRequests", "finance")
             .HasIndex(r => r.Number).IsUnique();

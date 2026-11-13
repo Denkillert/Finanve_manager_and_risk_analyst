@@ -56,6 +56,16 @@ public enum RequestStatus
     Rejected = 9
 }
 
+public enum MaterialRequestStatus
+{
+    Draft = 0,
+    Submitted = 1,
+    Approved = 2,
+    Ordered = 3,
+    Delivered = 4,
+    Rejected = 5
+}
+
 public enum DocumentType
 {
     Contract = 1,
@@ -140,6 +150,28 @@ public static class RussianLabels
     {
         RequestType.Advance => "Новый аванс",
         RequestType.CurrentPayment => "Текущий платёж",
+        _ => type.ToString()
+    };
+
+    public static string MaterialRequestStatusName(MaterialRequestStatus status) => status switch
+    {
+        MaterialRequestStatus.Draft => "Черновик",
+        MaterialRequestStatus.Submitted => "Передана снабженцу",
+        MaterialRequestStatus.Approved => "Согласована снабженцем",
+        MaterialRequestStatus.Ordered => "Заказана у поставщика",
+        MaterialRequestStatus.Delivered => "Поставлена на объект",
+        MaterialRequestStatus.Rejected => "Отклонена снабженцем",
+        _ => status.ToString()
+    };
+
+    public static string DocumentTypeName(DocumentType type) => type switch
+    {
+        DocumentType.Contract => "Договор",
+        DocumentType.ActS2 => "Акт выполненных работ (С-2)",
+        DocumentType.CertificateS3 => "Справка о стоимости (С-3)",
+        DocumentType.Invoice => "Счёт / ТТН",
+        DocumentType.BankStatement => "Банковская выписка",
+        DocumentType.Specification => "Спецификация",
         _ => type.ToString()
     };
 

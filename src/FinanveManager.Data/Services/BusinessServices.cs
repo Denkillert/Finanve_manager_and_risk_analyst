@@ -989,6 +989,11 @@ public class ProjectManagementService : IProjectManagementService
                 .FirstOrDefaultAsync(u => !u.IsDeleted && u.IsActive && u.Id == dto.ProjectManagerUserId.Value, ct)
                 ?? throw new InvalidOperationException("Выбранный руководитель проекта не найден или заблокирован.");
 
+            if (!string.Equals(managerUser.Role?.Code, "ProjectManager", StringComparison.OrdinalIgnoreCase))
+                throw new DomainException(
+                    "Руководителем проекта может быть назначен только прораб (роль ProjectManager).",
+                    "INVALID_PROJECT_MANAGER_ROLE");
+
             assignment = new ProjectAssignment
             {
                 ProjectId = project.Id,
@@ -1090,6 +1095,11 @@ public class ProjectManagementService : IProjectManagementService
 
         if (dto.IsPrimaryManager)
         {
+            if (!string.Equals(user.Role?.Code, "ProjectManager", StringComparison.OrdinalIgnoreCase))
+                throw new DomainException(
+                    "Ответственным руководителем проекта можно назначить только прораба (роль ProjectManager).",
+                    "INVALID_PROJECT_MANAGER_ROLE");
+
             var currentPrimaries = await _db.ProjectAssignments
                 .Where(a => !a.IsDeleted && a.ProjectId == project.Id && a.IsPrimaryManager && a.UserId != user.Id)
                 .ToListAsync(ct);

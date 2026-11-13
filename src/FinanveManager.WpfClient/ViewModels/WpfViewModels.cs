@@ -27,7 +27,7 @@ public sealed class NavItemViewModel : ViewModelBase
     }
 }
 
-public sealed record LookupItem(Guid Id, string Display)
+public sealed record LookupItem(Guid Id, string Display, bool CanBePrimaryManager = false)
 {
     public override string ToString() => Display;
 }
@@ -143,6 +143,26 @@ public sealed record ContractGridRow(
     decimal PaidAmount,
     decimal RemainderAmount);
 
+public sealed record MaterialRequestGridRow(
+    Guid Id,
+    string Number,
+    string MaterialName,
+    string ObjectName,
+    string CostItemCode,
+    decimal Quantity,
+    string Unit,
+    decimal EstimatedUnitPrice,
+    decimal EstimatedTotal,
+    decimal? AgreedUnitPrice,
+    decimal? AgreedTotal,
+    DateTime RequiredDate,
+    MaterialRequestStatus Status,
+    string StatusText,
+    string SupplierName,
+    string SupplyComment,
+    string Purpose,
+    string SpecificationNotes);
+
 public sealed record AdvanceGridRow(
     Guid Id,
     string ContractNumber,
@@ -205,20 +225,38 @@ public sealed class MainViewModel : ViewModelBase
         foreach (var def in definitions)
             NavigationItems.Add(new NavItemViewModel(def.Section, def.Title));
 
-        ReportChoices = session.RoleCode == "RiskSpecialist"
-            ? new List<ReportChoice>
+        ReportChoices = session.RoleCode switch
+        {
+            "RiskSpecialist" => new List<ReportChoice>
             {
-                new("risks-reserve-p80", "1. Реестр рисков и резерв P80"),
-                new("project-evm-forecast", "2. Прогноз стоимости проектов (EVM + P80)")
-            }
-            : new List<ReportChoice>
+                new("risks-reserve-p80", "1. Реестр рисков и резерв P80")
+            },
+            "CEO" => new List<ReportChoice>
             {
-                new("budget-plan-fact", "1. План-факт исполнения бюджета (vFreeLimit)"),
+                new("ceo-portfolio-dashboard", "1. Сводный отчёт по портфелю проектов"),
+                new("ceo-liquidity", "2. Ликвидность и покрытие обязательств"),
+                new("ceo-critical-risks", "3. Критические риски портфеля"),
+                new("cash-flow-forecast", "4. Прогноз движения денежных средств"),
+                new("budget-plan-fact", "5. План-факт исполнения бюджета"),
+                new("project-evm-forecast", "6. Прогноз стоимости проектов (EVM + P80)"),
+                new("contracts-advances", "7. Договоры и контроль авансов"),
+                new("payment-requests-violations", "8. Реестр платёжных заявок и нарушений")
+            },
+            "FinancialManager" => new List<ReportChoice>
+            {
+                new("cash-flow-forecast", "1. Прогноз движения денежных средств"),
+                new("budget-plan-fact", "2. План-факт исполнения бюджета"),
+                new("contracts-advances", "3. Договоры и контроль авансов"),
+                new("payment-requests-violations", "4. Реестр платёжных заявок и нарушений")
+            },
+            _ => new List<ReportChoice>
+            {
+                new("budget-plan-fact", "1. План-факт исполнения бюджета"),
                 new("project-evm-forecast", "2. Прогноз стоимости проектов (EVM + P80)"),
-                new("risks-reserve-p80", "3. Реестр рисков и резерв P80"),
-                new("contracts-advances", "4. Договоры и контроль авансов"),
-                new("payment-requests-violations", "5. Реестр платёжных заявок и нарушений")
-            };
+                new("contracts-advances", "3. Договоры и контроль авансов"),
+                new("payment-requests-violations", "4. Реестр платёжных заявок и нарушений")
+            }
+        };
         _selectedReportChoice = ReportChoices.FirstOrDefault();
 
         SelectSectionCommand = new RelayCommand<NavItemViewModel>(async item =>
@@ -254,7 +292,16 @@ public sealed class MainViewModel : ViewModelBase
         CreateContractCommand = new RelayCommand(async () => await CreateContractAsync());
         OffsetAdvanceCommand = new RelayCommand(async () => await OffsetSelectedAdvanceAsync());
         ImportStatementCommand = new RelayCommand(async () => await ImportStatementAsync());
-        ImportEstimateCommand = new RelayCommand(async () => await ImportEstimateAsync());
+
+        // Material requests (прораб создаёт, снабженец обрабатывает)
+        CreateMaterialRequestCommand = new RelayCommand(async () => await CreateMaterialRequestAsync());
+        SubmitMaterialRequestCommand = new RelayCommand(async () => await SubmitMaterialRequestAsync());
+        UpdateMaterialRequestCommand = new RelayCommand(async () => await UpdateMaterialRequestAsync());
+        ApproveMaterialCommand = new RelayCommand(async () => await ApproveMaterialAsync());
+        RejectMaterialCommand = new RelayCommand(async () => await RejectMaterialAsync());
+        OrderMaterialCommand = new RelayCommand(async () => await OrderMaterialAsync());
+        DeliverMaterialCommand = new RelayCommand(async () => await DeliverMaterialAsync());
+        EditMaterialCommand = new RelayCommand(() => LoadMaterialForEdit());
 
         // Risks
         RefreshRisksCommand = new RelayCommand(async () => await RefreshRisksAsync());
@@ -304,16 +351,19 @@ public sealed class MainViewModel : ViewModelBase
     public bool CanManageProjectsAndTeam => RoleCode == "CEO";
     public bool CanManageBudgets => RoleCode is "FinancialManager" or "CEO";
     public bool CanApproveVersion => RoleCode == "CEO";
-    public bool CanCreateRequest => RoleCode is "ProjectManager" or "ProcurementSpecialist" or "FinancialManager" or "CEO";
+    public bool CanCreateRequest => RoleCode is "ProcurementSpecialist" or "FinancialManager" or "CEO";
     public bool CanApproveOverrun => RoleCode == "CEO";
     public bool CanApproveRequest => RoleCode is "FinancialManager" or "CEO";
     public bool CanExecutePayment => RoleCode == "Accountant";
     public bool CanCreateAct => RoleCode is "ProjectManager" or "Accountant" or "ProcurementSpecialist";
     public bool CanRescheduleCalendar => RoleCode is "FinancialManager" or "CEO";
-    public bool CanCreateContract => RoleCode is "ProcurementSpecialist" or "FinancialManager";
+    public bool CanCreateContract => RoleCode == "ProcurementSpecialist";
     public bool CanOffsetAdvance => RoleCode is "Accountant" or "FinancialManager";
     public bool CanImportStatement => RoleCode == "Accountant";
-    public bool CanImportEstimate => RoleCode is "FinancialManager" or "ProjectManager" or "ProcurementSpecialist";
+    public bool CanCreateMaterialRequest => RoleCode == "ProjectManager";
+    public bool CanSupplyMaterial => RoleCode == "ProcurementSpecialist";
+    public bool CanSeeMaterialRequests => RoleCode is "ProjectManager" or "ProcurementSpecialist" or "Accountant" or "CEO";
+    public bool CanSeeAccountingReports => RoleCode == "Accountant";
     public bool CanEditRisks => RoleCode is "RiskSpecialist" or "ProjectManager" or "CEO";
     public bool IsAdminRole => RoleCode == "Admin";
 
@@ -412,6 +462,7 @@ public sealed class MainViewModel : ViewModelBase
     public ObservableCollection<ContractScheduleItem> ScheduleItems { get; } = new();
     public ObservableCollection<ContractGridRow> Contracts { get; } = new();
     public ObservableCollection<AdvanceGridRow> Advances { get; } = new();
+    public ObservableCollection<MaterialRequestGridRow> MaterialRequests { get; } = new();
     public ObservableCollection<RiskGridRow> Risks { get; } = new();
     public ObservableCollection<RiskMatrixCellView> RiskMatrix { get; } = new();
     public ObservableCollection<SensitivityFactorResult> Sensitivity { get; } = new();
@@ -567,12 +618,69 @@ public sealed class MainViewModel : ViewModelBase
         "BankOperationId;Date;Amount;Currency;Counterparty;RequestNumber;Purpose;OrderNo\n" +
         "OP-2026-9001;2026-11-10;850.00;BYN;ОАО Белорусский цементный завод;ЗП-20261110-0003;Оплата по акту С-2 № 18;ПП-103";
     public string StatementContent { get => _statementContent; set => SetField(ref _statementContent, value); }
-    private string _estimateContent =
-        "Code;Name;Amount\n" +
-        "ST-01;Строительные материалы, бетон и ЖБИ;6000.00\n" +
-        "ST-02;Субподрядные монтажные работы;3500.00\n" +
-        "ST-03;Инженерное оборудование;520.00";
-    public string EstimateContent { get => _estimateContent; set => SetField(ref _estimateContent, value); }
+
+    // Material requests: прораб описывает потребность, снабженец подбирает поставщика
+    private MaterialRequestGridRow? _selectedMaterialRequest;
+    public MaterialRequestGridRow? SelectedMaterialRequest
+    {
+        get => _selectedMaterialRequest;
+        set
+        {
+            if (SetField(ref _selectedMaterialRequest, value) && value != null)
+            {
+                SupplySupplierName = value.SupplierName;
+                SupplyAgreedUnitPrice = (value.AgreedUnitPrice ?? value.EstimatedUnitPrice).ToString("0.00", CultureInfo.InvariantCulture);
+                SupplyComment = value.SupplyComment;
+            }
+        }
+    }
+
+    private Guid? _editingMaterialId;
+    public Guid? EditingMaterialId
+    {
+        get => _editingMaterialId;
+        set
+        {
+            if (SetField(ref _editingMaterialId, value))
+                OnPropertyChanged(nameof(IsEditingMaterial));
+        }
+    }
+    public bool IsEditingMaterial => EditingMaterialId.HasValue;
+
+    private string _editingMaterialNumber = string.Empty;
+    public string EditingMaterialNumber { get => _editingMaterialNumber; set => SetField(ref _editingMaterialNumber, value); }
+
+    private LookupItem? _newMaterialObject;
+    public LookupItem? NewMaterialObject { get => _newMaterialObject; set => SetField(ref _newMaterialObject, value); }
+    private LookupItem? _newMaterialCostItem;
+    public LookupItem? NewMaterialCostItem { get => _newMaterialCostItem; set => SetField(ref _newMaterialCostItem, value); }
+    private string _newMaterialName = string.Empty;
+    public string NewMaterialName { get => _newMaterialName; set => SetField(ref _newMaterialName, value); }
+    private string _newMaterialUnit = "шт.";
+    public string NewMaterialUnit { get => _newMaterialUnit; set => SetField(ref _newMaterialUnit, value); }
+    private string _newMaterialQty = "10";
+    public string NewMaterialQty { get => _newMaterialQty; set => SetField(ref _newMaterialQty, value); }
+    private string _newMaterialPrice = "0.00";
+    public string NewMaterialPrice { get => _newMaterialPrice; set => SetField(ref _newMaterialPrice, value); }
+    private string _newMaterialDate = "2026-11-20";
+    public string NewMaterialDate { get => _newMaterialDate; set => SetField(ref _newMaterialDate, value); }
+    private string _newMaterialPurpose = string.Empty;
+    public string NewMaterialPurpose { get => _newMaterialPurpose; set => SetField(ref _newMaterialPurpose, value); }
+    private string _newMaterialNotes = string.Empty;
+    public string NewMaterialNotes { get => _newMaterialNotes; set => SetField(ref _newMaterialNotes, value); }
+    private bool _newMaterialSubmitImmediately = true;
+    public bool NewMaterialSubmitImmediately { get => _newMaterialSubmitImmediately; set => SetField(ref _newMaterialSubmitImmediately, value); }
+
+    private LookupItem? _supplyContract;
+    public LookupItem? SupplyContract { get => _supplyContract; set => SetField(ref _supplyContract, value); }
+    private string _supplySupplierName = string.Empty;
+    public string SupplySupplierName { get => _supplySupplierName; set => SetField(ref _supplySupplierName, value); }
+    private string _supplyAgreedUnitPrice = "0.00";
+    public string SupplyAgreedUnitPrice { get => _supplyAgreedUnitPrice; set => SetField(ref _supplyAgreedUnitPrice, value); }
+    private string _supplyComment = string.Empty;
+    public string SupplyComment { get => _supplyComment; set => SetField(ref _supplyComment, value); }
+    private string _supplyRejectReason = "Уточните марку и объём материала";
+    public string SupplyRejectReason { get => _supplyRejectReason; set => SetField(ref _supplyRejectReason, value); }
 
     // Risks Inputs
     private LookupItem? _riskProject;
@@ -689,7 +797,21 @@ public sealed class MainViewModel : ViewModelBase
     private LookupItem? _assignProject;
     public LookupItem? AssignProject { get => _assignProject; set => SetField(ref _assignProject, value); }
     private LookupItem? _assignUser;
-    public LookupItem? AssignUser { get => _assignUser; set => SetField(ref _assignUser, value); }
+    public LookupItem? AssignUser
+    {
+        get => _assignUser;
+        set
+        {
+            if (!SetField(ref _assignUser, value)) return;
+            if (value == null) return;
+            // Руководителем проекта (primary manager) может быть только прораб.
+            if (!value.CanBePrimaryManager)
+                AssignIsPrimaryManager = false;
+            AssignRoleInput = value.CanBePrimaryManager
+                ? "Руководитель проекта (прораб)"
+                : "Участник проекта";
+        }
+    }
     private string _assignRoleInput = "Руководитель проекта (прораб)";
     public string AssignRoleInput { get => _assignRoleInput; set => SetField(ref _assignRoleInput, value); }
     private bool _assignIsPrimaryManager = true;
@@ -729,7 +851,14 @@ public sealed class MainViewModel : ViewModelBase
     public RelayCommand CreateContractCommand { get; }
     public RelayCommand OffsetAdvanceCommand { get; }
     public RelayCommand ImportStatementCommand { get; }
-    public RelayCommand ImportEstimateCommand { get; }
+    public RelayCommand CreateMaterialRequestCommand { get; }
+    public RelayCommand SubmitMaterialRequestCommand { get; }
+    public RelayCommand UpdateMaterialRequestCommand { get; }
+    public RelayCommand ApproveMaterialCommand { get; }
+    public RelayCommand RejectMaterialCommand { get; }
+    public RelayCommand OrderMaterialCommand { get; }
+    public RelayCommand DeliverMaterialCommand { get; }
+    public RelayCommand EditMaterialCommand { get; }
     public RelayCommand RefreshRisksCommand { get; }
     public RelayCommand UpdateRiskCommand { get; }
     public RelayCommand CreateRiskCommand { get; }
@@ -809,16 +938,19 @@ public sealed class MainViewModel : ViewModelBase
         NewReqObject ??= ObjectLookups.FirstOrDefault();
         NewActObject ??= ObjectLookups.FirstOrDefault();
         NewLimitObject ??= ObjectLookups.FirstOrDefault();
+        NewMaterialObject ??= ObjectLookups.FirstOrDefault();
 
         OutgoingContractLookups.Clear();
         foreach (var c in contracts) OutgoingContractLookups.Add(new LookupItem(c.Id, $"{c.Number} — {c.Counterparty}"));
         NewReqContract ??= OutgoingContractLookups.FirstOrDefault();
         NewActContract ??= OutgoingContractLookups.FirstOrDefault();
+        SupplyContract ??= OutgoingContractLookups.FirstOrDefault();
 
         CostItemLookups.Clear();
         foreach (var ci in costItems) CostItemLookups.Add(new LookupItem(ci.Id, $"{ci.Code} — {ci.Name}"));
         NewReqCostItem ??= CostItemLookups.FirstOrDefault();
         NewLimitCostItem ??= CostItemLookups.FirstOrDefault();
+        NewMaterialCostItem ??= CostItemLookups.FirstOrDefault();
 
         if (CanManageProjectsAndTeam)
         {
@@ -834,17 +966,15 @@ public sealed class MainViewModel : ViewModelBase
             ProjectManagerUserLookups.Add(new LookupItem(Guid.Empty, "— Без назначения прораба —"));
             AssignableUserLookups.Clear();
 
+            // Руководителем проекта может быть только прораб (роль ProjectManager).
             foreach (var u in activeUsers.Where(x => x.Role?.Code == "ProjectManager"))
-                ProjectManagerUserLookups.Add(new LookupItem(u.Id, $"{u.FullName} ({u.Login}) — Прораб/РП"));
+                ProjectManagerUserLookups.Add(new LookupItem(u.Id, $"{u.FullName} ({u.Login}) — Прораб / РП", true));
 
             foreach (var u in activeUsers.Where(x => x.Role?.Code != "Admin"))
             {
-                string roleLabel = u.Role?.Code == "ProjectManager"
-                    ? "Руководитель проекта (прораб)"
-                    : (u.Role?.Name ?? "Сотрудник");
-                AssignableUserLookups.Add(new LookupItem(u.Id, $"{u.FullName} ({u.Login}) — {roleLabel}"));
-                if (u.Role?.Code != "ProjectManager")
-                    ProjectManagerUserLookups.Add(new LookupItem(u.Id, $"{u.FullName} ({u.Login}) — {roleLabel}"));
+                bool isPm = u.Role?.Code == "ProjectManager";
+                string roleLabel = isPm ? "Руководитель проекта (прораб)" : (u.Role?.Name ?? "Сотрудник");
+                AssignableUserLookups.Add(new LookupItem(u.Id, $"{u.FullName} ({u.Login}) — {roleLabel}", isPm));
             }
 
             SelectedNewProjectManager = ProjectManagerUserLookups.FirstOrDefault(x => x.Id == prevPm)
@@ -1005,6 +1135,47 @@ public sealed class MainViewModel : ViewModelBase
 
         if (SelectedRequest == null && PaymentRequests.Count > 0)
             SelectedRequest = PaymentRequests[0];
+
+        await LoadMaterialRequestsAsync();
+    }
+
+    private async Task LoadMaterialRequestsAsync()
+    {
+        using var scope = _dbFactory.CreateScope();
+        var list = await scope.Db.MaterialRequests
+            .Include(m => m.ConstructionObject)
+            .Include(m => m.CostItem)
+            .Where(m => !m.IsDeleted)
+            .OrderByDescending(m => m.CreatedAt)
+            .ToListAsync();
+
+        var prevId = SelectedMaterialRequest?.Id;
+        MaterialRequests.Clear();
+        foreach (var m in list)
+        {
+            MaterialRequests.Add(new MaterialRequestGridRow(
+                m.Id,
+                m.Number,
+                m.MaterialName,
+                m.ConstructionObject?.Name ?? "—",
+                m.CostItem?.Code ?? "—",
+                m.Quantity,
+                m.Unit,
+                m.EstimatedUnitPrice,
+                m.EstimatedTotal,
+                m.AgreedUnitPrice,
+                m.AgreedTotal,
+                m.RequiredDate,
+                m.Status,
+                RussianLabels.MaterialRequestStatusName(m.Status),
+                m.SupplierName ?? string.Empty,
+                m.SupplyComment ?? string.Empty,
+                m.Purpose ?? string.Empty,
+                m.SpecificationNotes ?? string.Empty));
+        }
+
+        SelectedMaterialRequest = MaterialRequests.FirstOrDefault(x => x.Id == prevId)
+            ?? MaterialRequests.FirstOrDefault();
     }
 
     private async Task LoadSelectedRequestCardAsync(PaymentRequestGridRow? row)
@@ -1123,6 +1294,8 @@ public sealed class MainViewModel : ViewModelBase
                 a.Id, a.Contract?.Number ?? "—", a.FundingSource, a.Amount, a.UsedAmount, a.Remainder,
                 a.UtilizationPercent ?? 0m, a.DueDate, RussianLabels.AdvanceStatusName(a.Status, a.IsOverdueAt(refDate))));
         }
+
+        await LoadMaterialRequestsAsync();
     }
 
     private async Task RefreshRisksAsync()
@@ -1169,6 +1342,83 @@ public sealed class MainViewModel : ViewModelBase
 
         switch (SelectedReportChoice.Key)
         {
+            case "cash-flow-forecast":
+                RCol1 = "Дата"; RCol2 = "День"; RCol3 = "Остаток на начало"; RCol4 = "Поступления"; RCol5 = "Выплаты"; RCol6 = "Остаток / разрыв";
+                var forecastDays = await ComputeCalendarAsync(scope, null, 90);
+                var meaningful = forecastDays
+                    .Where(d => d.DayIndex <= 10 || d.Inflows > 0 || d.Outflows > 0 || d.CashGap > 0)
+                    .ToList();
+                ReportSubtitle = $"Прогноз движения денежных средств на 90 дней. Дней с дефицитом: {forecastDays.Count(d => d.CashGap > 0)}, максимальный разрыв: {(forecastDays.Count == 0 ? 0m : forecastDays.Max(d => d.CashGap)):N2} тыс. р.";
+                foreach (var d in meaningful)
+                    ReportRows.Add(new ReportRowView(
+                        d.Date.ToString("dd.MM.yyyy"),
+                        d.DayIndex.ToString(),
+                        d.OpeningBalance.ToString("N2"),
+                        d.Inflows.ToString("N2"),
+                        d.Outflows.ToString("N2"),
+                        d.CashGap > 0 ? $"−{d.CashGap:N2} (разрыв)" : d.ClosingBalance.ToString("N2")));
+                break;
+
+            case "ceo-portfolio-dashboard":
+                RCol1 = "Код"; RCol2 = "Проект"; RCol3 = "Договор / BAC"; RCol4 = "EAC / P80"; RCol5 = "Фин. результат"; RCol6 = "CPI / SPI";
+                var portfolio = await BuildForecastRowsAsync(scope);
+                ReportSubtitle = $"Сводный отчёт по портфелю: {portfolio.Count} проектов, договорная цена {portfolio.Sum(p => p.ContractValue):N0} тыс. р., EAC {portfolio.Sum(p => p.Eac):N0} тыс. р.";
+                foreach (var f in portfolio)
+                    ReportRows.Add(new ReportRowView(
+                        f.Code,
+                        f.Name,
+                        $"{f.ContractValue:N0} / {f.Bac:N0}",
+                        $"{f.Eac:N2} / {f.ReserveP80:N2}",
+                        f.FinancialResult.ToString("N2"),
+                        $"{f.CpiText} / {f.SpiText}"));
+                break;
+
+            case "ceo-liquidity":
+                RCol1 = "Проект"; RCol2 = "Утверждённый бюджет B"; RCol3 = "Обязательства O"; RCol4 = "Оплачено F"; RCol5 = "Свободный лимит"; RCol6 = "Покрытие, %";
+                var liquidity = await BuildFreeLimitRowsAsync(scope);
+                var liquidityByProject = liquidity
+                    .GroupBy(l => l.ProjectCode)
+                    .Select(g => new
+                    {
+                        ProjectCode = g.Key,
+                        Contract = g.Sum(x => x.ApprovedBudget),
+                        Obligations = g.Sum(x => x.GrossObligations),
+                        Paid = g.Sum(x => x.PaidFact),
+                        Free = g.Sum(x => x.FreeLimit)
+                    })
+                    .ToList();
+                ReportSubtitle = "Ликвидность и покрытие обязательств по проектам (B — утверждённый бюджет, O — обязательства, F — оплачено)";
+                foreach (var p in liquidityByProject)
+                {
+                    decimal coverage = p.Obligations <= 0 ? 100m : Math.Round(p.Contract / p.Obligations * 100m, 1);
+                    ReportRows.Add(new ReportRowView(
+                        p.ProjectCode,
+                        p.Contract.ToString("N2"),
+                        p.Obligations.ToString("N2"),
+                        p.Paid.ToString("N2"),
+                        p.Free.ToString("N2"),
+                        $"{coverage:N1} %"));
+                }
+                break;
+
+            case "ceo-critical-risks":
+                RCol1 = "Код"; RCol2 = "Проект"; RCol3 = "Событие"; RCol4 = "R / зона"; RCol5 = "EMV / остаточный"; RCol6 = "Владелец / статус";
+                var allProjects = await scope.Db.Projects.Where(p => !p.IsDeleted).ToDictionaryAsync(p => p.Id);
+                var criticalRisks = await scope.Db.Risks.Where(r => !r.IsDeleted).OrderByDescending(r => r.IntegralScore).ToListAsync();
+                ReportSubtitle = "Критические и высокие риски портфеля (R ≥ 10)";
+                foreach (var r in criticalRisks.Where(r => r.IntegralScore >= 10))
+                {
+                    allProjects.TryGetValue(r.ProjectId, out var prj);
+                    ReportRows.Add(new ReportRowView(
+                        r.Code,
+                        prj?.Code ?? "—",
+                        r.Event,
+                        $"{r.IntegralScore} ({RiskCalculator.GetRiskZone(r.IntegralScore)})",
+                        $"{r.Emv:N2} / {(r.ResidualEmv ?? r.Emv):N2}",
+                        $"{r.OwnerRole} ({RussianLabels.RiskStatusName(r.Status)})"));
+                }
+                break;
+
             case "project-evm-forecast":
                 RCol1 = "Код"; RCol2 = "Проект"; RCol3 = "V / BAC"; RCol4 = "PV / EV / AC"; RCol5 = "CPI / SPI"; RCol6 = "EAC / Фин. рез.";
                 var forecasts = await BuildForecastRowsAsync(scope);
@@ -1588,16 +1838,157 @@ public sealed class MainViewModel : ViewModelBase
         });
     }
 
-    private async Task ImportEstimateAsync()
+    // ---------------------- Заявки на материал ----------------------
+
+    private async Task CreateMaterialRequestAsync()
     {
-        if (!CanImportEstimate) return;
+        if (!CanCreateMaterialRequest || NewMaterialObject == null) return;
+        await RunSafeAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(NewMaterialName))
+                throw new DomainException("Укажите наименование материала.");
+            decimal qty = ParseDecimal(NewMaterialQty, "количество");
+            decimal price = string.IsNullOrWhiteSpace(NewMaterialPrice) ? 0m : ParseDecimal(NewMaterialPrice, "ориентировочная цена");
+            var requiredDate = ParseDate(NewMaterialDate, new DateTime(2026, 11, 20));
+
+            using var scope = _dbFactory.CreateScope();
+            var obj = await scope.Db.ConstructionObjects.FirstAsync(o => o.Id == NewMaterialObject.Id && !o.IsDeleted);
+            var dto = new CreateMaterialRequestDto(
+                obj.ProjectId,
+                obj.Id,
+                NewMaterialCostItem?.Id,
+                NewMaterialName.Trim(),
+                string.IsNullOrWhiteSpace(NewMaterialUnit) ? "шт." : NewMaterialUnit.Trim(),
+                qty,
+                price,
+                requiredDate,
+                string.IsNullOrWhiteSpace(NewMaterialPurpose) ? null : NewMaterialPurpose.Trim(),
+                string.IsNullOrWhiteSpace(NewMaterialNotes) ? null : NewMaterialNotes.Trim(),
+                NewMaterialSubmitImmediately);
+
+            var m = await scope.MaterialRequests.CreateAsync(dto, _session.UserId, _session.Login);
+            await LoadMaterialRequestsAsync();
+            ResetMaterialForm();
+            SetStatus($"Заявка на материал {m.Number} создана ({RussianLabels.MaterialRequestStatusName(m.Status)}).", false);
+        });
+    }
+
+    private async Task UpdateMaterialRequestAsync()
+    {
+        if (!CanCreateMaterialRequest || EditingMaterialId == null || NewMaterialObject == null) return;
+        await RunSafeAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(NewMaterialName))
+                throw new DomainException("Укажите наименование материала.");
+            decimal qty = ParseDecimal(NewMaterialQty, "количество");
+            decimal price = string.IsNullOrWhiteSpace(NewMaterialPrice) ? 0m : ParseDecimal(NewMaterialPrice, "ориентировочная цена");
+            var requiredDate = ParseDate(NewMaterialDate, new DateTime(2026, 11, 20));
+
+            using var scope = _dbFactory.CreateScope();
+            var obj = await scope.Db.ConstructionObjects.FirstAsync(o => o.Id == NewMaterialObject.Id && !o.IsDeleted);
+            var dto = new CreateMaterialRequestDto(
+                obj.ProjectId, obj.Id, NewMaterialCostItem?.Id, NewMaterialName.Trim(),
+                string.IsNullOrWhiteSpace(NewMaterialUnit) ? "шт." : NewMaterialUnit.Trim(),
+                qty, price, requiredDate,
+                string.IsNullOrWhiteSpace(NewMaterialPurpose) ? null : NewMaterialPurpose.Trim(),
+                string.IsNullOrWhiteSpace(NewMaterialNotes) ? null : NewMaterialNotes.Trim(),
+                NewMaterialSubmitImmediately);
+
+            var m = await scope.MaterialRequests.UpdateAsync(EditingMaterialId.Value, dto, _session.UserId, _session.Login);
+            await LoadMaterialRequestsAsync();
+            ResetMaterialForm();
+            SetStatus($"Заявка {m.Number} доработана ({RussianLabels.MaterialRequestStatusName(m.Status)}).", false);
+        });
+    }
+
+    private async Task SubmitMaterialRequestAsync()
+    {
+        if (!CanCreateMaterialRequest || SelectedMaterialRequest == null) return;
         await RunSafeAsync(async () =>
         {
             using var scope = _dbFactory.CreateScope();
-            var catalog = await scope.Db.CostItems.Where(c => !c.IsDeleted).ToListAsync();
-            var res = scope.EstimateImporter.ImportFromExcelOrXml(EstimateContent, "smeta.csv", catalog);
-            SetStatus($"Смета: сопоставлено {res.MatchedLines}/{res.TotalLines} строк ({res.MatchPercent:N1} %).", false);
+            var m = await scope.MaterialRequests.SubmitAsync(SelectedMaterialRequest.Id, _session.UserId, _session.Login);
+            await LoadMaterialRequestsAsync();
+            SetStatus($"Заявка {m.Number} передана снабженцу.", false);
         });
+    }
+
+    private async Task ApproveMaterialAsync()
+    {
+        if (!CanSupplyMaterial || SelectedMaterialRequest == null) return;
+        await RunSafeAsync(async () =>
+        {
+            var dto = BuildSupplyDto();
+            using var scope = _dbFactory.CreateScope();
+            var m = await scope.MaterialRequests.ApproveAsync(SelectedMaterialRequest.Id, dto, _session.UserId, _session.Login);
+            await LoadMaterialRequestsAsync();
+            SetStatus($"Заявка {m.Number} согласована снабженцем.", false);
+        });
+    }
+
+    private async Task RejectMaterialAsync()
+    {
+        if (!CanSupplyMaterial || SelectedMaterialRequest == null) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            var m = await scope.MaterialRequests.RejectAsync(SelectedMaterialRequest.Id, SupplyRejectReason, _session.UserId, _session.Login);
+            await LoadMaterialRequestsAsync();
+            SetStatus($"Заявка {m.Number} возвращена прорабу: {m.SupplyComment}", false);
+        });
+    }
+
+    private async Task OrderMaterialAsync()
+    {
+        if (!CanSupplyMaterial || SelectedMaterialRequest == null) return;
+        await RunSafeAsync(async () =>
+        {
+            var dto = BuildSupplyDto();
+            using var scope = _dbFactory.CreateScope();
+            var m = await scope.MaterialRequests.MarkOrderedAsync(SelectedMaterialRequest.Id, dto, _session.UserId, _session.Login);
+            await LoadMaterialRequestsAsync();
+            SetStatus($"Заявка {m.Number} заказана у поставщика {m.SupplierName}.", false);
+        });
+    }
+
+    private async Task DeliverMaterialAsync()
+    {
+        if (!CanSupplyMaterial || SelectedMaterialRequest == null) return;
+        await RunSafeAsync(async () =>
+        {
+            using var scope = _dbFactory.CreateScope();
+            var m = await scope.MaterialRequests.MarkDeliveredAsync(SelectedMaterialRequest.Id, _session.UserId, _session.Login);
+            await LoadMaterialRequestsAsync();
+            SetStatus($"Поставка по заявке {m.Number} подтверждена.", false);
+        });
+    }
+
+    private SupplyMaterialRequestDto BuildSupplyDto()
+    {
+        decimal? agreed = null;
+        if (!string.IsNullOrWhiteSpace(SupplyAgreedUnitPrice)
+            && decimal.TryParse(SupplyAgreedUnitPrice.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsed))
+        {
+            agreed = parsed;
+        }
+
+        return new SupplyMaterialRequestDto(
+            SupplyContract?.Id,
+            string.IsNullOrWhiteSpace(SupplySupplierName) ? null : SupplySupplierName.Trim(),
+            agreed,
+            string.IsNullOrWhiteSpace(SupplyComment) ? null : SupplyComment.Trim());
+    }
+
+    private void ResetMaterialForm()
+    {
+        EditingMaterialId = null;
+        EditingMaterialNumber = string.Empty;
+        NewMaterialName = string.Empty;
+        NewMaterialQty = "10";
+        NewMaterialPrice = "0.00";
+        NewMaterialPurpose = string.Empty;
+        NewMaterialNotes = string.Empty;
+        NewMaterialSubmitImmediately = true;
     }
 
     private async Task UpdateSelectedRiskAsync()
@@ -1733,12 +2124,88 @@ public sealed class MainViewModel : ViewModelBase
         static string Esc(string? s) => $"\"{(s ?? string.Empty).Replace("\"", "\"\"")}\"";
     }
 
-    public async Task<byte[]> Build1CExportCsvBytesAsync()
+    private void LoadMaterialForEdit()
+    {
+        var m = SelectedMaterialRequest;
+        if (!CanCreateMaterialRequest || m == null) return;
+
+        if (m.Status is not (MaterialRequestStatus.Draft or MaterialRequestStatus.Rejected))
+        {
+            SetStatus("Доработка доступна только для черновика или возвращённой заявки.", true);
+            return;
+        }
+
+        EditingMaterialId = m.Id;
+        EditingMaterialNumber = m.Number;
+        NewMaterialObject = ObjectLookups.FirstOrDefault(o => o.Display == m.ObjectName) ?? NewMaterialObject;
+        NewMaterialCostItem = CostItemLookups.FirstOrDefault(c => c.Display.StartsWith(m.CostItemCode, StringComparison.Ordinal))
+            ?? NewMaterialCostItem;
+        NewMaterialName = m.MaterialName;
+        NewMaterialUnit = m.Unit;
+        NewMaterialQty = m.Quantity.ToString("0.###", CultureInfo.InvariantCulture);
+        NewMaterialPrice = m.EstimatedUnitPrice.ToString("0.00", CultureInfo.InvariantCulture);
+        NewMaterialDate = m.RequiredDate.ToString("yyyy-MM-dd");
+        NewMaterialPurpose = m.Purpose;
+        NewMaterialNotes = m.SpecificationNotes;
+        NewMaterialSubmitImmediately = true;
+
+        SetStatus($"Заявка {m.Number} загружена в форму доработки.", false);
+    }
+
+    public async Task<byte[]> Build1CClientBankExchangeBytesAsync()
+    {
+        var ctx = await BuildAccountingContextAsync();
+        return AccountingReports.Build1CClientBankExchange(ctx);
+    }
+
+    public async Task<byte[]> BuildAccountingReportBytesAsync(string report)
+    {
+        var ctx = await BuildAccountingContextAsync();
+        return report switch
+        {
+            "pnl" => AccountingReports.BuildProfitAndLoss(ctx),
+            "vat" => AccountingReports.BuildVatRegister(ctx),
+            "documents" => AccountingReports.BuildPrimaryDocumentsRegister(ctx),
+            "debts" => AccountingReports.BuildReceivablesPayables(ctx),
+            "payments" => AccountingReports.BuildPaymentsRegister(ctx),
+            _ => AccountingReports.BuildBalanceSheet(ctx)
+        };
+    }
+
+    private async Task<AccountingReportContext> BuildAccountingContextAsync()
     {
         using var scope = _dbFactory.CreateScope();
-        var payments = await scope.Db.Payments.Where(p => !p.IsDeleted).ToListAsync();
-        var csv = scope.Accounting.ExportEntriesCsv(payments);
-        return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray();
+        var org = await scope.Db.Organizations.FirstOrDefaultAsync(o => !o.IsDeleted);
+        var requests = await scope.Db.PaymentRequests
+            .Include(r => r.Contract)
+            .Include(r => r.CostItem)
+            .Where(r => !r.IsDeleted)
+            .ToListAsync();
+        var payments = await scope.Db.Payments
+            .Include(p => p.PaymentRequest)
+            .Where(p => !p.IsDeleted)
+            .ToListAsync();
+        var contracts = await scope.Db.Contracts
+            .Include(c => c.Obligations)
+            .Include(c => c.Advances)
+            .Where(c => !c.IsDeleted)
+            .ToListAsync();
+
+        return new AccountingReportContext
+        {
+            OrganizationName = org?.Name ?? "ООО «СтройФинРиск»",
+            OrganizationUnp = org?.Unp ?? "191234567",
+            ResponsiblePerson = "Громов А.Н., директор",
+            ChiefAccountant = "Ковалёва И.П., главный бухгалтер",
+            PeriodStart = new DateTime(DateTime.UtcNow.Year, 1, 1),
+            PeriodEnd = DateTime.UtcNow.Date,
+            Projects = await scope.Db.Projects.Where(p => !p.IsDeleted).ToListAsync(),
+            Contracts = contracts,
+            Requests = requests,
+            Payments = payments,
+            Documents = await scope.Db.Documents.Where(d => !d.IsDeleted).ToListAsync(),
+            MaterialRequests = await scope.Db.MaterialRequests.Where(m => !m.IsDeleted).ToListAsync()
+        };
     }
 
     // Internal Builders

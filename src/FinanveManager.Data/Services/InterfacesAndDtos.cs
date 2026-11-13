@@ -59,18 +59,6 @@ public record StatementImportReportDto(
     List<string> Warnings,
     List<BankStatementOperationDto> UnmatchedOperations);
 
-public record EstimateImportLineDto(
-    string CostItemCode,
-    string Description,
-    decimal Amount,
-    bool Matched);
-
-public record EstimateImportResultDto(
-    int TotalLines,
-    int MatchedLines,
-    decimal MatchPercent,
-    List<EstimateImportLineDto> Lines);
-
 public record EdsSignResultDto(
     bool IsValid,
     string CertificateThumbprint,
@@ -215,11 +203,27 @@ public interface IBankAdapter
 public interface IAccountingAdapter
 {
     string ExportEntriesCsv(IEnumerable<Payment> payments);
-}
 
-public interface IEstimateImporter
-{
-    EstimateImportResultDto ImportFromExcelOrXml(string content, string fileName, IReadOnlyList<CostItem> catalog);
+    /// <summary>Реестр платежей в Excel (вместо CSV).</summary>
+    byte[] ExportEntriesXlsx(IEnumerable<Payment> payments);
+
+    /// <summary>Бухгалтерский баланс (форма 1) + ОСВ + движение денежных средств.</summary>
+    byte[] ExportBalanceSheet(AccountingReportContext context);
+
+    /// <summary>Отчёт о прибылях и убытках (форма 2).</summary>
+    byte[] ExportProfitAndLoss(AccountingReportContext context);
+
+    /// <summary>Реестр НДС за период.</summary>
+    byte[] ExportVatRegister(AccountingReportContext context);
+
+    /// <summary>Реестр первичных учётных документов (ст. 10 Закона № 57-З).</summary>
+    byte[] ExportPrimaryDocumentsRegister(AccountingReportContext context);
+
+    /// <summary>Реестр дебиторской и кредиторской задолженности.</summary>
+    byte[] ExportReceivablesPayables(AccountingReportContext context);
+
+    /// <summary>Выгрузка платёжных документов в формате 1С «1CClientBankExchange».</summary>
+    byte[] Export1CClientBankExchange(AccountingReportContext context);
 }
 
 public interface IEdsSignatureService

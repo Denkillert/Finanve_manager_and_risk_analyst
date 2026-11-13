@@ -229,6 +229,52 @@ public class Advance : BaseEntity
     }
 }
 
+public class MaterialRequest : BaseEntity
+{
+    public Guid ProjectId { get; set; }
+    public Project? Project { get; set; }
+    public Guid ConstructionObjectId { get; set; }
+    public ConstructionObject? ConstructionObject { get; set; }
+    public Guid AuthorUserId { get; set; }
+    public Guid? CostItemId { get; set; }
+    public CostItem? CostItem { get; set; }
+    public Guid? ContractId { get; set; }
+    public Contract? Contract { get; set; }
+
+    public string Number { get; set; } = string.Empty;
+    public string MaterialName { get; set; } = string.Empty;
+    public string Unit { get; set; } = "шт.";
+    public decimal Quantity { get; set; }
+    public decimal EstimatedUnitPrice { get; set; }
+    public decimal EstimatedTotal { get; set; }
+    public DateTime RequiredDate { get; set; }
+    public string? Purpose { get; set; }
+    public string? SpecificationNotes { get; set; }
+
+    public MaterialRequestStatus Status { get; set; } = MaterialRequestStatus.Draft;
+    public string? SupplierName { get; set; }
+    public decimal? AgreedUnitPrice { get; set; }
+    public decimal? AgreedTotal { get; set; }
+    public string? SupplyComment { get; set; }
+
+    public DateTime? SubmittedAt { get; set; }
+    public DateTime? ApprovedAt { get; set; }
+    public DateTime? OrderedAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+    public DateTime? RejectedAt { get; set; }
+
+    public void RecalculateTotals()
+    {
+        if (Quantity < 0)
+            throw new DomainException("Количество материала не может быть отрицательным.");
+        if (EstimatedUnitPrice < 0)
+            throw new DomainException("Ориентировочная цена не может быть отрицательной.");
+        EstimatedTotal = Math.Round(Quantity * EstimatedUnitPrice, 2);
+        AgreedTotal = AgreedUnitPrice.HasValue ? Math.Round(Quantity * AgreedUnitPrice.Value, 2) : null;
+        UpdatedAt = DateTime.UtcNow;
+    }
+}
+
 public class PaymentRequest : BaseEntity
 {
     public Guid ProjectId { get; set; }

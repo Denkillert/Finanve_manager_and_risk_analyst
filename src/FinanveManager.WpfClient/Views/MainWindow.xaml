@@ -1,4 +1,4 @@
-<Window x:Class="FinanveManager.WpfClient.Views.MainWindow"
+﻿<Window x:Class="FinanveManager.WpfClient.Views.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="СтройФинРиск — Финансы и риски строительных проектов"
@@ -10,7 +10,7 @@
         WindowState="Maximized"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
-        Background="#F4F6FB">
+        Background="#F5F7F6">
     <Window.Resources>
         <Style x:Key="TrimmedCellText" TargetType="TextBlock">
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
@@ -26,7 +26,7 @@
         <!-- Левая боковая навигация (только разрешённые для роли разделы) -->
         <Border Grid.Column="0" Background="{StaticResource BrushSidebar}">
             <DockPanel LastChildFill="True">
-                <Border DockPanel.Dock="Top" Padding="16,18,16,16" BorderBrush="#1E293B" BorderThickness="0,0,0,1">
+                <Border DockPanel.Dock="Top" Padding="16,18,16,16" BorderBrush="#1B4741" BorderThickness="0,0,0,1">
                     <StackPanel Orientation="Horizontal">
                         <Border Width="38" Height="38" CornerRadius="11" Background="{StaticResource BrushBrandMark}"
                                 VerticalAlignment="Center" Margin="0,0,10,0">
@@ -36,23 +36,23 @@
                         </Border>
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock Text="СтройФинРиск" Foreground="White" FontSize="17" FontWeight="Bold"/>
-                            <TextBlock Text="{Binding RoleName}" Foreground="#94A3B8" FontSize="11" Margin="0,2,0,0"
+                            <TextBlock Text="{Binding RoleName}" Foreground="#94A19E" FontSize="11" Margin="0,2,0,0"
                                        TextWrapping="Wrap" MaxWidth="150"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>
 
-                <Border DockPanel.Dock="Bottom" Padding="12,12,12,14" BorderBrush="#1E293B" BorderThickness="0,1,0,0">
+                <Border DockPanel.Dock="Bottom" Padding="12,12,12,14" BorderBrush="#1B4741" BorderThickness="0,1,0,0">
                     <StackPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                            <Border Width="32" Height="32" CornerRadius="16" Background="#24365A" Margin="0,0,9,0">
-                                <TextBlock Text="{Binding UserInitials}" Foreground="#BFDBFE" FontSize="11.5"
+                            <Border Width="32" Height="32" CornerRadius="16" Background="#1A4A43" Margin="0,0,9,0">
+                                <TextBlock Text="{Binding UserInitials}" Foreground="#9FE8DA" FontSize="11.5"
                                            FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                             </Border>
                             <StackPanel VerticalAlignment="Center" MaxWidth="150">
-                                <TextBlock Text="{Binding UserFullName}" Foreground="#E2E8F0" FontWeight="SemiBold"
+                                <TextBlock Text="{Binding UserFullName}" Foreground="#DCEBE6" FontWeight="SemiBold"
                                            FontSize="12" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Foreground="#8FA2BD" FontSize="10.5" TextTrimming="CharacterEllipsis">
+                                <TextBlock Foreground="#8FB2A9" FontSize="10.5" TextTrimming="CharacterEllipsis">
                                     <Run Text="{Binding UserLogin, Mode=OneWay}"/>
                                     <Run Text=" · "/>
                                     <Run Text="{Binding RoleCode, Mode=OneWay}"/>
@@ -88,31 +88,44 @@
         <!-- Основная рабочая область -->
         <DockPanel Grid.Column="1" LastChildFill="True">
             <!-- Верхняя строка заголовка -->
-            <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E5EAF2" BorderThickness="0,0,0,1" Padding="24,13">
+            <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E2EAE7" BorderThickness="0,0,0,1" Padding="24,12">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Background="#EFF6FF" CornerRadius="12" Padding="11,5" VerticalAlignment="Center">
+                        <Border Background="#E6F5F1" CornerRadius="12" Padding="11,5" VerticalAlignment="Center" Margin="0,0,10,0">
                             <StackPanel Orientation="Horizontal">
-                                <Ellipse Width="7" Height="7" Fill="#22C55E" Margin="0,0,7,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding DatabaseModeLabel}" Foreground="#1D4ED8" FontSize="11.5" FontWeight="SemiBold"/>
+                                <Ellipse Width="7" Height="7" Fill="#14B8A6" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding DatabaseModeLabel}" Foreground="#0E7C66" FontSize="11.5" FontWeight="SemiBold"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="#F4F8F6" BorderBrush="#E2EAE7" BorderThickness="1" CornerRadius="16" Padding="5,4,12,4">
+                            <StackPanel Orientation="Horizontal">
+                                <Border Width="26" Height="26" CornerRadius="13" Background="#0E7C66" Margin="0,0,8,0">
+                                    <TextBlock Text="{Binding UserInitials}" Foreground="White" FontSize="10.5"
+                                               FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding UserFullName}" FontSize="11.5" FontWeight="SemiBold" Foreground="#10201E"/>
+                                    <TextBlock Text="{Binding RoleName}" FontSize="10" Foreground="#64706D"/>
+                                </StackPanel>
                             </StackPanel>
                         </Border>
                     </StackPanel>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="{Binding SelectedSectionTitle}" FontSize="18" FontWeight="Bold" Foreground="#0F172A"/>
-                        <TextBlock Text="Рабочее пространство финансового контура" FontSize="11.5" Foreground="#64748B" Margin="0,1,0,0"/>
+                        <TextBlock Text="СТРОЙФИНРИСК · ФИНАНСОВЫЙ КОНТУР" FontSize="9.5" FontWeight="Bold"
+                                   Foreground="#0E7C66" Margin="0,0,0,2"/>
+                        <TextBlock Text="{Binding SelectedSectionTitle}" FontSize="18" FontWeight="Bold" Foreground="#10201E"/>
                     </StackPanel>
                 </DockPanel>
             </Border>
 
             <!-- Нижняя строка статуса -->
-            <Border DockPanel.Dock="Bottom" BorderBrush="#E5EAF2" BorderThickness="0,1,0,0" Padding="20,8">
+            <Border DockPanel.Dock="Bottom" BorderBrush="#E2EAE7" BorderThickness="0,1,0,0" Padding="20,8">
                 <Border.Style>
                     <Style TargetType="Border">
                         <Setter Property="Background" Value="White"/>
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsStatusError}" Value="True">
-                                <Setter Property="Background" Value="#FEF2F2"/>
+                                <Setter Property="Background" Value="#FBEEED"/>
                             </DataTrigger>
                         </Style.Triggers>
                     </Style>
@@ -120,10 +133,10 @@
                 <TextBlock Text="{Binding StatusMessage}" FontSize="12" TextTrimming="CharacterEllipsis">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="#334155"/>
+                            <Setter Property="Foreground" Value="#2F423F"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsStatusError}" Value="True">
-                                    <Setter Property="Foreground" Value="#991B1B"/>
+                                    <Setter Property="Foreground" Value="#8F2A25"/>
                                     <Setter Property="FontWeight" Value="SemiBold"/>
                                 </DataTrigger>
                             </Style.Triggers>
@@ -140,32 +153,32 @@
                         <UniformGrid Columns="5" Margin="0,0,-10,14">
                             <Border Style="{StaticResource KpiCardBorder}">
                                 <StackPanel>
-                                    <TextBlock Text="Контрактная цена" FontSize="11.5" Foreground="#64748B"/>
-                                    <TextBlock Text="{Binding KpiContractTotal}" FontSize="18" FontWeight="Bold" Foreground="#0F172A" Margin="0,4,0,0"/>
+                                    <TextBlock Text="Контрактная цена" FontSize="11.5" Foreground="#64706D"/>
+                                    <TextBlock Text="{Binding KpiContractTotal}" FontSize="18" FontWeight="Bold" Foreground="#10201E" Margin="0,4,0,0"/>
                                 </StackPanel>
                             </Border>
                             <Border Style="{StaticResource KpiCardBorder}">
                                 <StackPanel>
-                                    <TextBlock Text="Утверждённый бюджет BAC" FontSize="11.5" Foreground="#64748B"/>
-                                    <TextBlock Text="{Binding KpiApprovedBudget}" FontSize="18" FontWeight="Bold" Foreground="#0F172A" Margin="0,4,0,0"/>
+                                    <TextBlock Text="Утверждённый бюджет BAC" FontSize="11.5" Foreground="#64706D"/>
+                                    <TextBlock Text="{Binding KpiApprovedBudget}" FontSize="18" FontWeight="Bold" Foreground="#10201E" Margin="0,4,0,0"/>
                                 </StackPanel>
                             </Border>
                             <Border Style="{StaticResource KpiCardBorder}">
                                 <StackPanel>
-                                    <TextBlock Text="Свободный лимит Lдост" FontSize="11.5" Foreground="#64748B"/>
-                                    <TextBlock Text="{Binding KpiFreeLimit}" FontSize="18" FontWeight="Bold" Foreground="#065F46" Margin="0,4,0,0"/>
+                                    <TextBlock Text="Свободный лимит Lдост" FontSize="11.5" Foreground="#64706D"/>
+                                    <TextBlock Text="{Binding KpiFreeLimit}" FontSize="18" FontWeight="Bold" Foreground="#0A5F4F" Margin="0,4,0,0"/>
                                 </StackPanel>
                             </Border>
                             <Border Style="{StaticResource KpiCardBorder}">
                                 <StackPanel>
-                                    <TextBlock Text="Резерв рисков P80" FontSize="11.5" Foreground="#64748B"/>
-                                    <TextBlock Text="{Binding KpiReserveP80}" FontSize="18" FontWeight="Bold" Foreground="#1D4ED8" Margin="0,4,0,0"/>
+                                    <TextBlock Text="Резерв рисков P80" FontSize="11.5" Foreground="#64706D"/>
+                                    <TextBlock Text="{Binding KpiReserveP80}" FontSize="18" FontWeight="Bold" Foreground="#0E7C66" Margin="0,4,0,0"/>
                                 </StackPanel>
                             </Border>
                             <Border Style="{StaticResource KpiCardBorder}">
                                 <StackPanel>
-                                    <TextBlock Text="Кассовые разрывы (90 дн.)" FontSize="11.5" Foreground="#64748B"/>
-                                    <TextBlock Text="{Binding KpiCashGap}" FontSize="18" FontWeight="Bold" Foreground="#B91C1C" Margin="0,4,0,0"/>
+                                    <TextBlock Text="Кассовые разрывы (90 дн.)" FontSize="11.5" Foreground="#64706D"/>
+                                    <TextBlock Text="{Binding KpiCashGap}" FontSize="18" FontWeight="Bold" Foreground="#C2413B" Margin="0,4,0,0"/>
                                 </StackPanel>
                             </Border>
                         </UniformGrid>
@@ -224,7 +237,7 @@
                                             <Style TargetType="DataGridRow">
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding HasCashGap}" Value="True">
-                                                        <Setter Property="Background" Value="#FEE2E2"/>
+                                                        <Setter Property="Background" Value="#FBEEED"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -265,56 +278,56 @@
                                            FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
                                 <WrapPanel Margin="0,0,0,8">
                                     <StackPanel Width="115" Margin="0,0,10,8">
-                                        <TextBlock Text="Шифр проекта" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Шифр проекта" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewProjectCode}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="250" Margin="0,0,10,8">
-                                        <TextBlock Text="Наименование проекта" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Наименование проекта" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewProjectName}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="115" Margin="0,0,10,8">
-                                        <TextBlock Text="Цена V (тыс. р.)" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Цена V (тыс. р.)" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewProjectContractValue}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="75" Margin="0,0,10,8">
-                                        <TextBlock Text="Валюта" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Валюта" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <ComboBox ItemsSource="{Binding Currencies}" SelectedItem="{Binding NewProjectCurrency}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="105" Margin="0,0,10,8">
-                                        <TextBlock Text="Нач. остаток ДС" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Нач. остаток ДС" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewProjectInitialCash}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="105" Margin="0,0,10,8">
-                                        <TextBlock Text="Мин. остаток ДС" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Мин. остаток ДС" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewProjectMinCash}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="110" Margin="0,0,10,8">
-                                        <TextBlock Text="Дата начала" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Дата начала" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewProjectStartDate}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="110" Margin="0,0,10,8">
-                                        <TextBlock Text="Дата окончания" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Дата окончания" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewProjectEndDate}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="220" Margin="0,0,10,8">
-                                        <TextBlock Text="Первый объект строительства" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Первый объект строительства" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewProjectObjectName}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="190" Margin="0,0,10,8">
-                                        <TextBlock Text="Адрес объекта" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Адрес объекта" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewProjectObjectAddress}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="300" Margin="0,0,10,8">
-                                        <TextBlock Text="Назначить руководителя (прораба)" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Назначить руководителя (прораба)" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <ComboBox ItemsSource="{Binding ProjectManagerUserLookups}" SelectedItem="{Binding SelectedNewProjectManager}" DisplayMemberPath="Display" Padding="6,5"/>
                                     </StackPanel>
                                     <Button Content="Создать проект и назначить прораба" Command="{Binding CreateProjectCommand}"
                                             Style="{StaticResource PrimaryButton}" VerticalAlignment="Bottom" Margin="0,0,0,8"/>
                                 </WrapPanel>
 
-                                <Separator Margin="0,4,0,10" Background="#E2E8F0"/>
+                                <Separator Margin="0,4,0,10" Background="#DCEBE6"/>
                                 <TextBlock Text="Добавление объекта строительства и этапа работ (PV) к существующему проекту"
-                                           FontSize="12.5" FontWeight="SemiBold" Foreground="#334155" Margin="0,0,0,8"/>
+                                           FontSize="12.5" FontWeight="SemiBold" Foreground="#2F423F" Margin="0,0,0,8"/>
                                 <WrapPanel>
                                     <ComboBox ItemsSource="{Binding ProjectLookups}" SelectedItem="{Binding ObjectStageProject}" DisplayMemberPath="Display" Width="250" Padding="6,5" Margin="0,0,8,6"/>
                                     <TextBox Text="{Binding NewObjectName}" Width="180" Padding="6,5" Margin="0,0,8,6" ToolTip="Наименование объекта"/>
@@ -330,12 +343,15 @@
                                 Visibility="{Binding CanManageProjectsAndTeam, Converter={StaticResource BoolToVis}}">
                             <StackPanel>
                                 <TextBlock Text="Команда проекта и закреплённые руководители (прорабы)"
-                                           FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                           FontSize="14" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                <TextBlock Text="Ответственным руководителем проекта можно назначить только сотрудника с ролью «Прораб / РП». Остальные сотрудники добавляются участниками."
+                                           FontSize="11.5" Foreground="#64706D" Margin="0,0,0,10" TextWrapping="Wrap"/>
                                 <WrapPanel Margin="0,0,0,10">
                                     <ComboBox ItemsSource="{Binding ProjectLookups}" SelectedItem="{Binding AssignProject}" DisplayMemberPath="Display" Width="250" Padding="6,5" Margin="0,0,8,6"/>
                                     <ComboBox ItemsSource="{Binding AssignableUserLookups}" SelectedItem="{Binding AssignUser}" DisplayMemberPath="Display" Width="310" Padding="6,5" Margin="0,0,8,6"/>
                                     <TextBox Text="{Binding AssignRoleInput}" Width="210" Padding="6,5" Margin="0,0,8,6" ToolTip="Проектная роль"/>
-                                    <CheckBox IsChecked="{Binding AssignIsPrimaryManager}" Content="Ответственный прораб / РП" VerticalAlignment="Center" Margin="0,0,10,6"/>
+                                    <CheckBox IsChecked="{Binding AssignIsPrimaryManager}" Content="Ответственный прораб / РП" VerticalAlignment="Center" Margin="0,0,10,6"
+                                              ToolTip="Доступно только для сотрудников с ролью ProjectManager"/>
                                     <Button Content="Назначить в проект" Command="{Binding AssignMemberCommand}" Style="{StaticResource SuccessButton}" Margin="0,0,8,6"/>
                                     <Button Content="Снять выбранное назначение" Command="{Binding RemoveMemberCommand}" Style="{StaticResource DangerButton}" Margin="0,0,0,6"/>
                                 </WrapPanel>
@@ -438,6 +454,94 @@
 
                     <!-- 3. Платёжные заявки -->
                     <StackPanel Visibility="{Binding IsRequestsSection, Converter={StaticResource BoolToVis}}">
+                        <!-- Заявки прораба на материал: только потребность, без выбора поставщика -->
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14"
+                                Visibility="{Binding CanCreateMaterialRequest, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock FontSize="14" FontWeight="SemiBold" Margin="0,0,0,2">
+                                    <Run Text="Заявка на материал"/>
+                                    <Run Text="{Binding EditingMaterialNumber, Mode=OneWay}" Foreground="#0E7C66"/>
+                                </TextBlock>
+                                <TextBlock Text="Прораб указывает материал, количество, срок и назначение. Поставщика и договор подбирает снабженец."
+                                           FontSize="11.5" Foreground="#64706D" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <WrapPanel>
+                                    <StackPanel Width="220" Margin="0,0,12,8">
+                                        <TextBlock Text="Объект строительства" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <ComboBox ItemsSource="{Binding ObjectLookups}" SelectedItem="{Binding NewMaterialObject}" DisplayMemberPath="Display" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="230" Margin="0,0,12,8">
+                                        <TextBlock Text="Статья затрат" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <ComboBox ItemsSource="{Binding CostItemLookups}" SelectedItem="{Binding NewMaterialCostItem}" DisplayMemberPath="Display" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="260" Margin="0,0,12,8">
+                                        <TextBlock Text="Наименование материала" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewMaterialName}" Padding="6,5" ToolTip="Например, плиты перекрытия ПК 60-15-8"/>
+                                    </StackPanel>
+                                    <StackPanel Width="80" Margin="0,0,12,8">
+                                        <TextBlock Text="Ед. изм." FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewMaterialUnit}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="95" Margin="0,0,12,8">
+                                        <TextBlock Text="Количество" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewMaterialQty}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="110" Margin="0,0,12,8">
+                                        <TextBlock Text="Цена за ед., BYN" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewMaterialPrice}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="125" Margin="0,0,12,8">
+                                        <TextBlock Text="Срок поставки" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewMaterialDate}" Padding="6,5" ToolTip="Формат ГГГГ-ММ-ДД"/>
+                                    </StackPanel>
+                                    <StackPanel Width="250" Margin="0,0,12,8">
+                                        <TextBlock Text="Назначение / участок" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewMaterialPurpose}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="280" Margin="0,0,12,8">
+                                        <TextBlock Text="Технические требования" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding NewMaterialNotes}" Padding="6,5" ToolTip="Марка, ГОСТ/СТБ, сертификаты"/>
+                                    </StackPanel>
+                                    <CheckBox Content="Сразу передать снабженцу" IsChecked="{Binding NewMaterialSubmitImmediately}"
+                                              VerticalAlignment="Bottom" Margin="0,0,12,12"/>
+                                    <Button Content="Создать заявку" Command="{Binding CreateMaterialRequestCommand}"
+                                            Style="{StaticResource PrimaryButton}" VerticalAlignment="Bottom" Margin="0,0,8,8"
+                                            Visibility="{Binding IsEditingMaterial, Converter={StaticResource InverseBoolToVis}}"/>
+                                    <Button Content="Сохранить доработку" Command="{Binding UpdateMaterialRequestCommand}"
+                                            Style="{StaticResource SuccessButton}" VerticalAlignment="Bottom" Margin="0,0,8,8"
+                                            Visibility="{Binding IsEditingMaterial, Converter={StaticResource BoolToVis}}"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14"
+                                Visibility="{Binding CanSeeMaterialRequests, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="Материальные заявки" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                                <DataGrid ItemsSource="{Binding MaterialRequests}" SelectedItem="{Binding SelectedMaterialRequest}" MaxHeight="230">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Номер" Binding="{Binding Number}" Width="135"/>
+                                        <DataGridTextColumn Header="Материал" Binding="{Binding MaterialName}" Width="240" ElementStyle="{StaticResource TrimmedCellText}"/>
+                                        <DataGridTextColumn Header="Объект" Binding="{Binding ObjectName}" Width="180" ElementStyle="{StaticResource TrimmedCellText}"/>
+                                        <DataGridTextColumn Header="Кол-во" Binding="{Binding Quantity, StringFormat=N3}" Width="75"/>
+                                        <DataGridTextColumn Header="Ед." Binding="{Binding Unit}" Width="50"/>
+                                        <DataGridTextColumn Header="Оценка, BYN" Binding="{Binding EstimatedTotal, StringFormat=N2}" Width="100"/>
+                                        <DataGridTextColumn Header="Срок" Binding="{Binding RequiredDate, StringFormat=dd.MM.yyyy}" Width="88"/>
+                                        <DataGridTextColumn Header="Статус" Binding="{Binding StatusText}" Width="170"/>
+                                        <DataGridTextColumn Header="Поставщик" Binding="{Binding SupplierName}" Width="*" ElementStyle="{StaticResource TrimmedCellText}"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                                <WrapPanel Margin="0,10,0,0"
+                                           Visibility="{Binding CanCreateMaterialRequest, Converter={StaticResource BoolToVis}}">
+                                    <Button Content="Доработать выбранную" Command="{Binding EditMaterialCommand}"
+                                            Style="{StaticResource SecondaryButton}" Margin="0,0,8,6"/>
+                                    <Button Content="Передать снабженцу" Command="{Binding SubmitMaterialRequestCommand}"
+                                            Style="{StaticResource PrimaryButton}" Margin="0,0,8,6"/>
+                                    <TextBlock Text="Доработка доступна для черновика и заявки, возвращённой снабженцем."
+                                               FontSize="11" Foreground="#64706D" VerticalAlignment="Center" Margin="0,0,0,6"/>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+
                         <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,10">
@@ -461,12 +565,12 @@
                                     </DataGrid.Columns>
                                 </DataGrid>
 
-                                <Border Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,10,0,0">
+                                <Border Background="#F4F8F6" BorderBrush="#DCEBE6" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,10,0,0">
                                     <StackPanel>
                                         <TextBlock Text="Карточка выбранной заявки (реквизиты, расчёт Lдост / Oост и история)"
-                                                   FontSize="12" FontWeight="SemiBold" Foreground="#0F172A" Margin="0,0,0,4"/>
-                                        <TextBlock Text="{Binding SelectedRequestCardSummary}" FontSize="12" Foreground="#334155" TextWrapping="Wrap"/>
-                                        <TextBlock Text="{Binding SelectedRequestHistoryText}" FontSize="11.5" Foreground="#64748B" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                                   FontSize="12" FontWeight="SemiBold" Foreground="#10201E" Margin="0,0,0,4"/>
+                                        <TextBlock Text="{Binding SelectedRequestCardSummary}" FontSize="12" Foreground="#2F423F" TextWrapping="Wrap"/>
+                                        <TextBlock Text="{Binding SelectedRequestHistoryText}" FontSize="11.5" Foreground="#64706D" TextWrapping="Wrap" Margin="0,4,0,0"/>
                                     </StackPanel>
                                 </Border>
 
@@ -505,39 +609,39 @@
                                            FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
                                 <WrapPanel>
                                     <StackPanel Width="230" Margin="0,0,12,8">
-                                        <TextBlock Text="Объект строительства" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Объект строительства" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <ComboBox ItemsSource="{Binding ObjectLookups}" SelectedItem="{Binding NewReqObject}" DisplayMemberPath="Display" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="250" Margin="0,0,12,8">
-                                        <TextBlock Text="Договор" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Договор" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <ComboBox ItemsSource="{Binding OutgoingContractLookups}" SelectedItem="{Binding NewReqContract}" DisplayMemberPath="Display" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="230" Margin="0,0,12,8">
-                                        <TextBlock Text="Статья затрат" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Статья затрат" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <ComboBox ItemsSource="{Binding CostItemLookups}" SelectedItem="{Binding NewReqCostItem}" DisplayMemberPath="Display" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="155" Margin="0,0,12,8">
-                                        <TextBlock Text="Тип заявки" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Тип заявки" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <ComboBox ItemsSource="{Binding RequestTypes}" SelectedItem="{Binding NewReqType}" DisplayMemberPath="Title" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="110" Margin="0,0,12,8">
-                                        <TextBlock Text="Сумма" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Сумма" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewReqAmount}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="80" Margin="0,0,12,8">
-                                        <TextBlock Text="Валюта" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Валюта" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <ComboBox ItemsSource="{Binding Currencies}" SelectedItem="{Binding NewReqCurrency}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="115" Margin="0,0,12,8">
-                                        <TextBlock Text="Дата (ГГГГ-ММ-ДД)" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Дата (ГГГГ-ММ-ДД)" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewReqDate}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="120" Margin="0,0,12,8">
-                                        <TextBlock Text="Документ С-2" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Документ С-2" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewReqDocNo}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="250" Margin="0,0,12,8">
-                                        <TextBlock Text="Назначение" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Назначение" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewReqPurpose}" Padding="6,5"/>
                                     </StackPanel>
                                     <Button Content="Создать и проверить" Command="{Binding CreateRequestCommand}"
@@ -555,31 +659,31 @@
                                            FontSize="14" FontWeight="SemiBold" Margin="0,0,0,10"/>
                                 <WrapPanel>
                                     <StackPanel Width="230" Margin="0,0,12,8">
-                                        <TextBlock Text="Договор" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Договор" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <ComboBox ItemsSource="{Binding OutgoingContractLookups}" SelectedItem="{Binding NewActContract}" DisplayMemberPath="Display" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="220" Margin="0,0,12,8">
-                                        <TextBlock Text="Объект строительства" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Объект строительства" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <ComboBox ItemsSource="{Binding ObjectLookups}" SelectedItem="{Binding NewActObject}" DisplayMemberPath="Display" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="110" Margin="0,0,12,8">
-                                        <TextBlock Text="Номер акта" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Номер акта" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewActNumber}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="100" Margin="0,0,12,8">
-                                        <TextBlock Text="Сумма Sакт" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Сумма Sакт" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewActGross}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="100" Margin="0,0,12,8">
-                                        <TextBlock Text="Зачёт аванса" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Зачёт аванса" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewActOffset}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="100" Margin="0,0,12,8">
-                                        <TextBlock Text="Удержание" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Удержание" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewActRetention}" Padding="6,5"/>
                                     </StackPanel>
                                     <StackPanel Width="320" Margin="0,0,12,8">
-                                        <TextBlock Text="Описание выполненных работ" FontSize="11.5" Foreground="#475569" Margin="0,0,0,3"/>
+                                        <TextBlock Text="Описание выполненных работ" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
                                         <TextBox Text="{Binding NewActDesc}" Padding="6,5"/>
                                     </StackPanel>
                                     <Button Content="Зарегистрировать акт С-2" Command="{Binding CreateActCommand}"
@@ -651,7 +755,7 @@
                                             <Style TargetType="DataGridRow">
                                                 <Style.Triggers>
                                                     <DataTrigger Binding="{Binding HasCashGap}" Value="True">
-                                                        <Setter Property="Background" Value="#FEE2E2"/>
+                                                        <Setter Property="Background" Value="#FBEEED"/>
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -694,7 +798,7 @@
                         <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
                             <StackPanel>
                                 <DockPanel Margin="0,0,0,10">
-                                    <Button DockPanel.Dock="Right" Content="Выгрузить проводки для 1С (CSV)"
+                                    <Button DockPanel.Dock="Right" Content="Выгрузка в 1С (1CClientBankExchange)"
                                             Click="Export1CButton_OnClick" Style="{StaticResource SecondaryButton}"
                                             Visibility="{Binding CanOffsetAdvance, Converter={StaticResource BoolToVis}}"/>
                                     <TextBlock Text="Реестр договоров и обязательств" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
@@ -712,6 +816,58 @@
                                         <DataGridTextColumn Header="Остаток" Binding="{Binding RemainderAmount, StringFormat=N2}" Width="*"/>
                                     </DataGrid.Columns>
                                 </DataGrid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Обработка материальных заявок прораба снабженцем -->
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14"
+                                Visibility="{Binding CanSupplyMaterial, Converter={StaticResource BoolToVis}}">
+                            <StackPanel>
+                                <TextBlock Text="Заявки прораба на материал" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                <TextBlock Text="Снабженец согласует потребность, подбирает поставщика, договор и согласованную цену."
+                                           FontSize="11.5" Foreground="#64706D" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                <DataGrid ItemsSource="{Binding MaterialRequests}" SelectedItem="{Binding SelectedMaterialRequest}" MaxHeight="220">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="Номер" Binding="{Binding Number}" Width="135"/>
+                                        <DataGridTextColumn Header="Материал" Binding="{Binding MaterialName}" Width="230" ElementStyle="{StaticResource TrimmedCellText}"/>
+                                        <DataGridTextColumn Header="Объект" Binding="{Binding ObjectName}" Width="175" ElementStyle="{StaticResource TrimmedCellText}"/>
+                                        <DataGridTextColumn Header="Кол-во" Binding="{Binding Quantity, StringFormat=N3}" Width="72"/>
+                                        <DataGridTextColumn Header="Ед." Binding="{Binding Unit}" Width="48"/>
+                                        <DataGridTextColumn Header="Оценка" Binding="{Binding EstimatedTotal, StringFormat=N2}" Width="90"/>
+                                        <DataGridTextColumn Header="Срок" Binding="{Binding RequiredDate, StringFormat=dd.MM.yyyy}" Width="86"/>
+                                        <DataGridTextColumn Header="Статус" Binding="{Binding StatusText}" Width="160"/>
+                                        <DataGridTextColumn Header="Поставщик" Binding="{Binding SupplierName}" Width="*" ElementStyle="{StaticResource TrimmedCellText}"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+
+                                <WrapPanel Margin="0,10,0,0">
+                                    <StackPanel Width="230" Margin="0,0,10,8">
+                                        <TextBlock Text="Договор поставки" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <ComboBox ItemsSource="{Binding OutgoingContractLookups}" SelectedItem="{Binding SupplyContract}" DisplayMemberPath="Display" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="200" Margin="0,0,10,8">
+                                        <TextBlock Text="Поставщик" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding SupplySupplierName}" Padding="6,5" ToolTip="ООО «Поставщик»"/>
+                                    </StackPanel>
+                                    <StackPanel Width="135" Margin="0,0,10,8">
+                                        <TextBlock Text="Цена за ед., BYN" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding SupplyAgreedUnitPrice}" Padding="6,5"/>
+                                    </StackPanel>
+                                    <StackPanel Width="230" Margin="0,0,10,8">
+                                        <TextBlock Text="Комментарий" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding SupplyComment}" Padding="6,5" ToolTip="Условия поставки, сроки"/>
+                                    </StackPanel>
+                                    <StackPanel Width="215" Margin="0,0,10,8">
+                                        <TextBlock Text="Причина возврата прорабу" FontSize="11.5" Foreground="#43574F" Margin="0,0,0,3"/>
+                                        <TextBox Text="{Binding SupplyRejectReason}" Padding="6,5"/>
+                                    </StackPanel>
+                                </WrapPanel>
+                                <WrapPanel>
+                                    <Button Content="Согласовать" Command="{Binding ApproveMaterialCommand}" Style="{StaticResource SuccessButton}" Margin="0,0,8,6"/>
+                                    <Button Content="Заказать у поставщика" Command="{Binding OrderMaterialCommand}" Style="{StaticResource PrimaryButton}" Margin="0,0,8,6"/>
+                                    <Button Content="Подтвердить поставку" Command="{Binding DeliverMaterialCommand}" Style="{StaticResource SecondaryButton}" Margin="0,0,8,6"/>
+                                    <Button Content="Вернуть прорабу" Command="{Binding RejectMaterialCommand}" Style="{StaticResource DangerButton}" Margin="0,0,8,6"/>
+                                </WrapPanel>
                             </StackPanel>
                         </Border>
 
@@ -760,17 +916,42 @@
                             <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14"
                                     Visibility="{Binding CanImportStatement, Converter={StaticResource BoolToVis}}">
                                 <StackPanel>
-                                    <TextBlock Text="Импорт банковской выписки CSV / MT940 (контроль дублей по BankOperationId)" FontSize="13.5" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                    <TextBox Text="{Binding StatementContent}" AcceptsReturn="True" Height="90" VerticalScrollBarVisibility="Auto" Margin="0,0,0,8"/>
-                                    <Button Content="Загрузить и сверить выписку" Command="{Binding ImportStatementCommand}" Style="{StaticResource PrimaryButton}" HorizontalAlignment="Left"/>
+                                    <TextBlock Text="Импорт банковской выписки CSV / MT940" FontSize="13.5" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                    <TextBlock Text="Файл читается с диска (UTF-8 или Windows-1251), дубли отсекаются по BankOperationId."
+                                               FontSize="11.5" Foreground="#64706D" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                                    <WrapPanel Margin="0,0,0,8">
+                                        <Button Content="Выбрать файл выписки…" Click="ImportStatementFileButton_OnClick"
+                                                Style="{StaticResource SecondaryButton}" Margin="0,0,8,6"/>
+                                        <Button Content="Загрузить и сверить выписку" Command="{Binding ImportStatementCommand}"
+                                                Style="{StaticResource PrimaryButton}" Margin="0,0,8,6"/>
+                                    </WrapPanel>
+                                    <TextBox Text="{Binding StatementContent}" AcceptsReturn="True" Height="110"
+                                             VerticalScrollBarVisibility="Auto" FontFamily="Consolas" FontSize="11.5"/>
                                 </StackPanel>
                             </Border>
+
                             <Border Style="{StaticResource CardBorder}"
-                                    Visibility="{Binding CanImportEstimate, Converter={StaticResource BoolToVis}}">
+                                    Visibility="{Binding CanSeeAccountingReports, Converter={StaticResource BoolToVis}}">
                                 <StackPanel>
-                                    <TextBlock Text="Импорт сметы и маппинг статей затрат (≥ 95 %)" FontSize="13.5" FontWeight="SemiBold" Margin="0,0,0,8"/>
-                                    <TextBox Text="{Binding EstimateContent}" AcceptsReturn="True" Height="90" VerticalScrollBarVisibility="Auto" Margin="0,0,0,8"/>
-                                    <Button Content="Выполнить маппинг сметы" Command="{Binding ImportEstimateCommand}" Style="{StaticResource SecondaryButton}" HorizontalAlignment="Left"/>
+                                    <TextBlock Text="Бухгалтерская и налоговая отчётность" FontSize="13.5" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                    <TextBlock Text="Формы построены по Закону № 57-З (ст. 10, 14–15), Постановлению Минфина № 102, Постановлению МАиС № 29 (С-2/С-3)."
+                                               FontSize="11.5" Foreground="#64706D" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                                    <WrapPanel>
+                                        <Button Content="Баланс (форма 1)" Tag="balance" Click="ExportAccountingButton_OnClick"
+                                                Style="{StaticResource SecondaryButton}" Margin="0,0,8,6"/>
+                                        <Button Content="Прибыли и убытки (форма 2)" Tag="pnl" Click="ExportAccountingButton_OnClick"
+                                                Style="{StaticResource SecondaryButton}" Margin="0,0,8,6"/>
+                                        <Button Content="Реестр НДС" Tag="vat" Click="ExportAccountingButton_OnClick"
+                                                Style="{StaticResource SecondaryButton}" Margin="0,0,8,6"/>
+                                        <Button Content="Первичные документы" Tag="documents" Click="ExportAccountingButton_OnClick"
+                                                Style="{StaticResource SecondaryButton}" Margin="0,0,8,6"/>
+                                        <Button Content="Дебиторка / кредиторка" Tag="debts" Click="ExportAccountingButton_OnClick"
+                                                Style="{StaticResource SecondaryButton}" Margin="0,0,8,6"/>
+                                        <Button Content="Реестр платежей" Tag="payments" Click="ExportAccountingButton_OnClick"
+                                                Style="{StaticResource SecondaryButton}" Margin="0,0,8,6"/>
+                                        <Button Content="Выгрузка в 1С (1CClientBankExchange)" Click="Export1CButton_OnClick"
+                                                Style="{StaticResource PrimaryButton}" Margin="0,0,8,6"/>
+                                    </WrapPanel>
                                 </StackPanel>
                             </Border>
                         </StackPanel>
@@ -792,26 +973,26 @@
                                 <UniformGrid Columns="4" Margin="0,0,-10,0">
                                     <Border Style="{StaticResource KpiCardBorder}">
                                         <StackPanel>
-                                            <TextBlock Text="ΣEMV (ожидаемые потери)" FontSize="11.5" Foreground="#64748B"/>
+                                            <TextBlock Text="ΣEMV (ожидаемые потери)" FontSize="11.5" Foreground="#64706D"/>
                                             <TextBlock Text="{Binding RiskSummaryEmv}" FontSize="17" FontWeight="Bold"/>
                                         </StackPanel>
                                     </Border>
                                     <Border Style="{StaticResource KpiCardBorder}">
                                         <StackPanel>
-                                            <TextBlock Text="Портфельное СКО σ" FontSize="11.5" Foreground="#64748B"/>
+                                            <TextBlock Text="Портфельное СКО σ" FontSize="11.5" Foreground="#64706D"/>
                                             <TextBlock Text="{Binding RiskSummarySigma}" FontSize="17" FontWeight="Bold"/>
                                         </StackPanel>
                                     </Border>
                                     <Border Style="{StaticResource KpiCardBorder}">
                                         <StackPanel>
-                                            <TextBlock Text="Резерв P80" FontSize="11.5" Foreground="#64748B"/>
-                                            <TextBlock Text="{Binding RiskSummaryP80}" FontSize="17" FontWeight="Bold" Foreground="#1D4ED8"/>
+                                            <TextBlock Text="Резерв P80" FontSize="11.5" Foreground="#64706D"/>
+                                            <TextBlock Text="{Binding RiskSummaryP80}" FontSize="17" FontWeight="Bold" Foreground="#0E7C66"/>
                                         </StackPanel>
                                     </Border>
                                     <Border Style="{StaticResource KpiCardBorder}">
                                         <StackPanel>
-                                            <TextBlock Text="Остаточный EMV после мер" FontSize="11.5" Foreground="#64748B"/>
-                                            <TextBlock Text="{Binding RiskSummaryResidual}" FontSize="17" FontWeight="Bold" Foreground="#065F46"/>
+                                            <TextBlock Text="Остаточный EMV после мер" FontSize="11.5" Foreground="#64706D"/>
+                                            <TextBlock Text="{Binding RiskSummaryResidual}" FontSize="17" FontWeight="Bold" Foreground="#0A5F4F"/>
                                         </StackPanel>
                                     </Border>
                                 </UniformGrid>
@@ -829,7 +1010,7 @@
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Border Background="{Binding BackgroundHex}" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="4" Margin="2" Padding="6,5">
+                                            <Border Background="{Binding BackgroundHex}" BorderBrush="#D2DED9" BorderThickness="1" CornerRadius="4" Margin="2" Padding="6,5">
                                                 <StackPanel>
                                                     <TextBlock Text="{Binding HeaderText}" Foreground="{Binding ForegroundHex}" FontSize="11" FontWeight="SemiBold" TextAlignment="Center"/>
                                                     <TextBlock Text="{Binding CodesText}" Foreground="{Binding ForegroundHex}" FontSize="12" FontWeight="Bold" TextAlignment="Center" TextWrapping="Wrap" Margin="0,2,0,0"/>
@@ -916,7 +1097,7 @@
                                     </StackPanel>
                                     <StackPanel>
                                         <TextBlock Text="Регламентная отчётность" FontSize="14" FontWeight="SemiBold"/>
-                                        <TextBlock Text="{Binding ReportSubtitle}" FontSize="12" Foreground="#64748B"/>
+                                        <TextBlock Text="{Binding ReportSubtitle}" FontSize="12" Foreground="#64706D"/>
                                     </StackPanel>
                                 </DockPanel>
 

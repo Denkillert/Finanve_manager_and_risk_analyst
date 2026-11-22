@@ -10,7 +10,7 @@
         <div class="card-header">
             <h3 class="card-title">Оформление акта сдачи-приёмки С-2 / С-3</h3>
         </div>
-        <form method="post" asp-controller="Requests" asp-action="CreateAct" class="form-grid">
+        <form method="post" asp-controller="Requests" asp-action="CreateAct" class="form-grid" id="actForm">
             <input type="hidden" name="returnTo" value="Acts" />
             <div class="field">
                 <label>Договор</label>
@@ -53,9 +53,23 @@
                 <label>Гарант. удержание (тыс. р.)</label>
                 <input type="number" step="0.01" name="retentionAmount" value="17.50" />
             </div>
-            <div class="field">
-                <label>Фотофиксация (путь / ссылка)</label>
-                <input name="photoEvidencePaths" placeholder="photos/obj1_stage2.jpg" />
+            <div class="field span-3">
+                <label>Фотофиксация объекта</label>
+                <div class="photo-tools">
+                    <button type="button" class="btn btn-outline btn-sm" id="btnCamera">Сделать фото</button>
+                    <label class="btn btn-outline btn-sm file-btn">
+                        Загрузить из галереи
+                        <input type="file" id="photoGallery" accept="image/*" multiple hidden />
+                    </label>
+                    <span class="muted" id="photoStatus">Камера или файл: JPG, PNG, WEBP</span>
+                </div>
+                <video id="cameraPreview" autoplay playsinline hidden></video>
+                <div class="photo-actions" id="cameraActions" hidden>
+                    <button type="button" class="btn btn-sm" id="btnCapture">Зафиксировать кадр</button>
+                    <button type="button" class="btn btn-outline btn-sm" id="btnStopCamera">Остановить камеру</button>
+                </div>
+                <div class="photo-strip" id="photoStrip"></div>
+                <input type="hidden" name="photoEvidencePaths" id="photoEvidencePaths" />
             </div>
             <div class="field">
                 <label>Описание выполненных работ</label>
@@ -110,11 +124,14 @@
                     <th class="num">Зачёт / Удерж.</th>
                     <th class="num">К оплате Sк_опл</th>
                     <th>Выполненные работы</th>
+                    <th>Фото</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach (var a in Model.Acts)
                 {
+                    var photos = (a.PhotoEvidencePaths ?? "")
+                        .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                     <tr>
                         <td><strong>@a.Number</strong></td>
                         <td>@a.Date.ToString("dd.MM.yyyy")</td>
@@ -122,9 +139,146 @@
                         <td class="num">@a.AdvanceOffset.ToString("N2") / @a.RetentionAmount.ToString("N2")</td>
                         <td class="num"><strong>@a.NetAmount.ToString("N2")</strong></td>
                         <td>@a.ActWorkDescription</td>
+                        <td>
+                            @if (photos.Length == 0)
+                            {
+                                <span class="muted">—</span>
+                            }
+                            else
+                            {
+                                <div class="photo-thumbs">
+                                    @foreach (var p in photos)
+                                    {
+                                        <a href="@p" target="_blank" rel="noopener">
+                                            <img src="@p" alt="Фото акта @a.Number" loading="lazy" />
+                                        </a>
+                                    }
+                                </div>
+                            }
+                        </td>
                     </tr>
                 }
             </tbody>
         </table>
     </div>
 </div>
+
+@section Scripts {
+<script>
+(function () {
+    const form = document.getElementById('actForm');
+    if (!form) return;
+
+    const tokenInput = form.querySelector('input[name="__RequestVerificationToken"]');
+    const token = tokenInput ? tokenInput.value : '';
+    const hidden = document.getElementById('photoEvidencePaths');
+    const strip = document.getElementById('photoStrip');
+    const status = document.getElementById('photoStatus');
+    const video = document.getElementById('cameraPreview');
+    const cameraActions = document.getElementById('cameraActions');
+    const btnCamera = document.getElementById('btnCamera');
+    const btnCapture = document.getElementById('btnCapture');
+    const btnStop = document.getElementById('btnStopCamera');
+    const gallery = document.getElementById('photoGallery');
+    let stream = null;
+
+    function addPath(path) {
+        const existing = hidden.value ? hidden.value.split(';').filter(Boolean) : [];
+        existing.push(path);
+        hidden.value = existing.join(';');
+
+        const link = document.createElement('a');
+        link.href = path;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        const img = document.createElement('img');
+        img.src = path;
+        img.alt = 'Фотофиксация';
+        link.appendChild(img);
+        strip.appendChild(link);
+    }
+
+    async function uploadBlob(blob, name) {
+        const data = new FormData();
+        data.append('photo', blob, name);
+        const res = await fetch('@Url.Action("UploadPhoto", "Requests")', {
+            method: 'POST',
+            headers: token ? { 'RequestVerificationToken': token } : {},
+            body: data
+        });
+        if (!res.ok) {
+            let message = 'Не удалось загрузить фото.';
+            try { const j = await res.json(); message = j.error || message; } catch (_) {}
+            throw new Error(message);
+        }
+        const json = await res.json();
+        addPath(json.path);
+    }
+
+    async function startCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            status.textContent = 'Браузер не поддерживает камеру. Загрузите фото из галереи.';
+            return;
+        }
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' }, width: { ideal: 1600 }, height: { ideal: 1200 } },
+                audio: false
+            });
+            video.srcObject = stream;
+            video.hidden = false;
+            cameraActions.hidden = false;
+            status.textContent = 'Камера включена. Наведите на объект и нажмите «Зафиксировать кадр».';
+        } catch (err) {
+            status.textContent = 'Доступ к камере не получен: ' + (err.message || err.name) + '. Используйте загрузку из галереи.';
+        }
+    }
+
+    function stopCamera() {
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
+        }
+        video.srcObject = null;
+        video.hidden = true;
+        cameraActions.hidden = true;
+    }
+
+    btnCamera?.addEventListener('click', startCamera);
+    btnStop?.addEventListener('click', stopCamera);
+
+    btnCapture?.addEventListener('click', async () => {
+        if (!stream || !video.videoWidth) return;
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        canvas.toBlob(async (blob) => {
+            if (!blob) return;
+            try {
+                status.textContent = 'Загрузка кадра…';
+                await uploadBlob(blob, 'camera-' + Date.now() + '.jpg');
+                status.textContent = 'Кадр сохранён. Можно сделать ещё фото.';
+            } catch (e) {
+                status.textContent = e.message;
+            }
+        }, 'image/jpeg', 0.9);
+    });
+
+    gallery?.addEventListener('change', async () => {
+        for (const file of gallery.files) {
+            try {
+                status.textContent = 'Загрузка файла ' + file.name + '…';
+                await uploadBlob(file, file.name);
+            } catch (e) {
+                status.textContent = e.message;
+            }
+        }
+        status.textContent = 'Файлы загружены.';
+        gallery.value = '';
+    });
+
+    window.addEventListener('beforeunload', stopCamera);
+})();
+</script>
+}

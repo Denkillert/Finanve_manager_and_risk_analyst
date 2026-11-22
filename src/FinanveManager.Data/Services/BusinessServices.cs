@@ -590,7 +590,8 @@ public class PaymentRequestService : IPaymentRequestService
     {
         var messages = new List<string>();
         var contract = await _contractRepo.GetByIdAsync(request.ContractId, ct);
-        bool contractValid = contract != null && !contract.IsDeleted && contract.ProjectId == request.ProjectId
+        bool contractValid = contract != null && !contract.IsDeleted
+                             && (contract.ProjectId == null || contract.ProjectId == request.ProjectId)
                              && !string.IsNullOrWhiteSpace(docNumber);
 
         if (!contractValid)

@@ -3,7 +3,7 @@
     ViewData["Title"] = "Договоры и снабжение";
     ViewData["Subtitle"] = "Материальные заявки прораба, договоры с поставщиками, авансы и интеграции с банком и 1С";
     var roleCode = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value ?? "";
-    var refDate = new DateTime(2026, 11, 10);
+    var refDate = DateTime.Today;
     var isSupply = roleCode == "ProcurementSpecialist";
     var isAccountant = roleCode == "Accountant";
 }

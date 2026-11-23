@@ -130,7 +130,7 @@ public class AdminController : Controller
             DocumentSource = string.IsNullOrWhiteSpace(documentSource) ? "Внутренний стандарт" : documentSource.Trim(),
             ValueText = valueText?.Trim() ?? "",
             NumericValue = numericValue,
-            ValidFrom = new DateTime(2026, 11, 10),
+            ValidFrom = DateTime.Today,
             ResponsibleRole = string.IsNullOrWhiteSpace(responsibleRole) ? "Финансовый менеджер" : responsibleRole.Trim(),
             Revision = 1
         };

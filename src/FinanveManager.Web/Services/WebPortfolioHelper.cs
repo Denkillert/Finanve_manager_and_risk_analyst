@@ -113,7 +113,7 @@ public static class WebPortfolioHelper
     public static async Task<CalendarViewModel> BuildCalendarAsync(
         AppDbContext db, Guid? projectId, int horizonDays = 90, CancellationToken ct = default)
     {
-        var startDate = new DateTime(2026, 11, 10);
+        var startDate = DateTime.Today;
         var projects = await db.Projects.Where(p => !p.IsDeleted).OrderBy(p => p.Code).ToListAsync(ct);
         var selectedProjects = projectId.HasValue
             ? projects.Where(p => p.Id == projectId.Value).ToList()
@@ -140,22 +140,7 @@ public static class WebPortfolioHelper
                             || r.Status == RequestStatus.Approved))
             .ToListAsync(ct);
 
-        var dailyFlows = new Dictionary<DateTime, (decimal Inflows, decimal Outflows)>();
-        foreach (var item in scheduleItems.Where(s => s.PlannedDate.Date > startDate.Date))
-        {
-            var d = item.PlannedDate.Date;
-            dailyFlows.TryGetValue(d, out var cur);
-            dailyFlows[d] = item.IsIncoming
-                ? (cur.Inflows + item.Amount, cur.Outflows)
-                : (cur.Inflows, cur.Outflows + item.Amount);
-        }
-
-        foreach (var req in pendingRequests.Where(r => r.PlannedPaymentDate.Date > startDate.AddDays(5)))
-        {
-            var d = req.PlannedPaymentDate.Date;
-            dailyFlows.TryGetValue(d, out var cur);
-            dailyFlows[d] = (cur.Inflows, cur.Outflows + req.AmountInByn);
-        }
+        var dailyFlows = FinancialCalculator.BuildCashFlows(startDate, scheduleItems, pendingRequests);
 
         var forecastDays = FinancialCalculator.CalculateCashCalendar(
             initialCash, minCash, startDate, horizonDays, dailyFlows);

@@ -79,6 +79,10 @@ public class RisksController : Controller
         {
             TempData["Error"] = ex.Message;
         }
+        catch (FormatException)
+        {
+            TempData["Error"] = "Некорректная версия записи. Обновите страницу и повторите.";
+        }
         catch (DbUpdateException)
         {
             TempData["Error"] = "Ошибка сохранения оценки риска в БД. Обновите страницу и повторите.";
@@ -112,6 +116,11 @@ public class RisksController : Controller
             if (await _db.Risks.AnyAsync(r => !r.IsDeleted && r.ProjectId == projectId && r.Code == normalizedCode, ct))
                 throw new DuplicateEntityException($"Риск с кодом {normalizedCode} уже существует в этом проекте.");
 
+            RiskCalculator.GetProbabilityScore(probability);
+            RiskCalculator.GetImpactScore(monetaryImpact);
+            if (residualProbability is < 0m or > 1m)
+                throw new DomainException("Остаточная вероятность риска должна находиться в диапазоне [0; 1].");
+
             var risk = new Risk
             {
                 ProjectId = projectId,
@@ -119,9 +128,9 @@ public class RisksController : Controller
                 Event = eventText.Trim(),
                 Cause = "Выявлено в ходе мониторинга проекта",
                 Consequence = "Потенциальное отклонение стоимости/срока",
-                Probability = Math.Clamp(probability, 0.01m, 0.99m),
-                MonetaryImpact = Math.Max(0m, monetaryImpact),
-                ResidualProbability = residualProbability.HasValue ? Math.Clamp(residualProbability.Value, 0m, 0.99m) : null,
+                Probability = probability,
+                MonetaryImpact = monetaryImpact,
+                ResidualProbability = residualProbability,
                 OwnerRole = string.IsNullOrWhiteSpace(ownerRole) ? "Руководитель проекта" : ownerRole.Trim(),
                 Mitigation = mitigation ?? string.Empty,
                 EarlyIndicator = earlyIndicator ?? string.Empty,

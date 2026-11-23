@@ -2,6 +2,9 @@ using FinanveManager.Data.Persistence;
 using FinanveManager.Data.Services;
 using FinanveManager.Web.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +18,25 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.AccessDeniedPath = "/Account/AccessDenied";
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
+        options.Events.OnValidatePrincipal = async context =>
+        {
+            var idText = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+            var role = context.Principal?.FindFirstValue(ClaimTypes.Role);
+            var login = context.Principal?.Identity?.Name;
+            var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+            var user = Guid.TryParse(idText, out var id)
+                ? await db.Users.AsNoTracking().Include(u => u.Role)
+                    .FirstOrDefaultAsync(u => u.Id == id, context.HttpContext.RequestAborted)
+                : null;
+            if (user == null || user.IsDeleted || !user.IsActive || user.Role == null ||
+                !string.Equals(user.Login, login, StringComparison.Ordinal) ||
+                !string.Equals(user.Role.Code, role, StringComparison.Ordinal) ||
+                !RolePermissions.IsClientAllowed(user.Role.Code, ClientApp.Web))
+            {
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            }
+        };
     });
 
 builder.Services.AddAuthorization();

@@ -511,8 +511,12 @@ public class NbrbCurrencyRateProvider : ICurrencyRateProvider
         ["CNY"] = 0.4500m
     };
 
-    public Task<decimal> GetRateToBynAsync(string currency, DateTime date, CancellationToken ct = default) =>
-        Task.FromResult(DefaultRates.TryGetValue(currency, out var r) ? r : 1.0000m);
+    public Task<decimal> GetRateToBynAsync(string currency, DateTime date, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(currency) || !DefaultRates.TryGetValue(currency.Trim(), out var rate))
+            throw new DomainException($"Для валюты «{currency}» не задан курс к BYN.");
+        return Task.FromResult(rate);
+    }
 }
 
 public class AuditService : IAuditService
@@ -623,6 +627,8 @@ public sealed class DataScope : IAsyncDisposable, IDisposable
             new EfRepository<Contract>(db),
             new EfRepository<Document>(db),
             new EfRepository<Project>(db),
+            new EfRepository<ConstructionObject>(db),
+            new EfRepository<CostItem>(db),
             new EfRepository<Payment>(db),
             Budget, advPolicy, wf, rate, eds, pub, Audit, uow);
         Risks = new RiskService(

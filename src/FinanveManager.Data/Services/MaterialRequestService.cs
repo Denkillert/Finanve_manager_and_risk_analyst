@@ -154,8 +154,8 @@ public class MaterialRequestService : IMaterialRequestService
     {
         var request = await _db.MaterialRequests.FirstOrDefaultAsync(r => !r.IsDeleted && r.Id == id, ct)
             ?? throw new DomainException("Заявка на материал не найдена.");
-        if (request.Status is MaterialRequestStatus.Delivered or MaterialRequestStatus.Rejected)
-            throw new DomainException("Нельзя согласовать заявку в текущем статусе.");
+        if (request.Status is not (MaterialRequestStatus.Submitted or MaterialRequestStatus.Approved))
+            throw new DomainException("Согласовать можно только отправленную или уже согласованную заявку.");
 
         await ApplySupplyAsync(request, dto, ct);
         request.Status = MaterialRequestStatus.Approved;
@@ -174,8 +174,8 @@ public class MaterialRequestService : IMaterialRequestService
     {
         var request = await _db.MaterialRequests.FirstOrDefaultAsync(r => !r.IsDeleted && r.Id == id, ct)
             ?? throw new DomainException("Заявка на материал не найдена.");
-        if (request.Status is MaterialRequestStatus.Delivered)
-            throw new DomainException("Поставленная заявка не может быть отклонена.");
+        if (request.Status is not (MaterialRequestStatus.Submitted or MaterialRequestStatus.Approved) || request.PaymentRequestId.HasValue)
+            throw new DomainException("Заявку в текущем статусе или с созданной платёжной заявкой нельзя отклонить.");
 
         request.Status = MaterialRequestStatus.Rejected;
         request.SupplyComment = string.IsNullOrWhiteSpace(reason) ? "Требуется уточнение потребности" : reason.Trim();
@@ -243,12 +243,19 @@ public class MaterialRequestService : IMaterialRequestService
         if (!contractId.HasValue || contractId.Value == Guid.Empty)
         {
             var contract = await _db.Contracts
-                .Where(c => !c.IsDeleted && c.Direction == ContractDirection.SupplierSubcontractorOutgoing)
+                .Where(c => !c.IsDeleted && c.Direction == ContractDirection.SupplierSubcontractorOutgoing &&
+                            (c.ProjectId == null || c.ProjectId == request.ProjectId))
                 .FirstOrDefaultAsync(c => c.Counterparty == request.SupplierName, ct);
             contractId = contract?.Id;
         }
         if (!contractId.HasValue || contractId.Value == Guid.Empty)
             throw new DomainException("Для оплаты зарегистрируйте договор с выбранным поставщиком.");
+
+        var paymentContract = await _db.Contracts.FirstOrDefaultAsync(c => !c.IsDeleted && c.Id == contractId.Value, ct);
+        if (paymentContract == null || paymentContract.Direction != ContractDirection.SupplierSubcontractorOutgoing ||
+            (paymentContract.ProjectId.HasValue && paymentContract.ProjectId != request.ProjectId) ||
+            !string.Equals(paymentContract.Counterparty, request.SupplierName, StringComparison.OrdinalIgnoreCase))
+            throw new DomainException("Договор не соответствует выбранному поставщику или проекту.");
 
         Guid? costItemId = request.CostItemId;
         if (!costItemId.HasValue)
@@ -289,6 +296,7 @@ public class MaterialRequestService : IMaterialRequestService
 
         var (payment, _) = await _paymentRequests.CreateAsync(dto, userId, login, ct);
 
+        request.ContractId = contractId;
         request.PaymentRequestId = payment.Id;
         request.UpdatedAt = DateTime.UtcNow;
         await _audit.LogAsync(userId, login, nameof(MaterialRequest), request.Number,
@@ -300,60 +308,88 @@ public class MaterialRequestService : IMaterialRequestService
 
     private async Task ApplySupplyAsync(MaterialRequest request, SupplyMaterialRequestDto dto, CancellationToken ct)
     {
+        var supplierName = request.SupplierName;
+        var supplierId = request.SupplierId;
+        var offerId = request.SupplierOfferId;
+        var price = request.AgreedUnitPrice;
+        Contract? selectedContract = null;
+
+        if (dto.ContractId.HasValue && dto.ContractId.Value != Guid.Empty)
+        {
+            selectedContract = await _db.Contracts.FirstOrDefaultAsync(c => !c.IsDeleted && c.Id == dto.ContractId.Value, ct)
+                ?? throw new DomainException("Выбранный договор поставки не найден.");
+        }
+
         if (dto.SupplierOfferId.HasValue && dto.SupplierOfferId.Value != Guid.Empty)
         {
-            var offer = await _db.SupplierOffers
-                .Include(o => o.Supplier)
+            var offer = await _db.SupplierOffers.Include(o => o.Supplier)
                 .FirstOrDefaultAsync(o => !o.IsDeleted && o.IsActive && o.Id == dto.SupplierOfferId.Value, ct)
                 ?? throw new DomainException("Выбранное предложение поставщика не найдено.");
-
-            request.SupplierOfferId = offer.Id;
-            request.SupplierId = offer.SupplierId;
-            request.SupplierName = offer.Supplier?.Name ?? dto.SupplierName?.Trim();
-            request.AgreedUnitPrice = offer.UnitPrice;
+            if (offer.Supplier == null || offer.Supplier.IsDeleted || !offer.Supplier.IsActive ||
+                (offer.ValidUntil.HasValue && offer.ValidUntil.Value.Date < DateTime.Today))
+                throw new DomainException("Поставщик или его предложение больше не действуют.");
+            if (!string.Equals(offer.Unit.Trim(), request.Unit.Trim(), StringComparison.OrdinalIgnoreCase))
+                throw new DomainException("Единица измерения предложения не соответствует заявке.");
+            if (offer.UnitPrice < 0)
+                throw new DomainException("Цена предложения не может быть отрицательной.");
+            supplierName = offer.Supplier.Name;
+            supplierId = offer.SupplierId;
+            offerId = offer.Id;
+            price = offer.UnitPrice;
         }
         else
         {
-            if (dto.ContractId.HasValue && dto.ContractId.Value != Guid.Empty)
+            var requestedName = !string.IsNullOrWhiteSpace(dto.SupplierName) ? dto.SupplierName.Trim()
+                : selectedContract?.Counterparty;
+            if (!string.IsNullOrWhiteSpace(requestedName) &&
+                !string.Equals(requestedName, supplierName, StringComparison.OrdinalIgnoreCase))
             {
-                var contract = await _db.Contracts
-                    .FirstOrDefaultAsync(c => !c.IsDeleted && c.Id == dto.ContractId.Value, ct)
-                    ?? throw new DomainException("Выбранный договор поставки не найден.");
-                request.ContractId = contract.Id;
-                request.SupplierName = string.IsNullOrWhiteSpace(dto.SupplierName)
-                    ? contract.Counterparty
-                    : dto.SupplierName.Trim();
+                supplierName = requestedName;
+                supplierId = null;
+                offerId = null;
+                price = null;
             }
-            else if (!string.IsNullOrWhiteSpace(dto.SupplierName))
-            {
-                request.SupplierName = dto.SupplierName.Trim();
-            }
-
             if (dto.AgreedUnitPrice.HasValue)
             {
                 if (dto.AgreedUnitPrice.Value < 0)
                     throw new DomainException("Согласованная цена не может быть отрицательной.");
-                request.AgreedUnitPrice = dto.AgreedUnitPrice.Value;
+                price = dto.AgreedUnitPrice.Value;
             }
         }
 
-        if (string.IsNullOrWhiteSpace(request.SupplierName))
+        if (string.IsNullOrWhiteSpace(supplierName))
             throw new DomainException("Выберите предложение поставщика или укажите поставщика вручную.");
 
-        // Если снабженец не выбрал договор, подбираем действующий договор с этим поставщиком.
-        if (!request.ContractId.HasValue && dto.ContractId.HasValue && dto.ContractId.Value != Guid.Empty)
-            request.ContractId = dto.ContractId.Value;
-        if (!request.ContractId.HasValue)
+        if (selectedContract == null && request.ContractId.HasValue)
         {
-            var supplierContract = await _db.Contracts
-                .Where(c => !c.IsDeleted && c.Direction == ContractDirection.SupplierSubcontractorOutgoing)
-                .FirstOrDefaultAsync(c => c.Counterparty == request.SupplierName, ct);
-            request.ContractId = supplierContract?.Id;
+            var existing = await _db.Contracts.FirstOrDefaultAsync(c => !c.IsDeleted && c.Id == request.ContractId, ct);
+            if (existing != null && string.Equals(existing.Counterparty, supplierName, StringComparison.OrdinalIgnoreCase))
+                selectedContract = existing;
         }
+        if (selectedContract == null)
+            selectedContract = await _db.Contracts.FirstOrDefaultAsync(c => !c.IsDeleted &&
+                c.Direction == ContractDirection.SupplierSubcontractorOutgoing &&
+                (c.ProjectId == null || c.ProjectId == request.ProjectId) && c.Counterparty == supplierName, ct);
 
+        if (selectedContract != null &&
+            (selectedContract.Direction != ContractDirection.SupplierSubcontractorOutgoing ||
+             (selectedContract.ProjectId.HasValue && selectedContract.ProjectId != request.ProjectId) ||
+             !string.Equals(selectedContract.Counterparty, supplierName, StringComparison.OrdinalIgnoreCase)))
+            throw new DomainException("Договор должен относиться к проекту и выбранному поставщику и предусматривать исходящий платёж.");
+
+        if (request.PaymentRequestId.HasValue &&
+            (request.ContractId != selectedContract?.Id || request.SupplierId != supplierId ||
+             request.SupplierOfferId != offerId || request.AgreedUnitPrice != price ||
+             !string.Equals(request.SupplierName, supplierName, StringComparison.OrdinalIgnoreCase)))
+            throw new DomainException("После создания платёжной заявки менять поставщика, договор или цену нельзя.");
+
+        request.ContractId = selectedContract?.Id;
+        request.SupplierName = supplierName;
+        request.SupplierId = supplierId;
+        request.SupplierOfferId = offerId;
+        request.AgreedUnitPrice = price;
         if (!string.IsNullOrWhiteSpace(dto.Comment))
             request.SupplyComment = dto.Comment.Trim();
-
         request.RecalculateTotals();
     }
 

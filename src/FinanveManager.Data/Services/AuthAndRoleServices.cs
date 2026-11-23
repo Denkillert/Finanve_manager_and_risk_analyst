@@ -189,6 +189,12 @@ public class AuthService
             return new AuthLoginResult(false, null,
                 $"Учётная запись заблокирована до {user.LockedUntil.Value.ToLocalTime():HH:mm:ss} после 5 неудачных попыток (НФТ-7).");
 
+        if (user.LockedUntil.HasValue && user.LockedUntil.Value <= DateTime.UtcNow)
+        {
+            user.LockedUntil = null;
+            user.FailedLoginCount = 0;
+        }
+
         if (!PasswordHasher.VerifyPassword(password, user.PasswordHash))
         {
             user.FailedLoginCount += 1;
@@ -205,7 +211,11 @@ public class AuthService
             return new AuthLoginResult(false, null, err);
         }
 
-        string roleCode = user.Role?.Code ?? "ProjectManager";
+        if (user.Role == null ||
+            !RolePermissions.GetSectionsForRole(user.Role.Code).Any(s => RolePermissions.CanAccess(user.Role.Code, s.Section)))
+            return new AuthLoginResult(false, null, "Роль пользователя не настроена или не поддерживается.");
+
+        string roleCode = user.Role.Code;
         if (!RolePermissions.IsClientAllowed(roleCode, requiredClient))
         {
             string targetClientName = RolePermissions.GetTargetClient(roleCode) == ClientApp.Wpf
@@ -215,10 +225,24 @@ public class AuthService
                 $"Роль «{user.Role?.Name ?? roleCode}» предназначена для {targetClientName} согласно НФТ-1 (табл. 1.8).");
         }
 
-        if (user.TwoFactorEnabled && (twoFactorCode?.Trim() ?? string.Empty) != (user.TwoFactorSecret ?? "246810"))
+        if (user.TwoFactorEnabled)
         {
-            return new AuthLoginResult(false, null,
-                "Для администратора требуется код 2FA (по умолчанию: 246810).", RequiresTwoFactor: true);
+            if (string.IsNullOrWhiteSpace(user.TwoFactorSecret))
+                return new AuthLoginResult(false, null, "Код 2FA не настроен. Обратитесь к администратору.");
+            if (string.IsNullOrWhiteSpace(twoFactorCode))
+                return new AuthLoginResult(false, null, "Введите код 2FA.", RequiresTwoFactor: true);
+            if (!string.Equals(twoFactorCode.Trim(), user.TwoFactorSecret, StringComparison.Ordinal))
+            {
+                user.FailedLoginCount += 1;
+                if (user.FailedLoginCount >= 5)
+                    user.LockedUntil = DateTime.UtcNow.AddMinutes(15);
+                await _audit.LogAsync(user.Id, user.Login, "Auth", user.Login, "LOGIN_FAILED_2FA", null,
+                    $"Попытка {user.FailedLoginCount}", sourceClient, ct);
+                await _db.SaveChangesAsync(ct);
+                return new AuthLoginResult(false, null,
+                    user.LockedUntil.HasValue ? "Превышено 5 неудачных попыток. Учётная запись заблокирована на 15 минут." : "Неверный код 2FA.",
+                    RequiresTwoFactor: true);
+            }
         }
 
         user.FailedLoginCount = 0;

@@ -661,7 +661,7 @@ public sealed class MainViewModel : ViewModelBase
     public string NewReqCurrency { get => _newReqCurrency; set => SetField(ref _newReqCurrency, value); }
     private string _newReqAmount = "320.00";
     public string NewReqAmount { get => _newReqAmount; set => SetField(ref _newReqAmount, value); }
-    private string _newReqDate = "2026-11-15";
+    private string _newReqDate = DateTime.Today.ToString("yyyy-MM-dd");
     public string NewReqDate { get => _newReqDate; set => SetField(ref _newReqDate, value); }
     private string _newReqDocNo = "С-2/341";
     public string NewReqDocNo { get => _newReqDocNo; set => SetField(ref _newReqDocNo, value); }
@@ -702,7 +702,7 @@ public sealed class MainViewModel : ViewModelBase
                 RescheduleDateInput = value.PlannedDate.ToString("yyyy-MM-dd");
         }
     }
-    private string _rescheduleDateInput = "2026-11-18";
+    private string _rescheduleDateInput = DateTime.Today.ToString("yyyy-MM-dd");
     public string RescheduleDateInput { get => _rescheduleDateInput; set => SetField(ref _rescheduleDateInput, value); }
 
     // Contracts & Statements Inputs
@@ -770,7 +770,7 @@ public sealed class MainViewModel : ViewModelBase
     public string NewMaterialUnit { get => _newMaterialUnit; set => SetField(ref _newMaterialUnit, value); }
     private string _newMaterialQty = "10";
     public string NewMaterialQty { get => _newMaterialQty; set => SetField(ref _newMaterialQty, value); }
-    private string _newMaterialDate = "2026-11-20";
+    private string _newMaterialDate = DateTime.Today.AddDays(7).ToString("yyyy-MM-dd");
     public string NewMaterialDate { get => _newMaterialDate; set => SetField(ref _newMaterialDate, value); }
     private string _newMaterialPurpose = string.Empty;
     public string NewMaterialPurpose { get => _newMaterialPurpose; set => SetField(ref _newMaterialPurpose, value); }
@@ -942,9 +942,9 @@ public sealed class MainViewModel : ViewModelBase
     public string NewProjectInitialCash { get => _newProjectInitialCash; set => SetField(ref _newProjectInitialCash, value); }
     private string _newProjectMinCash = "500.00";
     public string NewProjectMinCash { get => _newProjectMinCash; set => SetField(ref _newProjectMinCash, value); }
-    private string _newProjectStartDate = "2026-11-10";
+    private string _newProjectStartDate = DateTime.Today.ToString("yyyy-MM-dd");
     public string NewProjectStartDate { get => _newProjectStartDate; set => SetField(ref _newProjectStartDate, value); }
-    private string _newProjectEndDate = "2027-12-31";
+    private string _newProjectEndDate = DateTime.Today.AddYears(1).ToString("yyyy-MM-dd");
     public string NewProjectEndDate { get => _newProjectEndDate; set => SetField(ref _newProjectEndDate, value); }
     private string _newProjectObjectName = "Основной корпус (1-я очередь)";
     public string NewProjectObjectName { get => _newProjectObjectName; set => SetField(ref _newProjectObjectName, value); }
@@ -1538,7 +1538,7 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         var advs = await scope.Db.Advances.Include(a => a.Contract).Where(a => !a.IsDeleted).OrderBy(a => a.DueDate).ToListAsync();
-        var refDate = new DateTime(2026, 11, 10);
+        var refDate = DateTime.Today;
         Advances.Clear();
         foreach (var a in advs)
         {
@@ -1799,8 +1799,8 @@ public sealed class MainViewModel : ViewModelBase
             decimal contractVal = ParseDecimal(NewProjectContractValue, "контрактная цена");
             decimal initCash = ParseDecimal(NewProjectInitialCash, "начальный остаток");
             decimal minCash = ParseDecimal(NewProjectMinCash, "неснижаемый остаток");
-            var startDate = ParseDate(NewProjectStartDate, new DateTime(2026, 11, 10));
-            var endDate = ParseDate(NewProjectEndDate, new DateTime(2027, 12, 31));
+            var startDate = ParseDate(NewProjectStartDate, DateTime.Today);
+            var endDate = ParseDate(NewProjectEndDate, DateTime.Today.AddYears(1));
             Guid? pmId = SelectedNewProjectManager != null && SelectedNewProjectManager.Id != Guid.Empty
                 ? SelectedNewProjectManager.Id
                 : null;
@@ -1959,14 +1959,14 @@ public sealed class MainViewModel : ViewModelBase
         await RunSafeAsync(async () =>
         {
             decimal amt = ParseDecimal(NewReqAmount, "сумма заявки");
-            var dt = ParseDate(NewReqDate, new DateTime(2026, 11, 15));
+            var dt = ParseDate(NewReqDate, DateTime.Today);
             using var scope = _dbFactory.CreateScope();
             var obj = await scope.Db.ConstructionObjects.FirstAsync(o => o.Id == NewReqObject.Id);
             var dto = new CreatePaymentRequestDto(
                 obj.ProjectId, obj.Id, NewReqContract.Id, NewReqCostItem.Id,
                 amt, amt, 0m, 0m, true, NewReqCurrency, NewReqType.Type, dt,
                 NewReqPurpose, NewReqType.Type == RequestType.Advance ? DocumentType.Contract : DocumentType.ActS2,
-                NewReqDocNo, new DateTime(2026, 11, 10), null, $"WPF-{Guid.NewGuid():N}", true);
+                NewReqDocNo, DateTime.Today, null, $"WPF-{Guid.NewGuid():N}", true);
             var (req, checks) = await scope.Requests.CreateAsync(dto, _session.UserId, _session.Login);
             await LoadRequestsAsync();
             SetStatus($"Заявка {req.Number} ({RussianLabels.RequestStatusName(req.Status)}): " + string.Join(" | ", checks.Messages), req.Status == RequestStatus.Blocked);
@@ -2038,7 +2038,7 @@ public sealed class MainViewModel : ViewModelBase
                 ConstructionObjectId = NewActObject.Id,
                 Type = DocumentType.ActS2,
                 Number = string.IsNullOrWhiteSpace(NewActNumber) ? $"С-2/{DateTime.UtcNow:HHmm}" : NewActNumber.Trim(),
-                Date = new DateTime(2026, 11, 10),
+                Date = DateTime.Today,
                 GrossAmount = gross,
                 AdvanceOffset = offset,
                 RetentionAmount = retention,
@@ -2099,8 +2099,8 @@ public sealed class MainViewModel : ViewModelBase
                 Direction = ContractDirection.SupplierSubcontractorOutgoing,
                 TotalAmount = amt,
                 Currency = "BYN",
-                StartDate = new DateTime(2026, 11, 10),
-                EndDate = new DateTime(2027, 11, 10),
+                StartDate = DateTime.Today,
+                EndDate = DateTime.Today.AddYears(1),
                 SpecificationNotes = NewContractSpec.Trim()
             };
             await scope.Db.Contracts.AddAsync(contract);
@@ -2151,7 +2151,7 @@ public sealed class MainViewModel : ViewModelBase
             if (string.IsNullOrWhiteSpace(NewMaterialName))
                 throw new DomainException("Укажите наименование материала.");
             decimal qty = ParseDecimal(NewMaterialQty, "количество");
-            var requiredDate = ParseDate(NewMaterialDate, new DateTime(2026, 11, 20));
+            var requiredDate = ParseDate(NewMaterialDate, DateTime.Today.AddDays(7));
 
             using var scope = _dbFactory.CreateScope();
             var obj = await scope.Db.ConstructionObjects.FirstAsync(o => o.Id == NewMaterialObject.Id && !o.IsDeleted);
@@ -2182,7 +2182,7 @@ public sealed class MainViewModel : ViewModelBase
             if (string.IsNullOrWhiteSpace(NewMaterialName))
                 throw new DomainException("Укажите наименование материала.");
             decimal qty = ParseDecimal(NewMaterialQty, "количество");
-            var requiredDate = ParseDate(NewMaterialDate, new DateTime(2026, 11, 20));
+            var requiredDate = ParseDate(NewMaterialDate, DateTime.Today.AddDays(7));
 
             using var scope = _dbFactory.CreateScope();
             var obj = await scope.Db.ConstructionObjects.FirstAsync(o => o.Id == NewMaterialObject.Id && !o.IsDeleted);
@@ -2496,7 +2496,7 @@ public sealed class MainViewModel : ViewModelBase
                 Name = NewRuleName.Trim(),
                 DocumentSource = "Внутренний стандарт",
                 ValueText = NewRuleValue.Trim(),
-                ValidFrom = new DateTime(2026, 11, 10),
+                ValidFrom = DateTime.Today,
                 ResponsibleRole = "Финансовый менеджер",
                 Revision = 1
             };
@@ -2661,7 +2661,7 @@ public sealed class MainViewModel : ViewModelBase
 
     private static async Task<List<CashDayForecast>> ComputeCalendarAsync(DataScope scope, Guid? projectId, int horizonDays)
     {
-        var startDate = new DateTime(2026, 11, 10);
+        var startDate = DateTime.Today;
         var projects = await scope.Db.Projects.Where(p => !p.IsDeleted).ToListAsync();
         var sel = projectId.HasValue ? projects.Where(p => p.Id == projectId.Value).ToList() : projects;
         var selIds = sel.Select(p => p.Id).ToHashSet();
@@ -2677,19 +2677,7 @@ public sealed class MainViewModel : ViewModelBase
                         && (r.Status == RequestStatus.PendingApproval || r.Status == RequestStatus.ApprovedByManagement || r.Status == RequestStatus.Approved))
             .ToListAsync();
 
-        var flows = new Dictionary<DateTime, (decimal Inflows, decimal Outflows)>();
-        foreach (var item in schedule.Where(s => s.PlannedDate.Date > startDate.Date))
-        {
-            var d = item.PlannedDate.Date;
-            flows.TryGetValue(d, out var cur);
-            flows[d] = item.IsIncoming ? (cur.Inflows + item.Amount, cur.Outflows) : (cur.Inflows, cur.Outflows + item.Amount);
-        }
-        foreach (var req in reqs.Where(r => r.PlannedPaymentDate.Date > startDate.AddDays(5)))
-        {
-            var d = req.PlannedPaymentDate.Date;
-            flows.TryGetValue(d, out var cur);
-            flows[d] = (cur.Inflows, cur.Outflows + req.AmountInByn);
-        }
+        var flows = FinancialCalculator.BuildCashFlows(startDate, schedule, reqs);
 
         return FinancialCalculator.CalculateCashCalendar(
             sel.Sum(p => p.InitialCash), sel.Sum(p => p.MinCashBalance), startDate, Math.Clamp(horizonDays, 5, 180), flows);

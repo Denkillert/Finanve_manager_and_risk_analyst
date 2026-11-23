@@ -16,11 +16,20 @@ public static class PasswordHasher
 
     public static bool VerifyPassword(string password, string storedHash)
     {
+        if (string.IsNullOrEmpty(password) || string.IsNullOrEmpty(storedHash)) return false;
         var parts = storedHash.Split('.');
         if (parts.Length != 2) return false;
-        byte[] salt = Convert.FromBase64String(parts[0]);
-        byte[] expected = Convert.FromBase64String(parts[1]);
-        byte[] actual = Rfc2898DeriveBytes.Pbkdf2(password, salt, 100_000, HashAlgorithmName.SHA256, 32);
-        return CryptographicOperations.FixedTimeEquals(actual, expected);
+        try
+        {
+            byte[] salt = Convert.FromBase64String(parts[0]);
+            byte[] expected = Convert.FromBase64String(parts[1]);
+            if (salt.Length != 16 || expected.Length != 32) return false;
+            byte[] actual = Rfc2898DeriveBytes.Pbkdf2(password, salt, 100_000, HashAlgorithmName.SHA256, 32);
+            return CryptographicOperations.FixedTimeEquals(actual, expected);
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 }

@@ -32,12 +32,14 @@ public class WorkflowEngine : IWorkflowEngine
 
     public Task BlockAsync(PaymentRequest request, string reason, CancellationToken ct = default)
     {
-        if (request.Status is not (RequestStatus.Draft or RequestStatus.UnderReview or RequestStatus.PendingApproval or RequestStatus.Returned))
+        if (request.Status is not (RequestStatus.Draft or RequestStatus.UnderReview or RequestStatus.PendingApproval or RequestStatus.Returned or RequestStatus.Blocked))
             throw new DomainException($"Недопустимая блокировка из состояния {request.Status}.");
 
+        var wasBlocked = request.Status == RequestStatus.Blocked;
         request.Status = RequestStatus.Blocked;
         request.BlockReason = reason;
-        request.BlockedAt = DateTime.UtcNow;
+        if (!wasBlocked || !request.BlockedAt.HasValue)
+            request.BlockedAt = DateTime.UtcNow;
         request.UpdatedAt = DateTime.UtcNow;
         return Task.CompletedTask;
     }
@@ -270,6 +272,8 @@ public class PaymentRequestService : IPaymentRequestService
     private readonly IRepository<Contract> _contractRepo;
     private readonly IRepository<Document> _documentRepo;
     private readonly IRepository<Project> _projectRepo;
+    private readonly IRepository<ConstructionObject> _objectRepo;
+    private readonly IRepository<CostItem> _costItemRepo;
     private readonly IRepository<Payment> _paymentRepo;
     private readonly IBudgetService _budgetService;
     private readonly IAdvancePolicy _advancePolicy;
@@ -285,6 +289,8 @@ public class PaymentRequestService : IPaymentRequestService
         IRepository<Contract> contractRepo,
         IRepository<Document> documentRepo,
         IRepository<Project> projectRepo,
+        IRepository<ConstructionObject> objectRepo,
+        IRepository<CostItem> costItemRepo,
         IRepository<Payment> paymentRepo,
         IBudgetService budgetService,
         IAdvancePolicy advancePolicy,
@@ -299,6 +305,8 @@ public class PaymentRequestService : IPaymentRequestService
         _contractRepo = contractRepo;
         _documentRepo = documentRepo;
         _projectRepo = projectRepo;
+        _objectRepo = objectRepo;
+        _costItemRepo = costItemRepo;
         _paymentRepo = paymentRepo;
         _budgetService = budgetService;
         _advancePolicy = advancePolicy;
@@ -323,6 +331,15 @@ public class PaymentRequestService : IPaymentRequestService
                 return (existingByKey, summary);
             }
         }
+
+        var project = await _projectRepo.GetByIdAsync(dto.ProjectId, ct);
+        var obj = await _objectRepo.GetByIdAsync(dto.ConstructionObjectId, ct);
+        var costItem = await _costItemRepo.GetByIdAsync(dto.CostItemId, ct);
+        if (project == null || obj == null || obj.ProjectId != dto.ProjectId || costItem == null)
+            throw new DomainException("Проект, объект строительства или статья затрат указаны некорректно.");
+        if (dto.Amount <= 0 || dto.ActAmount < 0 || string.IsNullOrWhiteSpace(dto.Currency) ||
+            string.IsNullOrWhiteSpace(dto.DocumentNumber) || dto.DocumentDate == default || dto.PlannedPaymentDate == default)
+            throw new DomainException("Укажите положительную сумму, валюту, номер и даты документа и платежа.");
 
         var allDocs = await _documentRepo.GetAllAsync(ct);
         var duplicateDoc = allDocs.FirstOrDefault(d =>
@@ -358,7 +375,7 @@ public class PaymentRequestService : IPaymentRequestService
             VatIncluded = dto.VatIncluded,
             VatRate = 20m,
             VatAmount = vatBreakdown.VatAmount,
-            Currency = dto.Currency.ToUpperInvariant(),
+            Currency = dto.Currency.Trim().ToUpperInvariant(),
             ExchangeRate = rate,
             AmountInByn = payableInByn,
             Type = dto.Type,
@@ -718,6 +735,11 @@ public class RiskService : IRiskService
         if (rowVersion.Length > 0 && !risk.RowVersion.SequenceEqual(rowVersion))
             throw new ConcurrencyConflictException();
 
+        // Validate before changing the tracked entity, even if the operation is rejected.
+        RiskCalculator.GetProbabilityScore(probability);
+        RiskCalculator.GetImpactScore(monetaryImpact);
+        if (residualProbability is < 0m or > 1m)
+            throw new DomainException("Остаточная вероятность риска должна находиться в диапазоне [0; 1].");
         string oldSnapshot = $"p={risk.Probability},C={risk.MonetaryImpact},EMV={risk.Emv}";
         risk.Probability = probability;
         risk.MonetaryImpact = monetaryImpact;

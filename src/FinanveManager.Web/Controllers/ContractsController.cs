@@ -102,8 +102,8 @@ public class ContractsController : Controller
                 Direction = direction,
                 TotalAmount = totalAmount,
                 Currency = string.IsNullOrWhiteSpace(currency) ? "BYN" : currency.Trim().ToUpperInvariant(),
-                StartDate = new DateTime(2026, 11, 10),
-                EndDate = new DateTime(2027, 11, 10),
+                StartDate = DateTime.Today,
+                EndDate = DateTime.Today.AddYears(1),
                 SpecificationNotes = specificationNotes?.Trim()
             };
             await _db.Contracts.AddAsync(contract, ct);

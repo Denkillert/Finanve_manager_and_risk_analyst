@@ -34,6 +34,12 @@ public class CalendarController : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Reschedule(Guid scheduleItemId, DateTime newDate, Guid? projectId, int horizonDays = 90, CancellationToken ct = default)
     {
+        if (!ModelState.IsValid || newDate == default)
+        {
+            TempData["Error"] = "Укажите корректную дату платежа.";
+            return RedirectToAction(nameof(Index), new { projectId, horizonDays });
+        }
+
         var item = await _db.ContractScheduleItems.FirstOrDefaultAsync(s => s.Id == scheduleItemId && !s.IsDeleted, ct);
         if (item == null)
         {

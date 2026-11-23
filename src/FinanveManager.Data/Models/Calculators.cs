@@ -70,6 +70,30 @@ public static class FinancialCalculator
         return new ActPayableResult(actAmount, advanceOffset, retentionAmount, Math.Round(payable, 4));
     }
 
+    // Day zero is the opening balance. Due and overdue unpaid items are included on day one.
+    public static Dictionary<DateTime, (decimal Inflows, decimal Outflows)> BuildCashFlows(
+        DateTime startDate, IEnumerable<ContractScheduleItem> schedule, IEnumerable<PaymentRequest> requests)
+    {
+        var flows = new Dictionary<DateTime, (decimal Inflows, decimal Outflows)>();
+        var firstForecastDate = startDate.Date.AddDays(1);
+        foreach (var item in schedule.Where(s => !s.IsDeleted && !s.IsPaid))
+        {
+            var date = item.PlannedDate.Date < firstForecastDate ? firstForecastDate : item.PlannedDate.Date;
+            flows.TryGetValue(date, out var current);
+            flows[date] = item.IsIncoming
+                ? (current.Inflows + item.Amount, current.Outflows)
+                : (current.Inflows, current.Outflows + item.Amount);
+        }
+        foreach (var request in requests.Where(r => !r.IsDeleted &&
+                     r.Status is RequestStatus.PendingApproval or RequestStatus.ApprovedByManagement or RequestStatus.Approved))
+        {
+            var date = request.PlannedPaymentDate.Date < firstForecastDate ? firstForecastDate : request.PlannedPaymentDate.Date;
+            flows.TryGetValue(date, out var current);
+            flows[date] = (current.Inflows, current.Outflows + request.AmountInByn);
+        }
+        return flows;
+    }
+
     public static List<CashDayForecast> CalculateCashCalendar(
         decimal initialCash,
         decimal minCashBalance,
@@ -77,6 +101,8 @@ public static class FinancialCalculator
         int horizonDays,
         IReadOnlyDictionary<DateTime, (decimal Inflows, decimal Outflows)> dailyFlows)
     {
+        if (horizonDays < 0)
+            throw new ArgumentOutOfRangeException(nameof(horizonDays));
         var result = new List<CashDayForecast>(horizonDays + 1);
         decimal running = initialCash;
 
@@ -115,6 +141,8 @@ public static class FinancialCalculator
     {
         if (amount < 0)
             throw new DomainException("Сумма не может быть отрицательной.");
+        if (vatRate < 0)
+            throw new DomainException("Ставка НДС не может быть отрицательной.");
 
         if (vatIncluded)
         {
@@ -296,14 +324,15 @@ public static class RiskCalculator
 
     public static void RecalculateScores(Risk risk)
     {
+        if (risk.ResidualProbability is < 0m or > 1m)
+            throw new DomainException("Остаточная вероятность риска должна находиться в диапазоне [0; 1].");
         risk.ProbabilityScore = GetProbabilityScore(risk.Probability);
         risk.ImpactScore = GetImpactScore(risk.MonetaryImpact);
         risk.IntegralScore = risk.ProbabilityScore * risk.ImpactScore;
         risk.Emv = Math.Round(risk.Probability * risk.MonetaryImpact, 4, MidpointRounding.AwayFromZero);
-        if (risk.ResidualProbability.HasValue)
-        {
-            risk.ResidualEmv = Math.Round(risk.ResidualProbability.Value * risk.MonetaryImpact, 4, MidpointRounding.AwayFromZero);
-        }
+        risk.ResidualEmv = risk.ResidualProbability.HasValue
+            ? Math.Round(risk.ResidualProbability.Value * risk.MonetaryImpact, 4, MidpointRounding.AwayFromZero)
+            : null;
     }
 
     public static RiskPortfolioSummary CalculatePortfolioSummary(IEnumerable<Risk> risks, decimal z = 0.84m)

@@ -189,11 +189,11 @@ public class RequestsController : Controller
                 effectiveAmount, actAmount, advanceOffset, retentionAmount, vatIncluded,
                 string.IsNullOrWhiteSpace(currency) ? "BYN" : currency.Trim().ToUpperInvariant(),
                 type,
-                plannedPaymentDate == default ? new DateTime(2026, 11, 15) : plannedPaymentDate,
+                plannedPaymentDate == default ? DateTime.Today : plannedPaymentDate,
                 string.IsNullOrWhiteSpace(purpose) ? "Оплата по договору" : purpose,
                 type == RequestType.Advance ? DocumentType.Contract : DocumentType.ActS2,
                 string.IsNullOrWhiteSpace(documentNumber) ? $"С-2/{DateTime.UtcNow:HHmmss}" : documentNumber,
-                new DateTime(2026, 11, 10),
+                DateTime.Today,
                 null,
                 $"WEB-{Guid.NewGuid():N}",
                 true);
@@ -605,7 +605,7 @@ public class RequestsController : Controller
 
             var docType = documentType == DocumentType.CertificateS3 ? DocumentType.CertificateS3 : DocumentType.ActS2;
             string docNumber = string.IsNullOrWhiteSpace(number) ? $"С-2/{DateTime.UtcNow:MMdd-HHmm}" : number.Trim();
-            var docDate = new DateTime(2026, 11, 10);
+            var docDate = DateTime.Today;
 
             if (await _db.Documents.AnyAsync(d => !d.IsDeleted && d.Type == docType && d.Number == docNumber && d.Date == docDate, ct))
                 throw new DuplicateEntityException($"Документ {docNumber} от {docDate:dd.MM.yyyy} уже зарегистрирован.");

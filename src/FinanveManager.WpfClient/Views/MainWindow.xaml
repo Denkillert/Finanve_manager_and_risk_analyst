@@ -248,6 +248,7 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Button Style="{StaticResource AttentionButton}" Margin="0,0,6,0"
+                                                    Click="NavigationTile_OnClick"
                                                     Command="{Binding DataContext.SelectSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                     CommandParameter="{Binding}">
                                                 <StackPanel Orientation="Horizontal">
@@ -283,6 +284,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Button Style="{StaticResource TileButton}" MinHeight="118" Margin="0,0,10,10"
+                                            Click="NavigationTile_OnClick"
                                             Command="{Binding DataContext.SelectSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding}">
                                         <Grid>

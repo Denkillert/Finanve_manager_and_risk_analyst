@@ -17,6 +17,8 @@ namespace FinanveManager.WpfClient.Views;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
+    private FrameworkElement? _lastTile;
+    private Rect _tileOrigin = Rect.Empty;
 
     public bool LogoutRequested { get; private set; }
 
@@ -71,14 +73,34 @@ public partial class MainWindow : Window
         Close();
     }
 
+    // Click is raised before the navigation command, while the tile is still laid out.
+    private void NavigationTile_OnClick(object sender, RoutedEventArgs e)
+    {
+        _lastTile = sender as FrameworkElement;
+        _tileOrigin = Rect.Empty;
+        if (_lastTile == null || _lastTile.ActualWidth <= 0 || _lastTile.ActualHeight <= 0)
+            return;
+
+        try
+        {
+            _tileOrigin = _lastTile.TransformToVisual(ContentScroll).TransformBounds(
+                new Rect(0, 0, _lastTile.ActualWidth, _lastTile.ActualHeight));
+        }
+        catch (InvalidOperationException)
+        {
+            // A disconnected visual falls back to the centre of the section.
+        }
+    }
+
     /// <summary>Мягкое появление главного меню: шапка, полоса внимания и плитки «лесенкой».</summary>
     private void AnimateHub()
     {
+        _lastTile = null;
+        _tileOrigin = Rect.Empty;
+        SectionVeil.Visibility = Visibility.Collapsed;
         if (!SystemParameters.ClientAreaAnimation) return;
 
         ContentScroll.ScrollToTop();
-        _lastTile = null;
-        _tileOrigin = Rect.Empty;
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         HubPanel.Opacity = 1;
         if (HubPanel.RenderTransform is not TranslateTransform shift)
@@ -150,6 +172,7 @@ public partial class MainWindow : Window
 
     private void PlaySectionExpand()
     {
+        if (_vm.IsHubVisible) return;
         SectionsHost.UpdateLayout();
         ContentScroll.ScrollToTop();
 

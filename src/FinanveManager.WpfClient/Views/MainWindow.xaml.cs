@@ -17,8 +17,6 @@ namespace FinanveManager.WpfClient.Views;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
-    private FrameworkElement? _lastTile;
-    private Rect _tileOrigin = Rect.Empty;
 
     public bool LogoutRequested { get; private set; }
 
@@ -29,34 +27,12 @@ public partial class MainWindow : Window
         DataContext = _vm;
         Title = $"ОАО «МАПИД» — {session.FullName} ({session.RoleName})";
         _vm.PropertyChanged += ViewModel_OnPropertyChanged;
-        HubTiles.PreviewMouseLeftButtonDown += HubTiles_OnPreviewMouseLeftButtonDown;
         Loaded += async (_, _) =>
         {
             await _vm.LoadAllAsync();
             SyncReportHeaders();
             AnimateHub();
         };
-    }
-
-    // Запоминаем плитку, из которой открывают раздел: анимация «раскрытия»
-    // начинается именно из её прямоугольника.
-    private void HubTiles_OnPreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        _lastTile = null;
-        _tileOrigin = Rect.Empty;
-        if (e.OriginalSource is not DependencyObject source) return;
-        if (ItemsControl.ContainerFromElement(HubTiles, source) is not FrameworkElement container) return;
-
-        _lastTile = container;
-        try
-        {
-            _tileOrigin = container.TransformToVisual(ContentScroll)
-                .TransformBounds(new Rect(0, 0, container.ActualWidth, container.ActualHeight));
-        }
-        catch (InvalidOperationException)
-        {
-            _tileOrigin = Rect.Empty;
-        }
     }
 
     private void ViewModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs e)

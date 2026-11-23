@@ -27,9 +27,7 @@ public class AccountController : Controller
     {
         if (User.Identity?.IsAuthenticated == true && string.IsNullOrWhiteSpace(returnUrl))
         {
-            var role = User.FindFirstValue(ClaimTypes.Role) ?? "";
-            var (ctrl, act) = RolePermissions.GetLandingRoute(role);
-            return RedirectToAction(act, ctrl);
+            return RedirectToAction("Index", "Home");
         }
 
         ViewBag.ReturnUrl = returnUrl;
@@ -65,8 +63,7 @@ public class AccountController : Controller
         if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl))
             return Redirect(returnUrl);
 
-        var (ctrl, act) = RolePermissions.GetLandingRoute(res.Session.RoleCode);
-        return RedirectToAction(act, ctrl);
+        return RedirectToAction("Index", "Home");
     }
 
     [AllowAnonymous]

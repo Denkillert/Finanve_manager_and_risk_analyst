@@ -11,8 +11,13 @@ namespace FinanveManager.WpfClient.ViewModels;
 public sealed class NavItemViewModel : ViewModelBase
 {
     private bool _isSelected;
+    private string? _badgeText;
     public AppSection Section { get; }
     public string Title { get; }
+    public string Description { get; }
+    public string Accent { get; }
+    public string AccentSoft { get; }
+    public string Glyph { get; }
 
     public bool IsSelected
     {
@@ -20,10 +25,37 @@ public sealed class NavItemViewModel : ViewModelBase
         set => SetField(ref _isSelected, value);
     }
 
+    /// <summary>Счётчик на плитке главного меню («4 · ждёт»), null — счётчик не показывается.</summary>
+    public string? BadgeText
+    {
+        get => _badgeText;
+        set
+        {
+            if (SetField(ref _badgeText, value))
+                OnPropertyChanged(nameof(HasBadge));
+        }
+    }
+
+    public bool HasBadge => !string.IsNullOrWhiteSpace(BadgeText);
+
     public NavItemViewModel(AppSection section, string title)
     {
         Section = section;
         Title = title;
+        (Description, Accent, AccentSoft, Glyph) = section switch
+        {
+            AppSection.Dashboard => ("Портфель, ликвидность, EVM и кассовые разрывы", "#0A5F4F", "#E6F5F1", "\uE80A"),
+            AppSection.ProjectsAndBudgets => ("Проекты, объекты, этапы, версии бюджета и лимиты", "#0A5F4F", "#E6F5F1", "\uE80F"),
+            AppSection.PaymentRequests => ("Согласование, ЭЦП, исполнение и контроль лимита", "#C97F14", "#FDF3E2", "\uE8A5"),
+            AppSection.PaymentCalendar => ("Платежи по дням, баланс и кассовые разрывы", "#C97F14", "#FDF3E2", "\uE787"),
+            AppSection.ContractsAndStatements => ("Договоры, авансы, выписки CSV/MT940, экспорт 1С", "#5B62B8", "#EEF0FA", "\uE8AC"),
+            AppSection.RisksAndP80 => ("Матрица 5×5, EMV, σ и портфельный резерв P80", "#C97F14", "#FDF3E2", "\uEA18"),
+            AppSection.Reports => ("Финансовые отчёты, реестр рисков, печатные формы", "#5B62B8", "#EEF0FA", "\uE9D2"),
+            AppSection.SiteActs => ("Акты выполненных работ, удержания, фотофиксация", "#0A5F4F", "#E6F5F1", "\uE9D5"),
+            AppSection.Administration => ("Пользователи, роли, НСИ, курсы валют", "#5B62B8", "#EEF0FA", "\uE716"),
+            AppSection.AuditLog => ("Неизменяемый журнал действий и попыток входа", "#5B62B8", "#EEF0FA", "\uE823"),
+            _ => ("Раздел системы", "#0A5F4F", "#E6F5F1", "\uE80A")
+        };
     }
 }
 
@@ -284,6 +316,7 @@ public sealed class MainViewModel : ViewModelBase
             if (item != null) await SelectSectionAsync(item.Section);
         });
         RefreshCommand = new RelayCommand(async () => await LoadAllAsync());
+        GoHomeCommand = new RelayCommand(() => IsHubVisible = true);
 
         // Budgets & CEO Project Management
         CreateProjectCommand = new RelayCommand(async () => await CreateProjectAsync());
@@ -339,7 +372,7 @@ public sealed class MainViewModel : ViewModelBase
         ToggleUserActiveCommand = new RelayCommand(async () => await ToggleSelectedUserAsync());
         AddNormRuleCommand = new RelayCommand(async () => await AddNormRuleAsync());
 
-        // Default landing section for role
+        // Default landing section for role (данные грузятся, но окно открывается в главном меню)
         var first = NavigationItems.FirstOrDefault();
         if (first != null)
         {
@@ -347,6 +380,7 @@ public sealed class MainViewModel : ViewModelBase
             first.IsSelected = true;
             _selectedSectionTitle = first.Title;
         }
+        _isHubVisible = true;
     }
 
     // Session & Role Info
@@ -392,6 +426,63 @@ public sealed class MainViewModel : ViewModelBase
 
     // Navigation State
     public ObservableCollection<NavItemViewModel> NavigationItems { get; } = new();
+    public ObservableCollection<NavItemViewModel> HubAttention { get; } = new();
+
+    private bool _isHubVisible = true;
+    public bool IsHubVisible
+    {
+        get => _isHubVisible;
+        set
+        {
+            if (!SetField(ref _isHubVisible, value)) return;
+            NotifySectionVisibility();
+        }
+    }
+
+    public string HubGreeting => (DateTime.Now.Hour switch
+    {
+        < 6 => "Доброй ночи",
+        < 12 => "Доброе утро",
+        < 18 => "Добрый день",
+        _ => "Добрый вечер"
+    }) + ", " + UserFullName;
+
+    public string HubScope => RoleCode switch
+    {
+        "CEO" => "Портфель всей организации · утверждение бюджетов и перерасхода",
+        "FinancialManager" => "Оперативный контур · планирование бюджетов и акцепт (ЭЦП)",
+        "Accountant" => "Фактическое исполнение платежей, выписки и экспорт в 1С",
+        "ProcurementSpecialist" => "Закупки: реестр поставщиков, цены, договоры, заявки на материал",
+        "ProjectManager" => "Строго назначенные проекты · заявки на материал и акты С-2",
+        "RiskSpecialist" => "Реестр рисков, матрица 5×5 и расчёт резерва P80",
+        "Admin" => "Учётные записи, НСИ, курсы валют и журнал аудита · 2FA обязательна",
+        _ => "Финансовый контур строительной компании"
+    };
+
+    public string HubSectionCountText => $"Доступно разделов: {NavigationItems.Count}";
+
+    private string _referenceDateText = "Курсы НБРБ не загружены";
+
+    /// <summary>Дата последней загрузки курсов валют — берётся из БД, без выдуманных дат.</summary>
+    public string ReferenceDateText
+    {
+        get => _referenceDateText;
+        private set => SetField(ref _referenceDateText, value);
+    }
+
+    private void NotifySectionVisibility()
+    {
+        OnPropertyChanged(nameof(IsDashboardSection));
+        OnPropertyChanged(nameof(IsProjectsSection));
+        OnPropertyChanged(nameof(IsRequestsSection));
+        OnPropertyChanged(nameof(IsSiteActsSection));
+        OnPropertyChanged(nameof(IsCalendarSection));
+        OnPropertyChanged(nameof(IsContractsSection));
+        OnPropertyChanged(nameof(IsRisksSection));
+        OnPropertyChanged(nameof(IsReportsSection));
+        OnPropertyChanged(nameof(IsAdminSection));
+        OnPropertyChanged(nameof(IsAuditSection));
+    }
 
     private AppSection _selectedSection;
     public AppSection SelectedSection
@@ -422,16 +513,16 @@ public sealed class MainViewModel : ViewModelBase
         private set => SetField(ref _selectedSectionTitle, value);
     }
 
-    public bool IsDashboardSection => SelectedSection == AppSection.Dashboard && _allowedSections.Contains(AppSection.Dashboard);
-    public bool IsProjectsSection => SelectedSection == AppSection.ProjectsAndBudgets && _allowedSections.Contains(AppSection.ProjectsAndBudgets);
-    public bool IsRequestsSection => SelectedSection == AppSection.PaymentRequests && _allowedSections.Contains(AppSection.PaymentRequests);
-    public bool IsSiteActsSection => SelectedSection == AppSection.SiteActs && _allowedSections.Contains(AppSection.SiteActs);
-    public bool IsCalendarSection => SelectedSection == AppSection.PaymentCalendar && _allowedSections.Contains(AppSection.PaymentCalendar);
-    public bool IsContractsSection => SelectedSection == AppSection.ContractsAndStatements && _allowedSections.Contains(AppSection.ContractsAndStatements);
-    public bool IsRisksSection => SelectedSection == AppSection.RisksAndP80 && _allowedSections.Contains(AppSection.RisksAndP80);
-    public bool IsReportsSection => SelectedSection == AppSection.Reports && _allowedSections.Contains(AppSection.Reports);
-    public bool IsAdminSection => SelectedSection == AppSection.Administration && _allowedSections.Contains(AppSection.Administration);
-    public bool IsAuditSection => SelectedSection == AppSection.AuditLog && _allowedSections.Contains(AppSection.AuditLog);
+    public bool IsDashboardSection => !IsHubVisible && SelectedSection == AppSection.Dashboard && _allowedSections.Contains(AppSection.Dashboard);
+    public bool IsProjectsSection => !IsHubVisible && SelectedSection == AppSection.ProjectsAndBudgets && _allowedSections.Contains(AppSection.ProjectsAndBudgets);
+    public bool IsRequestsSection => !IsHubVisible && SelectedSection == AppSection.PaymentRequests && _allowedSections.Contains(AppSection.PaymentRequests);
+    public bool IsSiteActsSection => !IsHubVisible && SelectedSection == AppSection.SiteActs && _allowedSections.Contains(AppSection.SiteActs);
+    public bool IsCalendarSection => !IsHubVisible && SelectedSection == AppSection.PaymentCalendar && _allowedSections.Contains(AppSection.PaymentCalendar);
+    public bool IsContractsSection => !IsHubVisible && SelectedSection == AppSection.ContractsAndStatements && _allowedSections.Contains(AppSection.ContractsAndStatements);
+    public bool IsRisksSection => !IsHubVisible && SelectedSection == AppSection.RisksAndP80 && _allowedSections.Contains(AppSection.RisksAndP80);
+    public bool IsReportsSection => !IsHubVisible && SelectedSection == AppSection.Reports && _allowedSections.Contains(AppSection.Reports);
+    public bool IsAdminSection => !IsHubVisible && SelectedSection == AppSection.Administration && _allowedSections.Contains(AppSection.Administration);
+    public bool IsAuditSection => !IsHubVisible && SelectedSection == AppSection.AuditLog && _allowedSections.Contains(AppSection.AuditLog);
 
     private string _statusMessage = "Готово";
     public string StatusMessage
@@ -919,6 +1010,7 @@ public sealed class MainViewModel : ViewModelBase
     // Commands
     public RelayCommand<NavItemViewModel> SelectSectionCommand { get; }
     public RelayCommand RefreshCommand { get; }
+    public RelayCommand GoHomeCommand { get; }
     public RelayCommand CreateProjectCommand { get; }
     public RelayCommand AddObjectStageCommand { get; }
     public RelayCommand AssignMemberCommand { get; }
@@ -961,6 +1053,7 @@ public sealed class MainViewModel : ViewModelBase
     public async Task SelectSectionAsync(AppSection section)
     {
         if (!_allowedSections.Contains(section)) return;
+        IsHubVisible = false;
         foreach (var item in NavigationItems)
             item.IsSelected = item.Section == section;
 
@@ -975,9 +1068,92 @@ public sealed class MainViewModel : ViewModelBase
         {
             await LoadLookupsAsync();
             await LoadCurrentSectionAsync();
+            await RefreshHubBadgesAsync();
             SetStatus($"Данные обновлены ({DatabaseModeLabel}).", false);
         });
     }
+
+    /// <summary>Счётчики на плитках главного меню — те же контрольные точки, что в веб-клиенте.</summary>
+    private async Task RefreshHubBadgesAsync()
+    {
+        try
+        {
+            using var scope = _dbFactory.CreateScope();
+            var db = scope.Db;
+            var pendingRequests = await db.PaymentRequests.CountAsync(r => !r.IsDeleted
+                && (r.Status == RequestStatus.PendingApproval || r.Status == RequestStatus.Blocked));
+            var pendingMaterials = await db.MaterialRequests.CountAsync(m => !m.IsDeleted
+                && (m.Status == MaterialRequestStatus.Submitted || m.Status == MaterialRequestStatus.Draft));
+            var unread = await db.Notifications.CountAsync(n => !n.IsRead);
+            var highRisks = await db.Risks.CountAsync(r => !r.IsDeleted && r.IntegralScore >= 15
+                && r.Status != RiskStatus.Closed && r.Status != RiskStatus.Realized);
+            var contracts = await db.Contracts.CountAsync(c => !c.IsDeleted && c.StartDate <= DateTime.Now && c.EndDate >= DateTime.Now);
+            var projects = await db.Projects.CountAsync(p => !p.IsDeleted);
+            var rateDate = await db.CurrencyRates
+                .OrderByDescending(r => r.RateDate)
+                .Select(r => (DateTime?)r.RateDate)
+                .FirstOrDefaultAsync();
+            ReferenceDateText = rateDate.HasValue
+                ? $"Курсы НБРБ на {rateDate.Value:dd.MM.yyyy}"
+                : "Курсы НБРБ не загружены";
+
+            foreach (var item in NavigationItems)
+            {
+                item.BadgeText = item.Section switch
+                {
+                    AppSection.Dashboard when unread > 0 => $"{unread} уведомл.",
+                    AppSection.ProjectsAndBudgets when projects > 0 => $"{projects} {Plural(projects, "проект", "проекта", "проектов")}",
+                    AppSection.PaymentRequests when pendingRequests + pendingMaterials > 0 => $"{pendingRequests + pendingMaterials} · ждёт",
+                    AppSection.ContractsAndStatements when contracts > 0 => $"{contracts} действ.",
+                    AppSection.RisksAndP80 when highRisks > 0 => $"{highRisks} · высокий",
+                    _ => null
+                };
+            }
+
+            HubAttention.Clear();
+            if (pendingRequests > 0)
+            {
+                var requestTile = NavigationItems.FirstOrDefault(i => i.Section == AppSection.PaymentRequests);
+                if (requestTile != null) HubAttention.Add(requestTile);
+            }
+            if (highRisks > 0)
+            {
+                var riskTile = NavigationItems.FirstOrDefault(i => i.Section == AppSection.RisksAndP80);
+                if (riskTile != null && !HubAttention.Contains(riskTile)) HubAttention.Add(riskTile);
+            }
+            if (pendingMaterials > 0)
+            {
+                var materialTile = NavigationItems.FirstOrDefault(i => i.Section == AppSection.SiteActs)
+                    ?? NavigationItems.FirstOrDefault(i => i.Section == AppSection.PaymentRequests);
+                if (materialTile != null && !HubAttention.Contains(materialTile)) HubAttention.Add(materialTile);
+            }
+            OnPropertyChanged(nameof(HubAttentionCountText));
+            OnPropertyChanged(nameof(HasHubAttention));
+        }
+        catch
+        {
+            // Счётчики не должны ломать загрузку раздела.
+        }
+    }
+
+    public bool HasHubAttention => HubAttention.Count > 0;
+
+    private static string Plural(int count, string one, string few, string many)
+    {
+        int mod100 = Math.Abs(count) % 100;
+        int mod10 = mod100 % 10;
+        if (mod100 is >= 11 and <= 14) return many;
+        return mod10 switch
+        {
+            1 => one,
+            >= 2 and <= 4 => few,
+            _ => many
+        };
+    }
+
+    public string HubAttentionCountText => HubAttention.Count == 0
+        ? "Все контрольные точки в норме"
+        : $"Требует внимания: {HubAttention.Count}";
 
     private async Task LoadCurrentSectionAsync()
     {

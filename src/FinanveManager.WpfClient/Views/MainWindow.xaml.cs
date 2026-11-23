@@ -2,6 +2,9 @@ using System.ComponentModel;
 using System.IO;
 using System.Text;
 using System.Windows;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using FinanveManager.Data.Persistence;
 using FinanveManager.Data.Services;
 using FinanveManager.WpfClient.ViewModels;
@@ -26,11 +29,18 @@ public partial class MainWindow : Window
         {
             await _vm.LoadAllAsync();
             SyncReportHeaders();
+            AnimateHub();
         };
     }
 
     private void ViewModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(MainViewModel.IsHubVisible))
+        {
+            if (_vm.IsHubVisible) AnimateHub();
+            else AnimateSection();
+        }
+
         if (e.PropertyName is nameof(MainViewModel.RCol1)
             or nameof(MainViewModel.RCol2)
             or nameof(MainViewModel.RCol3)
@@ -57,6 +67,83 @@ public partial class MainWindow : Window
     {
         LogoutRequested = true;
         Close();
+    }
+
+    /// <summary>Мягкое появление главного меню: заголовок, полоса внимания и плитки «лесенкой».</summary>
+    private void AnimateHub()
+    {
+        if (!SystemParameters.ClientAreaAnimation) return;
+
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        HubPanel.Opacity = 1;
+        var shift = HubPanel.RenderTransform as TranslateTransform;
+        if (shift == null)
+        {
+            shift = new TranslateTransform();
+            HubPanel.RenderTransform = shift;
+        }
+
+        HubPanel.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
+        shift.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(8, 0, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });
+
+        HubTiles.UpdateLayout();
+        for (int i = 0; i < _vm.NavigationItems.Count; i++)
+        {
+            if (HubTiles.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement tile) continue;
+
+            var delay = TimeSpan.FromMilliseconds(Math.Min(i, 8) * 32);
+            tile.Opacity = 1;
+            var move = tile.RenderTransform as TranslateTransform;
+            if (move == null)
+            {
+                move = new TranslateTransform();
+                tile.RenderTransform = move;
+            }
+
+            tile.BeginAnimation(OpacityProperty,
+                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(240))
+                {
+                    BeginTime = delay,
+                    EasingFunction = ease
+                });
+            move.BeginAnimation(TranslateTransform.YProperty,
+                new DoubleAnimation(10, 0, TimeSpan.FromMilliseconds(280))
+                {
+                    BeginTime = delay,
+                    EasingFunction = ease
+                });
+        }
+    }
+
+    /// <summary>Раздел «въезжает» так же, как в прототипе: лёгкий подъём и проявление.</summary>
+    private void AnimateSection()
+    {
+        if (!SystemParameters.ClientAreaAnimation) return;
+
+        var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
+        SectionsHost.Opacity = 1;
+        var shift = SectionsHost.RenderTransform as TranslateTransform;
+        if (shift == null)
+        {
+            shift = new TranslateTransform();
+            SectionsHost.RenderTransform = shift;
+        }
+
+        SectionsHost.BeginAnimation(OpacityProperty,
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
+        shift.BeginAnimation(TranslateTransform.YProperty,
+            new DoubleAnimation(6, 0, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });
+    }
+
+    private void MainWindow_OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && !_vm.IsHubVisible)
+        {
+            _vm.GoHomeCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 
     private void ExportReportCsvButton_OnClick(object sender, RoutedEventArgs e)

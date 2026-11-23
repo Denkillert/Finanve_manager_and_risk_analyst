@@ -66,6 +66,80 @@
     </div>
 </div>
 
+@if (Model.Days.Count > 1)
+{
+    var days = Model.Days;
+    var inv = System.Globalization.CultureInfo.InvariantCulture;
+    const decimal cw = 900m;
+    const decimal chh = 210m;
+    const decimal cPad = 30m;
+    decimal minC = Math.Min(days.Min(d => d.ClosingBalance), Model.MinCashBalance);
+    decimal maxC = Math.Max(days.Max(d => d.ClosingBalance), Model.MinCashBalance);
+    if (maxC - minC < 1m) maxC = minC + 1m;
+    decimal X(int i) => cPad + (cw - 2 * cPad) * i / Math.Max(1, days.Count - 1);
+    decimal Y(decimal v) => chh - cPad - (chh - 2 * cPad) * (v - minC) / (maxC - minC);
+    var points = string.Join(" ", days.Select((d, i) =>
+        X(i).ToString("0.##", inv) + "," + Y(d.ClosingBalance).ToString("0.##", inv)));
+    var area = cPad.ToString("0.##", inv) + "," + (chh - cPad).ToString("0.##", inv) + " "
+        + points + " " + (cw - cPad).ToString("0.##", inv) + "," + (chh - cPad).ToString("0.##", inv);
+    int minIdx = days.Select((d, i) => (d, i)).OrderBy(t => t.d.ClosingBalance).First().i;
+    var minDate = days[minIdx].Date;
+    var minValue = days[minIdx].ClosingBalance;
+
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title">Баланс денежных средств, @horizonDays дн. горизонта</h3>
+            <div class="card-actions">
+                <div class="tabs">
+                    @foreach (var hz in new[] { 90, 30, 5 })
+                    {
+                        <a class="tab @(horizonDays == hz ? "active" : "")"
+                           asp-controller="Calendar" asp-action="Index"
+                           asp-route-projectId="@Model.SelectedProjectId"
+                           asp-route-horizonDays="@hz">@hz дней</a>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="chart-box">
+            <svg viewBox="0 0 900 210" preserveAspectRatio="none" role="img"
+                 aria-label="Прогноз остатка денежных средств на @days.Count дней">
+                <defs>
+                    <linearGradient id="cashArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#14b8a6" stop-opacity="0.28"/>
+                        <stop offset="100%" stop-color="#14b8a6" stop-opacity="0"/>
+                    </linearGradient>
+                </defs>
+                @foreach (var f in new[] { 0.25m, 0.5m, 0.75m })
+                {
+                    var gy = ((chh - 2 * cPad) * f + cPad).ToString("0.##", inv);
+                    <line x1="@cPad.ToString("0.##", inv)" x2="@((cw - cPad).ToString("0.##", inv))"
+                          y1="@gy" y2="@gy" stroke="#eef3f1" stroke-width="1"/>
+                }
+                <line x1="@cPad.ToString("0.##", inv)" x2="@((cw - cPad).ToString("0.##", inv))"
+                      y1="@Y(Model.MinCashBalance).ToString("0.##", inv)"
+                      y2="@Y(Model.MinCashBalance).ToString("0.##", inv)"
+                      stroke="#c2413b" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.7"/>
+                <polygon points="@area" fill="url(#cashArea)"/>
+                <polyline points="@points" fill="none" stroke="#0e7c66" stroke-width="2"
+                          stroke-linejoin="round" stroke-linecap="round"/>
+                <circle cx="@X(minIdx).ToString("0.##", inv)" cy="@Y(minValue).ToString("0.##", inv)"
+                        r="4" fill="#c2413b" stroke="#fff" stroke-width="2"/>
+                <text x="@cPad.ToString("0.##", inv)" y="@((chh - 8).ToString("0.##", inv))"
+                      font-size="10" fill="#94a19e">@(days[0].Date.ToString("dd.MM.yyyy"))</text>
+                <text x="@((cw - cPad).ToString("0.##", inv))" y="@((chh - 8).ToString("0.##", inv))"
+                      font-size="10" fill="#94a19e" text-anchor="end">@(days[days.Count - 1].Date.ToString("dd.MM.yyyy"))</text>
+            </svg>
+        </div>
+        <div class="legend">
+            <span><i style="background:#0e7c66"></i>Остаток C(t)</span>
+            <span><i style="background:#c2413b"></i>Неснижаемый минимум Cmin = @Model.MinCashBalance.ToString("N2") тыс. р.</span>
+            <span><i style="background:#c2413b;opacity:.6"></i>Минимум: @minValue.ToString("N2") тыс. р. (@minDate.ToString("dd.MM.yyyy"))</span>
+            <span style="margin-left:auto;color:var(--muted-2)">Разрыв = max(0, Cmin − C(t))</span>
+        </div>
+    </div>
+}
+
 @if (Model.OverdueCustomerItems.Any())
 {
     <div class="alert alert-warn">

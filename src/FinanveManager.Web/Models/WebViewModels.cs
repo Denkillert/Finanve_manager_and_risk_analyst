@@ -1,4 +1,5 @@
 using FinanveManager.Data.Models;
+using FinanveManager.Data.Services;
 
 namespace FinanveManager.Web.Models;
 
@@ -143,4 +144,30 @@ public class AdminViewModel
     public List<NormRule> NormRules { get; set; } = new();
     public List<CurrencyRate> CurrencyRates { get; set; } = new();
     public List<AuditLog> AuditLogs { get; set; } = new();
+}
+
+/// <summary>Плитка главного меню: один раздел, доступный роли.</summary>
+public sealed class HubTileViewModel
+{
+    public AppSection Section { get; init; }
+    public string Title { get; init; } = string.Empty;
+    public string Description { get; init; } = string.Empty;
+    public string Controller { get; init; } = string.Empty;
+    public string Action { get; init; } = "Index";
+    public string Accent { get; init; } = "green";
+    public string? CountText { get; init; }
+    public string CountTone { get; init; } = "soft";
+    public string? AttentionText { get; init; }
+}
+
+/// <summary>Модель главного меню (хаба): плитки разделов, сводка и предупреждения.</summary>
+public sealed class HubViewModel
+{
+    public string Greeting { get; init; } = string.Empty;
+    public string Scope { get; init; } = string.Empty;
+    /// <summary>Актуальность курсов валют из БД (реальная дата последней загрузки курсов).</summary>
+    public string ReferenceDate { get; init; } = string.Empty;
+    public int UnreadNotifications { get; init; }
+    public List<HubTileViewModel> Tiles { get; init; } = new();
+    public List<HubTileViewModel> Attention { get; init; } = new();
 }

@@ -1,0 +1,96 @@
+@model HubViewModel
+@using FinanveManager.Web.Services
+@{
+    ViewData["Title"] = "Главное меню";
+    var fullName = User.FindFirst("FullName")?.Value ?? User.Identity?.Name ?? "Гость";
+    var shortName = string.Join(' ', fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Skip(1));
+    if (string.IsNullOrWhiteSpace(shortName)) { shortName = fullName; }
+}
+
+<div class="hub-head">
+    <div>
+        <div class="hub-greet">@Model.Greeting, <span>@shortName</span></div>
+        <div class="hub-sub">@User.FindFirst("RoleName")?.Value · @Model.Scope</div>
+    </div>
+    <div class="hub-meta">
+        <span class="chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2.4"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            @Model.ReferenceDate
+        </span>
+        <span class="chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></svg>
+            Доступно разделов: <b>@Model.Tiles.Count</b>
+        </span>
+        @if (Model.UnreadNotifications > 0)
+        {
+            <span class="chip warn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+                Новых уведомлений: <b>@Model.UnreadNotifications</b>
+            </span>
+        }
+    </div>
+</div>
+
+@if (Model.Attention.Any())
+{
+    <div class="attn">
+        <span class="attn-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+            Требует внимания
+        </span>
+        @foreach (var a in Model.Attention)
+        {
+            <a class="attn-item @(a.CountTone == "hot" ? "crit" : a.CountTone == "warm" ? "warm" : "")"
+               asp-controller="@a.Controller" asp-action="@a.Action">
+                <i></i>@a.AttentionText
+            </a>
+        }
+    </div>
+}
+
+<div class="tiles @(Model.Tiles.Count <= 6 ? "tiles-6" : "")">
+    @foreach (var tile in Model.Tiles)
+    {
+        var accentFg = tile.Accent switch
+        {
+            "amber" => "#c97f14",
+            "violet" => "#5b62b8",
+            _ => "#0a5f4f"
+        };
+        var accentSoft = tile.Accent switch
+        {
+            "amber" => "#fdf3e2",
+            "violet" => "#eef0fa",
+            _ => "#e6f5f1"
+        };
+        <a class="tile" asp-controller="@tile.Controller" asp-action="@tile.Action"
+           style="--tile-accent:@accentFg;--tile-soft:@accentSoft">
+            <div class="tile-top">
+                <span class="tile-icon">@Html.Raw(SectionIcons.Svg(tile.Section))</span>
+                @if (!string.IsNullOrWhiteSpace(tile.CountText))
+                {
+                    <span class="tile-count @(tile.CountTone == "hot" ? "hot" : tile.CountTone == "warm" ? "warm" : "")">@tile.CountText</span>
+                }
+            </div>
+            <div class="tile-body">
+                <div class="tile-title">@tile.Title</div>
+                <div class="tile-desc">@tile.Description</div>
+            </div>
+            <div class="tile-foot">
+                Открыть раздел
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+            </div>
+        </a>
+    }
+</div>
+
+<div class="hub-tail">
+    <span class="chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+        Одно окно = один раздел, кнопка «Назад» сворачивает в меню
+    </span>
+    <span class="chip">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+        Esc — назад · плитки показывают только разделы вашей роли
+    </span>
+</div>

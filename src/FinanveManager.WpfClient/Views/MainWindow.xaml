@@ -10,110 +10,179 @@
         WindowState="Maximized"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display"
+        PreviewKeyDown="MainWindow_OnPreviewKeyDown"
         Background="#F5F7F6">
     <Window.Resources>
         <Style x:Key="TrimmedCellText" TargetType="TextBlock">
             <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
             <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
         </Style>
+
+        <!-- Плитка главного меню (компактная, плоская — как в WPF-рамке прототипа) -->
+        <Style x:Key="TileButton" TargetType="Button">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#E2EAE7"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="7"
+                                Padding="13,12"
+                                SnapsToDevicePixels="True">
+                            <Border.RenderTransform>
+                                <TranslateTransform x:Name="TileShift"/>
+                            </Border.RenderTransform>
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="16" ShadowDepth="2" Direction="270" Opacity="0" Color="#10201E"/>
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#FBFDFC"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#B7D6CD"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Bd"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                             To="-2" Duration="0:0:0.14">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="Bd"
+                                                             Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.Opacity)"
+                                                             To="0.16" Duration="0:0:0.14"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Bd"
+                                                             Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)"
+                                                             To="0" Duration="0:0:0.16">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut"/>
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                            <DoubleAnimation Storyboard.TargetName="Bd"
+                                                             Storyboard.TargetProperty="(UIElement.Effect).(DropShadowEffect.Opacity)"
+                                                             To="0" Duration="0:0:0.16"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#F1F8F5"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Кнопка в полосе «Требует внимания» -->
+        <Style x:Key="AttentionButton" TargetType="Button">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#D2DED9"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="6" Padding="9,4">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#14B8A6"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#F4FBF9"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="HubChip" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#E2EAE7"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="999"/>
+            <Setter Property="Padding" Value="9,4"/>
+            <Setter Property="Margin" Value="6,0,0,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
+        </Style>
     </Window.Resources>
     <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="235"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
-
-        <!-- Левая боковая навигация (только разрешённые для роли разделы) -->
-        <Border Grid.Column="0" Background="{StaticResource BrushSidebar}">
-            <DockPanel LastChildFill="True">
-                <Border DockPanel.Dock="Top" Padding="16,18,16,16" BorderBrush="#1B4741" BorderThickness="0,0,0,1">
-                    <StackPanel Orientation="Horizontal">
-                        <Border Width="38" Height="38" CornerRadius="11" Background="{StaticResource BrushBrandMark}"
-                                VerticalAlignment="Center" Margin="0,0,10,0">
+        <!-- Основная рабочая область: навигация «меню → раздел → меню» -->
+        <DockPanel LastChildFill="True">
+            <!-- Верхняя панель окна: бренд, «Главное меню», обновление и профиль -->
+            <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E2EAE7" BorderThickness="0,0,0,1" Padding="14,9">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Width="32" Height="32" CornerRadius="9" Background="{StaticResource BrushBrandMark}" Margin="0,0,10,0">
                             <Path Data="M 4 22 L 20 22 M 6 22 L 6 9 L 13 5 L 20 9 L 20 22 M 10 22 L 10 16 L 16 16 L 16 22"
-                                  Stroke="White" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                  Stretch="Uniform" Margin="8"/>
+                                  Stroke="#06211D" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                  Stretch="Uniform" Margin="7"/>
                         </Border>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="ОАО «МАПИД»" Foreground="White" FontSize="17" FontWeight="Bold"/>
-                            <TextBlock Text="{Binding RoleName}" Foreground="#94A19E" FontSize="11" Margin="0,2,0,0"
-                                       TextWrapping="Wrap" MaxWidth="150"/>
+                        <StackPanel VerticalAlignment="Center" Margin="0,0,12,0">
+                            <TextBlock Text="ОАО «МАПИД»" FontSize="13.5" FontWeight="Bold" Foreground="#10201E"/>
+                            <TextBlock Text="{Binding RoleName}" FontSize="10.5" Foreground="#64706D"/>
                         </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <Border DockPanel.Dock="Bottom" Padding="12,12,12,14" BorderBrush="#1B4741" BorderThickness="0,1,0,0">
-                    <StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                            <Border Width="32" Height="32" CornerRadius="16" Background="#1A4A43" Margin="0,0,9,0">
-                                <TextBlock Text="{Binding UserInitials}" Foreground="#9FE8DA" FontSize="11.5"
-                                           FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                            </Border>
-                            <StackPanel VerticalAlignment="Center" MaxWidth="150">
-                                <TextBlock Text="{Binding UserFullName}" Foreground="#DCEBE6" FontWeight="SemiBold"
-                                           FontSize="12" TextTrimming="CharacterEllipsis"/>
-                                <TextBlock Foreground="#8FB2A9" FontSize="10.5" TextTrimming="CharacterEllipsis">
-                                    <Run Text="{Binding UserLogin, Mode=OneWay}"/>
-                                    <Run Text=" · "/>
-                                    <Run Text="{Binding RoleCode, Mode=OneWay}"/>
-                                </TextBlock>
-                            </StackPanel>
-                        </StackPanel>
+                        <Border Width="1" Background="#E2EAE7" Margin="0,4,12,4"/>
+                        <Border Background="#E6F5F1" CornerRadius="9" Padding="9,4" Margin="0,0,6,0" VerticalAlignment="Center"
+                                Visibility="{Binding IsHubVisible, Converter={StaticResource InverseBoolToVis}}">
+                            <TextBlock Text="{Binding SelectedSectionTitle}" FontSize="11" FontWeight="SemiBold" Foreground="#0A5F4F"/>
+                        </Border>
+                        <Button Content="⌂  Главное меню"
+                                Command="{Binding GoHomeCommand}"
+                                Style="{StaticResource SecondaryButton}"
+                                Padding="11,6" FontSize="11.8" Margin="0,0,6,0"
+                                Visibility="{Binding IsHubVisible, Converter={StaticResource InverseBoolToVis}}"/>
                         <Button Content="Обновить данные"
                                 Command="{Binding RefreshCommand}"
-                                Style="{StaticResource SidebarPrimaryButton}"
-                                Margin="0,0,0,6"/>
-                        <Button x:Name="LogoutButton"
-                                Content="Выйти / Сменить роль"
-                                Click="LogoutButton_OnClick"
-                                Style="{StaticResource SidebarOutlineButton}"/>
+                                Style="{StaticResource SecondaryButton}"
+                                Padding="11,6" FontSize="11.8"/>
                     </StackPanel>
-                </Border>
-
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10,12">
-                    <ItemsControl ItemsSource="{Binding NavigationItems}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Content="{Binding Title}"
-                                        Command="{Binding DataContext.SelectSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}"
-                                        Style="{StaticResource NavButton}"/>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-            </DockPanel>
-        </Border>
-
-        <!-- Основная рабочая область -->
-        <DockPanel Grid.Column="1" LastChildFill="True">
-            <!-- Верхняя строка заголовка -->
-            <Border DockPanel.Dock="Top" Background="White" BorderBrush="#E2EAE7" BorderThickness="0,0,0,1" Padding="24,12">
-                <DockPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Background="#E6F5F1" CornerRadius="12" Padding="11,5" VerticalAlignment="Center" Margin="0,0,10,0">
+                        <Border Background="#E6F5F1" CornerRadius="10" Padding="9,5" Margin="0,0,8,0" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal">
-                                <Ellipse Width="7" Height="7" Fill="#14B8A6" Margin="0,0,7,0" VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding DatabaseModeLabel}" Foreground="#0E7C66" FontSize="11.5" FontWeight="SemiBold"/>
+                                <Ellipse Width="6" Height="6" Fill="#14B8A6" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding DatabaseModeLabel}" Foreground="#0A5F4F" FontSize="11" FontWeight="SemiBold"/>
                             </StackPanel>
                         </Border>
-                        <Border Background="#F4F8F6" BorderBrush="#E2EAE7" BorderThickness="1" CornerRadius="16" Padding="5,4,12,4">
+                        <Border Background="#F4F8F6" BorderBrush="#E2EAE7" BorderThickness="1" CornerRadius="15" Padding="4,3,11,3">
                             <StackPanel Orientation="Horizontal">
-                                <Border Width="26" Height="26" CornerRadius="13" Background="#0E7C66" Margin="0,0,8,0">
-                                    <TextBlock Text="{Binding UserInitials}" Foreground="White" FontSize="10.5"
+                                <Border Width="25" Height="25" CornerRadius="8" Background="#0E7C66" Margin="0,0,8,0">
+                                    <TextBlock Text="{Binding UserInitials}" Foreground="White" FontSize="10"
                                                FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <StackPanel VerticalAlignment="Center">
-                                    <TextBlock Text="{Binding UserFullName}" FontSize="11.5" FontWeight="SemiBold" Foreground="#10201E"/>
-                                    <TextBlock Text="{Binding RoleName}" FontSize="10" Foreground="#64706D"/>
+                                    <TextBlock Text="{Binding UserFullName}" FontSize="11.2" FontWeight="SemiBold" Foreground="#10201E"/>
+                                    <TextBlock Text="{Binding RoleName}" FontSize="9.8" Foreground="#64706D"/>
                                 </StackPanel>
                             </StackPanel>
                         </Border>
-                    </StackPanel>
-                    <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="ОАО «МАПИД» · ФИНАНСОВЫЙ КОНТУР" FontSize="9.5" FontWeight="Bold"
-                                   Foreground="#0E7C66" Margin="0,0,0,2"/>
-                        <TextBlock Text="{Binding SelectedSectionTitle}" FontSize="18" FontWeight="Bold" Foreground="#10201E"/>
+                        <Button x:Name="LogoutButton" Content="Выйти"
+                                Click="LogoutButton_OnClick"
+                                Style="{StaticResource SecondaryButton}"
+                                Padding="9,6" FontSize="11.2" Margin="7,0,0,0"/>
                     </StackPanel>
                 </DockPanel>
             </Border>
@@ -145,9 +214,120 @@
                 </TextBlock>
             </Border>
 
-            <!-- Контент активного раздела -->
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="24">
-                <Grid>
+            <!-- Контент: главное меню (плитки) или активный раздел -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="18,16,18,22">
+                <StackPanel>
+                    <!-- Главное меню: только разделы, разрешённые роли -->
+                    <StackPanel x:Name="HubPanel" Visibility="{Binding IsHubVisible, Converter={StaticResource BoolToVis}}" Margin="0,0,0,4">
+                        <Grid Margin="0,0,0,14">
+                            <StackPanel>
+                                <TextBlock Text="{Binding HubGreeting}" FontSize="21" FontWeight="Bold" Foreground="#10201E"/>
+                                <TextBlock Text="{Binding HubScope}" FontSize="12" Foreground="#64706D" Margin="0,3,0,0" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <WrapPanel HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                                <Border Style="{StaticResource HubChip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE787;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#64706D" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                        <TextBlock Text="{Binding ReferenceDateText}" FontSize="11" FontWeight="SemiBold" Foreground="#2F423F"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Style="{StaticResource HubChip}">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE80A;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#64706D" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                                        <TextBlock Text="{Binding HubSectionCountText}" FontSize="11" FontWeight="SemiBold" Foreground="#2F423F"/>
+                                    </StackPanel>
+                                </Border>
+                            </WrapPanel>
+                        </Grid>
+
+                        <Border Background="#E6F5F1" BorderBrush="#D8ECE5" BorderThickness="1" CornerRadius="9"
+                                Padding="10,8" Margin="0,0,0,13">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Left" Text="ТРЕБУЕТ ВНИМАНИЯ" FontSize="10.5" FontWeight="Bold"
+                                           Foreground="#0A5F4F" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <ItemsControl ItemsSource="{Binding HubAttention}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource AttentionButton}" Margin="0,0,6,0"
+                                                    Command="{Binding DataContext.SelectSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Ellipse Width="6" Height="6" Fill="#C2413B" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding Title}" FontSize="11.2" FontWeight="SemiBold" Foreground="#2F423F"/>
+                                                    <TextBlock Text="{Binding BadgeText}" FontSize="10.5" Foreground="#8F2A25" Margin="6,0,0,0"/>
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="Все контрольные точки в норме" FontSize="11.2" Foreground="#0A5F4F">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasHubAttention}" Value="False">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </DockPanel>
+                        </Border>
+
+                        <ItemsControl x:Name="HubTiles" ItemsSource="{Binding NavigationItems}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="3"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Style="{StaticResource TileButton}" MinHeight="118" Margin="0,0,10,10"
+                                            Command="{Binding DataContext.SelectSectionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <Grid Grid.Row="0" Margin="0,0,0,8">
+                                                <Border Width="34" Height="34" CornerRadius="6" Background="{Binding AccentSoft}"
+                                                        HorizontalAlignment="Left">
+                                                    <TextBlock Text="{Binding Glyph}" FontFamily="Segoe MDL2 Assets" FontSize="15"
+                                                               Foreground="{Binding Accent}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                                <Border Background="#F4F8F6" BorderBrush="#E2EAE7" BorderThickness="1"
+                                                        CornerRadius="999" Padding="6,1" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                        Visibility="{Binding HasBadge, Converter={StaticResource BoolToVis}}">
+                                                    <TextBlock Text="{Binding BadgeText}" FontSize="10" FontWeight="SemiBold" Foreground="#8F2A25"/>
+                                                </Border>
+                                            </Grid>
+                                            <StackPanel Grid.Row="1">
+                                                <TextBlock Text="{Binding Title}" FontSize="13.2" FontWeight="Bold" Foreground="#10201E"
+                                                           TextWrapping="Wrap"/>
+                                                <TextBlock Text="{Binding Description}" FontSize="11.3" Foreground="#64706D"
+                                                           TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                            </StackPanel>
+                                            <TextBlock Grid.Row="2" Text="Открыть раздел →" FontSize="10.6" FontWeight="SemiBold"
+                                                       Foreground="{Binding Accent}" Margin="0,9,0,0"/>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="Esc в разделе возвращает в главное меню · плитки показывают только разделы вашей роли"
+                                   FontSize="10.8" Foreground="#94A19E" Margin="0,4,0,0"/>
+                    </StackPanel>
+
+                    <Grid x:Name="SectionsHost">
                     <!-- 1. Обзор портфеля -->
                     <StackPanel Visibility="{Binding IsDashboardSection, Converter={StaticResource BoolToVis}}">
                         <UniformGrid Columns="5" Margin="0,0,-10,14">
@@ -1273,6 +1453,7 @@
                         </Border>
                     </StackPanel>
                 </Grid>
+                </StackPanel>
             </ScrollViewer>
         </DockPanel>
     </Grid>

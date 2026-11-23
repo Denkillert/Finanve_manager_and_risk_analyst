@@ -461,15 +461,6 @@ public sealed class MainViewModel : ViewModelBase
 
     public string HubSectionCountText => $"Доступно разделов: {NavigationItems.Count}";
 
-    private string _referenceDateText = "Курсы НБРБ не загружены";
-
-    /// <summary>Дата последней загрузки курсов валют — берётся из БД, без выдуманных дат.</summary>
-    public string ReferenceDateText
-    {
-        get => _referenceDateText;
-        private set => SetField(ref _referenceDateText, value);
-    }
-
     private void NotifySectionVisibility()
     {
         OnPropertyChanged(nameof(IsDashboardSection));
@@ -1089,13 +1080,6 @@ public sealed class MainViewModel : ViewModelBase
                 && r.Status != RiskStatus.Closed && r.Status != RiskStatus.Realized);
             var contracts = await db.Contracts.CountAsync(c => !c.IsDeleted && c.StartDate <= DateTime.Now && c.EndDate >= DateTime.Now);
             var projects = await db.Projects.CountAsync(p => !p.IsDeleted);
-            var rateDate = await db.CurrencyRates
-                .OrderByDescending(r => r.RateDate)
-                .Select(r => (DateTime?)r.RateDate)
-                .FirstOrDefaultAsync();
-            ReferenceDateText = rateDate.HasValue
-                ? $"Курсы НБРБ на {rateDate.Value:dd.MM.yyyy}"
-                : "Курсы НБРБ не загружены";
 
             foreach (var item in NavigationItems)
             {

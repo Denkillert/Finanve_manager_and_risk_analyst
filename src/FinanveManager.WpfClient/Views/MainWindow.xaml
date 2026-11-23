@@ -215,7 +215,7 @@
             </Border>
 
             <!-- Контент: главное меню (плитки) или активный раздел -->
-            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="18,16,18,22">
+            <ScrollViewer x:Name="ContentScroll" VerticalScrollBarVisibility="Auto" Padding="18,16,18,22">
                 <StackPanel>
                     <!-- Главное меню: только разделы, разрешённые роли -->
                     <StackPanel x:Name="HubPanel" Visibility="{Binding IsHubVisible, Converter={StaticResource BoolToVis}}" Margin="0,0,0,4">
@@ -225,12 +225,6 @@
                                 <TextBlock Text="{Binding HubScope}" FontSize="12" Foreground="#64706D" Margin="0,3,0,0" TextWrapping="Wrap"/>
                             </StackPanel>
                             <WrapPanel HorizontalAlignment="Right" VerticalAlignment="Bottom">
-                                <Border Style="{StaticResource HubChip}">
-                                    <StackPanel Orientation="Horizontal">
-                                        <TextBlock Text="&#xE787;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#64706D" VerticalAlignment="Center" Margin="0,0,5,0"/>
-                                        <TextBlock Text="{Binding ReferenceDateText}" FontSize="11" FontWeight="SemiBold" Foreground="#2F423F"/>
-                                    </StackPanel>
-                                </Border>
                                 <Border Style="{StaticResource HubChip}">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="&#xE80A;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="#64706D" VerticalAlignment="Center" Margin="0,0,5,0"/>
@@ -297,6 +291,9 @@
                                                 <RowDefinition Height="Auto"/>
                                                 <RowDefinition Height="Auto"/>
                                             </Grid.RowDefinitions>
+                                            <Border Width="3" HorizontalAlignment="Left" VerticalAlignment="Stretch"
+                                                    Margin="-13,-12,0,-12" Background="{Binding Accent}"
+                                                    CornerRadius="7,0,0,7"/>
                                             <Grid Grid.Row="0" Margin="0,0,0,8">
                                                 <Border Width="34" Height="34" CornerRadius="6" Background="{Binding AccentSoft}"
                                                         HorizontalAlignment="Left">
@@ -1452,6 +1449,17 @@
                             </StackPanel>
                         </Border>
                     </StackPanel>
+
+                    <!-- «Раскрывающаяся плитка»: прямоугольник растёт из плитки меню
+                         и растворяется над готовым разделом. -->
+                    <Border x:Name="SectionVeil" Visibility="Collapsed" Opacity="0"
+                            HorizontalAlignment="Left" VerticalAlignment="Top"
+                            CornerRadius="14" BorderThickness="1" BorderBrush="#D8ECE5"
+                            Background="#E6F5F1" IsHitTestVisible="False">
+                        <Border.RenderTransform>
+                            <ScaleTransform x:Name="VeilScale"/>
+                        </Border.RenderTransform>
+                    </Border>
                 </Grid>
                 </StackPanel>
             </ScrollViewer>

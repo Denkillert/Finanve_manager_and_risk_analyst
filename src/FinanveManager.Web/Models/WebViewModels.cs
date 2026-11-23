@@ -165,8 +165,6 @@ public sealed class HubViewModel
 {
     public string Greeting { get; init; } = string.Empty;
     public string Scope { get; init; } = string.Empty;
-    /// <summary>Актуальность курсов валют из БД (реальная дата последней загрузки курсов).</summary>
-    public string ReferenceDate { get; init; } = string.Empty;
     public int UnreadNotifications { get; init; }
     public List<HubTileViewModel> Tiles { get; init; } = new();
     public List<HubTileViewModel> Attention { get; init; } = new();

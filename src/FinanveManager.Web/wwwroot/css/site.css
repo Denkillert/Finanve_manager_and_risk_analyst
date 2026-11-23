@@ -2264,3 +2264,97 @@ textarea {
   .content.stage { padding: 0; }
 }
 
+/* ==========================================================================
+   Переход «плитка раскрывается в раздел» и обратное сворачивание.
+   Плитка превращается в прямоугольник на всю рабочую область, а «Назад»
+   сворачивает раздел обратно в плитку главного меню.
+   ========================================================================== */
+
+.nav-ghost {
+  position: fixed;
+  z-index: 30;
+  pointer-events: none;
+  border-radius: 18px;
+  border: 1px solid #cfe2dc;
+  background: #fff;
+  box-shadow: 0 22px 56px rgba(16, 32, 30, 0.2);
+  transform-origin: top left;
+  will-change: transform, opacity;
+}
+
+/* Пока идёт переход, повторный клик по плитке или «Назад» не срабатывает. */
+html.nav-busy .tile,
+html.nav-busy .back-btn { pointer-events: none; }
+
+/* Меню приглушается, пока плитка раскрывается в раздел. */
+.content.stage.nav-forward {
+  opacity: 0.3;
+  transition: opacity 0.28s ease;
+}
+
+/* Раздел проявляется под раскрывшейся плиткой. */
+.content.stage.nav-enter {
+  animation: nav-enter 0.36s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+@keyframes nav-enter {
+  from { opacity: 0; transform: translateY(12px) scale(0.988); }
+  to { opacity: 1; transform: none; }
+}
+
+.content.stage.nav-enter > * {
+  animation: nav-rise 0.38s cubic-bezier(0.2, 0.8, 0.3, 1) backwards;
+}
+
+.content.stage.nav-enter > *:nth-child(2) { animation-delay: 0.03s; }
+.content.stage.nav-enter > *:nth-child(3) { animation-delay: 0.06s; }
+.content.stage.nav-enter > *:nth-child(4) { animation-delay: 0.09s; }
+.content.stage.nav-enter > *:nth-child(5) { animation-delay: 0.12s; }
+
+@keyframes nav-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Возврат в меню: рабочая область мягко «схлопывается». */
+.page-hub .content.stage.nav-back {
+  animation: nav-back 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+@keyframes nav-back {
+  from { opacity: 0.4; transform: scale(0.992); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Микроанимации плиток: нажатие и «живая» иконка. */
+.tile:active {
+  transform: translateY(-1px) scale(0.994);
+  box-shadow: var(--shadow-sm);
+}
+
+.tile-icon svg {
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+
+.tile:hover .tile-icon svg {
+  transform: scale(1.08) rotate(-2deg);
+}
+
+.tile-count {
+  transition: transform 0.18s, box-shadow 0.18s;
+}
+
+.tile:hover .tile-count {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-xs);
+}
+
+/* Шапка меню и нижние подсказки появляются вместе с плитками. */
+.hub-head { animation: hub-head-in 0.34s cubic-bezier(0.2, 0.8, 0.3, 1) backwards; }
+.hub-tail { animation: nav-rise 0.36s cubic-bezier(0.2, 0.8, 0.3, 1) 0.18s backwards; }
+
+@keyframes hub-head-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
+

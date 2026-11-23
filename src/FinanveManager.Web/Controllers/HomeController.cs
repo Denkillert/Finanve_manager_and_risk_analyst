@@ -28,10 +28,6 @@ public class HomeController : Controller
         var roleName = User.FindFirst("RoleName")?.Value ?? roleCode;
         var descriptors = RolePermissions.GetSectionsForRole(roleCode);
         var counts = await LoadCountsAsync(ct);
-        var lastRateDate = await _db.CurrencyRates
-            .OrderByDescending(r => r.RateDate)
-            .Select(r => (DateTime?)r.RateDate)
-            .FirstOrDefaultAsync(ct);
         var now = DateTime.Now;
 
         var tiles = descriptors
@@ -48,9 +44,6 @@ public class HomeController : Controller
                 _ => "Добрый вечер"
             },
             Scope = ScopeFor(roleName),
-            ReferenceDate = lastRateDate.HasValue
-                ? $"Курсы НБРБ на {lastRateDate.Value:dd.MM.yyyy}"
-                : "Курсы НБРБ не загружены",
             UnreadNotifications = counts.UnreadNotifications,
             Tiles = tiles,
             Attention = tiles
@@ -153,7 +146,7 @@ public class HomeController : Controller
         {
             countText = $"{counts.PendingRequests + counts.PendingMaterials} · ждёт";
             tone = "hot";
-            attention ??= $"Заявки на материал: {counts.PendingMaterials}";
+            attention = $"Платёжные заявки и материал: {counts.PendingRequests + counts.PendingMaterials}";
         }
 
         return new HubTileViewModel

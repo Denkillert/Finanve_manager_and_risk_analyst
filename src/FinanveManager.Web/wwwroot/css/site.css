@@ -696,9 +696,9 @@ th {
   position: sticky;
   top: 0;
   z-index: 1;
-  font-size: 10.6px;
+  font-size: 11px;
   font-weight: 750;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #566964;
   background: #f6faf8;
@@ -2061,20 +2061,6 @@ textarea {
     border-color 0.2s ease;
 }
 
-/* Тонкая акцентная линия сверху — цвет раздела. */
-.tile::before {
-  content: "";
-  position: absolute;
-  left: 20px;
-  right: 20px;
-  top: 0;
-  height: 2px;
-  border-radius: 0 0 3px 3px;
-  background: linear-gradient(90deg, var(--tile-accent, var(--accent-2)), transparent 78%);
-  opacity: 0.5;
-  transition: opacity 0.24s ease, left 0.24s ease, right 0.24s ease;
-}
-
 /* Мягкое свечение в углу, проявляется при наведении. */
 .tile::after {
   content: "";
@@ -2099,7 +2085,6 @@ textarea {
     0 6px 16px -12px rgba(16, 32, 30, 0.18);
 }
 
-.tile:hover::before { left: 0; right: 0; opacity: 1; }
 .tile:hover::after { opacity: 1; transform: scale(1); }
 
 .tile:focus-visible { outline: none; box-shadow: var(--ring), var(--shadow); }
@@ -2317,11 +2302,18 @@ textarea {
 
 @media (max-width: 900px) {
   .webbar { flex-wrap: wrap; gap: 10px; padding: 10px 14px; }
-  .webnav { order: 3; width: 100%; margin-left: 0; }
+  .webnav {
+    order: 3;
+    width: 100%;
+    margin-left: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
   .bar-right { margin-left: auto; }
-  .content.stage { padding: 16px 14px 32px; }
+  .content.stage { padding: 18px 14px 32px; }
   .sec-head { position: static; margin: 0 0 16px; }
-  .hub-greet { font-size: 19px; }
+  .hub-greet { font-size: 21px; }
 }
 
 @media (max-width: 640px) {

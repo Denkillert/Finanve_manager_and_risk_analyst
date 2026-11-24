@@ -17,8 +17,6 @@ namespace FinanveManager.WpfClient.Views;
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _vm;
-    private FrameworkElement? _lastTile;
-    private Rect _tileOrigin = Rect.Empty;
 
     public bool LogoutRequested { get; private set; }
 
@@ -73,34 +71,12 @@ public partial class MainWindow : Window
         Close();
     }
 
-    // Click is raised before the navigation command, while the tile is still laid out.
-    private void NavigationTile_OnClick(object sender, RoutedEventArgs e)
-    {
-        _lastTile = sender as FrameworkElement;
-        _tileOrigin = Rect.Empty;
-        if (_lastTile == null || _lastTile.ActualWidth <= 0 || _lastTile.ActualHeight <= 0)
-            return;
-
-        try
-        {
-            _tileOrigin = _lastTile.TransformToVisual(ContentScroll).TransformBounds(
-                new Rect(0, 0, _lastTile.ActualWidth, _lastTile.ActualHeight));
-        }
-        catch (InvalidOperationException)
-        {
-            // A disconnected visual falls back to the centre of the section.
-        }
-    }
-
-    /// <summary>Мягкое появление главного меню: шапка, полоса внимания и плитки «лесенкой».</summary>
+    /// <summary>Мягкое появление главного меню: шапка и плитки «лесенкой».</summary>
     private void AnimateHub()
     {
-        _lastTile = null;
-        _tileOrigin = Rect.Empty;
-        SectionVeil.Visibility = Visibility.Collapsed;
+        ContentScroll.ScrollToTop();
         if (!SystemParameters.ClientAreaAnimation) return;
 
-        ContentScroll.ScrollToTop();
         var ease = new CubicEase { EasingMode = EasingMode.EaseOut };
         HubPanel.Opacity = 1;
         if (HubPanel.RenderTransform is not TranslateTransform shift)
@@ -110,20 +86,20 @@ public partial class MainWindow : Window
         }
 
         HubPanel.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(220)) { EasingFunction = ease });
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(240)) { EasingFunction = ease });
         shift.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(8, 0, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });
+            new DoubleAnimation(10, 0, TimeSpan.FromMilliseconds(300)) { EasingFunction = ease });
 
         HubTiles.UpdateLayout();
         for (int i = 0; i < _vm.NavigationItems.Count; i++)
         {
             if (HubTiles.ItemContainerGenerator.ContainerFromIndex(i) is not FrameworkElement tile) continue;
 
-            var delay = TimeSpan.FromMilliseconds(Math.Min(i, 8) * 34);
+            var delay = TimeSpan.FromMilliseconds(Math.Min(i, 8) * 45);
             tile.Opacity = 1;
 
-            var move = new TranslateTransform(0, 12);
-            var scale = new ScaleTransform(0.965, 0.965);
+            var move = new TranslateTransform(0, 14);
+            var scale = new ScaleTransform(0.985, 0.985);
             var group = new TransformGroup();
             group.Children.Add(scale);
             group.Children.Add(move);
@@ -131,25 +107,25 @@ public partial class MainWindow : Window
             tile.RenderTransform = group;
 
             tile.BeginAnimation(OpacityProperty,
-                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(240))
+                new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(280))
                 {
                     BeginTime = delay,
                     EasingFunction = ease
                 });
             move.BeginAnimation(TranslateTransform.YProperty,
-                new DoubleAnimation(12, 0, TimeSpan.FromMilliseconds(300))
+                new DoubleAnimation(14, 0, TimeSpan.FromMilliseconds(340))
                 {
                     BeginTime = delay,
                     EasingFunction = ease
                 });
             scale.BeginAnimation(ScaleTransform.ScaleXProperty,
-                new DoubleAnimation(0.965, 1, TimeSpan.FromMilliseconds(300))
+                new DoubleAnimation(0.985, 1, TimeSpan.FromMilliseconds(340))
                 {
                     BeginTime = delay,
                     EasingFunction = ease
                 });
             scale.BeginAnimation(ScaleTransform.ScaleYProperty,
-                new DoubleAnimation(0.965, 1, TimeSpan.FromMilliseconds(300))
+                new DoubleAnimation(0.985, 1, TimeSpan.FromMilliseconds(340))
                 {
                     BeginTime = delay,
                     EasingFunction = ease
@@ -157,7 +133,7 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>Раздел раскрывается из плитки: прямоугольник растёт и тает над контентом.</summary>
+    /// <summary>Раздел появляется мягко: лёгкий подъём и проявление без «вспышек».</summary>
     private void AnimateSection()
     {
         if (!SystemParameters.ClientAreaAnimation)
@@ -166,11 +142,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        // Ждём раскладку: размеры раздела нужны для анимации «раскрытия».
-        Dispatcher.BeginInvoke(new Action(PlaySectionExpand), DispatcherPriority.Loaded);
+        Dispatcher.BeginInvoke(new Action(PlaySectionReveal), DispatcherPriority.Loaded);
     }
 
-    private void PlaySectionExpand()
+    private void PlaySectionReveal()
     {
         if (_vm.IsHubVisible) return;
         SectionsHost.UpdateLayout();
@@ -185,93 +160,10 @@ public partial class MainWindow : Window
             SectionsHost.RenderTransform = shift;
         }
 
-        var startDelay = TimeSpan.FromMilliseconds(70);
         SectionsHost.BeginAnimation(OpacityProperty,
-            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(240))
-            {
-                BeginTime = startDelay,
-                EasingFunction = ease
-            });
+            new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(260)) { EasingFunction = ease });
         shift.BeginAnimation(TranslateTransform.YProperty,
-            new DoubleAnimation(8, 0, TimeSpan.FromMilliseconds(280))
-            {
-                BeginTime = startDelay,
-                EasingFunction = ease
-            });
-
-        AnimateVeil(ease);
-    }
-
-    private void AnimateVeil(CubicEase ease)
-    {
-        var hostWidth = SectionsHost.ActualWidth;
-        var hostHeight = SectionsHost.ActualHeight;
-        if (hostWidth <= 1 || hostHeight <= 1)
-        {
-            SectionVeil.Visibility = Visibility.Collapsed;
-            return;
-        }
-
-        var from = new Rect(hostWidth / 2, hostHeight / 4, 14, 14);
-        if (!_tileOrigin.IsEmpty && _tileOrigin.Width > 4 && _tileOrigin.Height > 4)
-        {
-            from = _tileOrigin;
-            try
-            {
-                var offset = SectionsHost.TransformToVisual(ContentScroll).Transform(new Point(0, 0));
-                from.Offset(-offset.X, -offset.Y);
-            }
-            catch (InvalidOperationException)
-            {
-                from = new Rect(hostWidth / 2, hostHeight / 4, 14, 14);
-            }
-        }
-
-        var nav = _lastTile?.DataContext as NavItemViewModel;
-        SectionVeil.Background = ToBrush(nav?.AccentSoft, "#E6F5F1");
-        SectionVeil.BorderBrush = ToBrush(nav?.Accent, "#D8ECE5");
-
-        SectionVeil.Visibility = Visibility.Visible;
-        SectionVeil.Opacity = 1;
-        SectionVeil.Width = Math.Max(10, from.Width);
-        SectionVeil.Height = Math.Max(10, from.Height);
-        SectionVeil.Margin = new Thickness(from.X, from.Y, 0, 0);
-
-        var duration = TimeSpan.FromMilliseconds(320);
-        SectionVeil.BeginAnimation(WidthProperty,
-            new DoubleAnimation(from.Width, hostWidth, duration) { EasingFunction = ease });
-        SectionVeil.BeginAnimation(HeightProperty,
-            new DoubleAnimation(from.Height, hostHeight, duration) { EasingFunction = ease });
-        SectionVeil.BeginAnimation(MarginProperty,
-            new ThicknessAnimation(new Thickness(from.X, from.Y, 0, 0), new Thickness(0), duration)
-            {
-                EasingFunction = ease
-            });
-
-        var fade = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(220))
-        {
-            BeginTime = TimeSpan.FromMilliseconds(110),
-            EasingFunction = ease
-        };
-        fade.Completed += (_, _) =>
-        {
-            SectionVeil.Visibility = Visibility.Collapsed;
-            SectionVeil.BeginAnimation(OpacityProperty, null);
-        };
-        SectionVeil.BeginAnimation(OpacityProperty, fade);
-    }
-
-    private static Brush ToBrush(string? value, string fallback)
-    {
-        try
-        {
-            var brush = new BrushConverter().ConvertFromString(value ?? fallback) as Brush;
-            return brush ?? new SolidColorBrush(Color.FromRgb(0xE6, 0xF5, 0xF1));
-        }
-        catch (FormatException)
-        {
-            return new SolidColorBrush(Color.FromRgb(0xE6, 0xF5, 0xF1));
-        }
+            new DoubleAnimation(12, 0, TimeSpan.FromMilliseconds(320)) { EasingFunction = ease });
     }
 
     private void MainWindow_OnPreviewKeyDown(object sender, KeyEventArgs e)
